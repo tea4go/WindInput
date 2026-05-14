@@ -83,6 +83,15 @@ func (dm *DictManager) OpenStore(dbPath string) error {
 
 	dm.store = s
 	dm.logger.Info("Store 后端已启用", "path", dbPath)
+
+	// 一次性迁移: 把旧的 (Texts + Name) 字符组短语改写为 Text 字段中的
+	// $AA("name", "chars") marker。幂等。下一版可删 PhraseRecord 的
+	// Texts/Name 字段。
+	if migrated, mErr := s.MigratePhraseRecordsToAA(); mErr != nil {
+		dm.logger.Warn("短语 $AA 迁移失败", "error", mErr)
+	} else if migrated > 0 {
+		dm.logger.Info("短语 $AA 迁移完成", "migrated", migrated)
+	}
 	return nil
 }
 
@@ -142,15 +151,14 @@ func (dm *DictManager) SeedDefaultPhrases() error {
 	systemLoaded := false
 	if entries, err := ParsePhraseYAMLFile(systemUserFile); err == nil {
 		for _, e := range entries {
-			if e.Code == "" || (e.Text == "" && e.Texts == "") {
+			if e.Code == "" || e.Text == "" {
 				continue
 			}
 			rec := store.PhraseRecord{
 				Code:     strings.ToLower(e.Code),
 				Text:     e.Text,
-				Texts:    e.Texts,
-				Name:     e.Name,
 				Type:     detectPhraseType(e),
+				Weight:   resolveWeightFromFileEntry(e),
 				Position: e.Position,
 				Enabled:  !e.Disabled,
 				IsSystem: true,
@@ -165,14 +173,12 @@ func (dm *DictManager) SeedDefaultPhrases() error {
 	if !systemLoaded {
 		if entries, err := ParsePhraseYAMLFile(systemFile); err == nil {
 			for _, e := range entries {
-				if e.Code == "" || (e.Text == "" && e.Texts == "") {
+				if e.Code == "" || e.Text == "" {
 					continue
 				}
 				rec := store.PhraseRecord{
 					Code:     strings.ToLower(e.Code),
 					Text:     e.Text,
-					Texts:    e.Texts,
-					Name:     e.Name,
 					Type:     detectPhraseType(e),
 					Position: e.Position,
 					Enabled:  !e.Disabled,

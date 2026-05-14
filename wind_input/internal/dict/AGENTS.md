@@ -22,7 +22,10 @@
 | `composite.go` | `CompositeDict`：按 LayerType 优先级聚合多层查询结果，持有 `ShadowProvider` 在搜索后应用 pin/delete 规则；`SetSortMode` 控制候选排序模式 |
 | `pinyin_dict.go` | 拼音词库实现（基于 binformat 的 mmap 读取） |
 | `codetable.go` | 五笔码表加载（文本格式和二进制 wdb 格式），含 `BuildReverseIndex`（全量）和 `BuildSingleCharReverseIndex`（仅单字，过滤权重 < maxWeight/10 的低频简码）；支持 Rime 词库合并结果 |
-| `phrase.go` | `PhraseLayer`：短语和命令处理，支持模板变量 |
+| `phrase.go` | `PhraseLayer`：短语和命令处理，支持模板变量；`SetCmdbarHook(CmdbarPhraseHook)` 装配命令直通车 hook，含 `$CC(` 或 `$CC1(` 的动态短语在 `SearchCommand` 中改走 hook 求值得到 `(display, actions)`；`SearchPrefix` 同时扫 `dynamicPhrases` 中带 cmdbar marker 的条目, 末尾用 `filterCmdbarExactOnly` 过滤掉 `$CC(` (仅精确) 条目, 保留 `$CC1(` (前缀可见); hook 报错或不可用时退化为字面量并记 WARN（不带 value 内容）。**权重**: 候选 `Weight` 由 `resolvePhraseWeight(weight, position)` 计算, 优先级 `显式 weight > position fallback (10000-position) > 默认 1000`; `PhraseFileEntry.Weight` 是 `*int` (用于区分"未设置" vs "显式 0"), `PhraseEntry/PhraseGroup/PhraseRecord` 的 `Weight` 是 `int` (resolve 后或 store 中的显式值)。字符组 ($AA) 内字符共享 group weight, `NaturalOrder = 数组下标` 做 tie-break, 保证按 chars 字符串顺序排列 |
+| `cmdbar_filter.go` | `HasCmdbarMarker(value)` 检测 `$CC(`/`$CC1(`; `IsCmdbarExactOnly(value)` 判断"仅精确匹配"语义 (含 `$CC(` 但不含 `$CC1(`); `filterCmdbarExactOnly(cs)` 给各 layer 的 `SearchPrefix` 收尾共享同一过滤语义。命令 marker 本身编码"是否前缀展开", 无需额外配置/字段 |
+| `aa_marker.go` | `ParseAAMarker(value)` 解析 `$AA("name", "chars")` 字符组 marker, 返回 (groupName, chars, ok); `HasAAMarker(value)` 快速旁路判断。yaml 短语统一只用 `text` 字段表达字符组, 取代旧的 `texts`+`name` 双字段; 精确码展开为 N 个独立字符候选, 前缀显示导航候选, 语义不变。详见 docs/design/2026-05-12-command-bar-design.md §3.7 |
+| `value_expand.go` | `ValueExpander` (`Hook` + `TemplateEngine`) + `ExpandResult` 统一展开任意候选 value: cmdbar marker (`$CC(`/`$CC1(`) → hook, `$X` 模板 → templateEngine, 其它 → 原样; 暴露 `HasExpandable(value)` 快速判断, 供 coordinator 候选后处理使用 |
 | `shadow.go` | `ShadowLayer`：pin(position)+delete 架构——`pinned` 列表按位置固定词条，`deleted` 列表隐藏词条；YAML 序列化 |
 | `user_dict.go` | `UserDict`：用户词频学习，按权重排序，持久化为 JSON |
 | `adapter.go` | 引擎词库适配器（将 binformat Reader 适配为词库层） |
@@ -71,6 +74,20 @@
 - 词库文件路径约定：`<exeDir>/dict/pinyin/`（拼音 Rime 格式）、`<exeDir>/dict/wubi/`（五笔 Rime 格式）
 - 用户数据路径：`%APPDATA%\WindInput\`（由 `pkg/config` 定义）
 - 二进制词库（mmap）优先于文本词库，几乎不占堆内存
+
+### 短语权重档位指南 (yaml `weight` 字段)
+所有短语 / 码表 / 范化后的拼音权重都在 `[0, 10000]` 区间比较, 中位 1000:
+
+| 档位 | weight 范围 | 用途 |
+|---|---|---|
+| 必置顶 | 8000~10000 | signature / 公司名 / 个人 ID |
+| 高频备选 | 4000~7000 | 常用短语, 排在主码表词条前 |
+| 中位 (默认) | 1000 | 普通短语, 未指定 weight 时自动取值 |
+| 罕用 | 200~500 | 仅在低频区域出现 |
+| 禁用排序 | 0 | 完全不参与排序, 但仍可匹配 |
+
+yaml 优先级: `weight` 显式 > `position` fallback (10000-position) > 默认 1000。
+混输引擎下 phrase 候选与 codetable 同 tier (+10M boost), 与拼音不同 tier。
 
 ## Dependencies
 ### Internal

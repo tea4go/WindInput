@@ -38,15 +38,14 @@ func loadPhraseLayerFromYAML(t *testing.T, systemFile, userFile string) *PhraseL
 			continue
 		}
 		for _, e := range entries {
-			if e.Code == "" || (e.Text == "" && e.Texts == "") {
+			if e.Code == "" || e.Text == "" {
 				continue
 			}
 			rec := store.PhraseRecord{
 				Code:     strings.ToLower(e.Code),
 				Text:     e.Text,
-				Texts:    e.Texts,
-				Name:     e.Name,
 				Type:     detectPhraseType(e),
+				Weight:   resolveWeightFromFileEntry(e),
 				Position: e.Position,
 				Enabled:  !e.Disabled,
 				IsSystem: file.isSystem,
@@ -155,12 +154,10 @@ func TestPhraseLayerGroupSearch(t *testing.T) {
 	systemFile := filepath.Join(tmpDir, "system.phrases.yaml")
 	content := `phrases:
   - code: "zzys"
-    name: "圈数字"
-    texts: "①②③④⑤"
+    text: '$AA("圈数字", "①②③④⑤")'
     position: 1
   - code: "zzjt"
-    name: "箭头符号"
-    texts: "→↑←↓"
+    text: '$AA("箭头符号", "→↑←↓")'
     position: 2
   - code: "zzrq"
     text: "$Y-$MM-$DD"
@@ -240,8 +237,7 @@ func TestPhraseLayerGroupDisabled(t *testing.T) {
 	systemFile := filepath.Join(tmpDir, "system.phrases.yaml")
 	content := `phrases:
   - code: "zzts"
-    name: "特殊符号"
-    texts: "℃°‰"
+    text: '$AA("特殊符号", "℃°‰")'
     position: 1
     disabled: true
 `
@@ -271,8 +267,7 @@ func TestSearchCommandGroupExactMatch(t *testing.T) {
 	systemFile := filepath.Join(tmpDir, "system.phrases.yaml")
 	content := `phrases:
   - code: "zzbd"
-    name: "标点符号"
-    texts: "，。！？"
+    text: '$AA("标点符号", "，。！？")'
     position: 1
 `
 	if err := os.WriteFile(systemFile, []byte(content), 0644); err != nil {
@@ -307,12 +302,10 @@ func TestSearchCommandGroupPrefixNavigation(t *testing.T) {
 	systemFile := filepath.Join(tmpDir, "system.phrases.yaml")
 	content := `phrases:
   - code: "zzbd"
-    name: "标点符号"
-    texts: "，。！"
+    text: '$AA("标点符号", "，。！")'
     position: 1
   - code: "zzsz"
-    name: "数字符号"
-    texts: "①②③"
+    text: '$AA("数字符号", "①②③")'
     position: 2
   - code: "abc"
     text: "普通短语"
@@ -352,5 +345,173 @@ func TestSearchCommandGroupPrefixNavigation(t *testing.T) {
 		if c.IsGroup {
 			t.Fatal("non-group prefix should not return IsGroup candidates")
 		}
+	}
+}
+
+// TestResolvePhraseWeight 覆盖 resolvePhraseWeight 的优先级与边界:
+//   - 显式 weight > 0 → 直接用 (clamp 到 10000)
+//   - weight = 0 且 position > 0 → fallback 10000 - position
+//   - 两者都缺 → 默认 1000
+//   - weight < 0 → 0
+//   - position > 10000 → 0 (clamp)
+func TestResolvePhraseWeight(t *testing.T) {
+	cases := []struct {
+		name     string
+		weight   int
+		position int
+		want     int
+	}{
+		{"explicit weight 3000", 3000, 0, 3000},
+		{"explicit weight overrides position", 5000, 1, 5000},
+		{"explicit weight clamps to max", 99999, 0, 10000},
+		{"position fallback 1", 0, 1, 9999},
+		{"position fallback 100", 0, 100, 9900},
+		{"position fallback negative input → 0", 0, 99999, 0},
+		{"neither set → default 1000", 0, 0, 1000},
+		{"negative weight → 0", -10, 0, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := resolvePhraseWeight(c.weight, c.position)
+			if got != c.want {
+				t.Fatalf("resolvePhraseWeight(%d, %d) = %d, want %d", c.weight, c.position, got, c.want)
+			}
+		})
+	}
+}
+
+// TestResolveWeightFromFileEntry 验证 *int Weight 字段的"未设置"与"显式 0" 区分:
+//   - Weight=nil + position 1 → 9999 (fallback)
+//   - Weight=*0 → 0 (显式禁用)
+//   - Weight=*2000 + position 1 → 2000 (显式覆盖)
+func TestResolveWeightFromFileEntry(t *testing.T) {
+	zero := 0
+	w2000 := 2000
+
+	if got := resolveWeightFromFileEntry(PhraseFileEntry{Position: 1}); got != 9999 {
+		t.Fatalf("Weight=nil + position=1 want 9999, got %d", got)
+	}
+	if got := resolveWeightFromFileEntry(PhraseFileEntry{Weight: &zero, Position: 1}); got != 0 {
+		t.Fatalf("explicit Weight=0 should yield 0 regardless of position, got %d", got)
+	}
+	if got := resolveWeightFromFileEntry(PhraseFileEntry{Weight: &w2000, Position: 1}); got != 2000 {
+		t.Fatalf("Weight=2000 should override position, got %d", got)
+	}
+	if got := resolveWeightFromFileEntry(PhraseFileEntry{}); got != 1000 {
+		t.Fatalf("empty entry should default to 1000, got %d", got)
+	}
+}
+
+// TestPhraseLayerWeightFieldPriority 验证 yaml 中 weight 字段显式生效:
+// 两条同编码短语, 一条 weight=3000 另一条 weight=8000, 前者应排后。
+func TestPhraseLayerWeightFieldPriority(t *testing.T) {
+	tmpDir := t.TempDir()
+	systemFile := filepath.Join(tmpDir, "system.phrases.yaml")
+	content := `phrases:
+  - code: "ww"
+    text: "中等优先级"
+    weight: 3000
+  - code: "ww"
+    text: "高优先级"
+    weight: 8000
+  - code: "ww"
+    text: "默认 (走 position fallback)"
+    position: 1
+`
+	if err := os.WriteFile(systemFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	pl := loadPhraseLayerFromYAML(t, systemFile, "")
+	results := pl.Search("ww", 10)
+	if len(results) != 3 {
+		t.Fatalf("expected 3 candidates, got %d", len(results))
+	}
+	// position=1 fallback → 9999, 应最靠前; 然后 8000, 3000
+	wantOrder := []string{"默认 (走 position fallback)", "高优先级", "中等优先级"}
+	for i, w := range wantOrder {
+		if results[i].Text != w {
+			t.Fatalf("idx %d: want %q, got %q (weight=%d)", i, w, results[i].Text, results[i].Weight)
+		}
+	}
+	if results[1].Weight != 8000 {
+		t.Fatalf("高优先级 weight want 8000, got %d", results[1].Weight)
+	}
+	if results[2].Weight != 3000 {
+		t.Fatalf("中等优先级 weight want 3000, got %d", results[2].Weight)
+	}
+}
+
+// TestPhraseLayerArrayGroupNaturalOrder 验证字符组展开:
+// $AA("test", "abc") + weight=3000 → 三个字符候选 weight 都是 3000,
+// NaturalOrder = 0/1/2, 排序按数组顺序。
+func TestPhraseLayerArrayGroupNaturalOrder(t *testing.T) {
+	tmpDir := t.TempDir()
+	systemFile := filepath.Join(tmpDir, "system.phrases.yaml")
+	content := `phrases:
+  - code: "tt"
+    text: '$AA("test", "abc")'
+    weight: 3000
+`
+	if err := os.WriteFile(systemFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	pl := loadPhraseLayerFromYAML(t, systemFile, "")
+	results := pl.SearchCommand("tt", 10)
+	if len(results) != 3 {
+		t.Fatalf("expected 3 candidates, got %d", len(results))
+	}
+	wantTexts := []string{"a", "b", "c"}
+	for i, w := range wantTexts {
+		if results[i].Text != w {
+			t.Fatalf("idx %d: want %q, got %q", i, w, results[i].Text)
+		}
+		if results[i].Weight != 3000 {
+			t.Fatalf("idx %d: weight want 3000, got %d", i, results[i].Weight)
+		}
+		if results[i].NaturalOrder != i {
+			t.Fatalf("idx %d: NaturalOrder want %d, got %d", i, i, results[i].NaturalOrder)
+		}
+	}
+}
+
+// TestPhraseLayerLegacyPositionStillWorks 验证旧 db 兼容性:
+// PhraseRecord 中 Weight=0 + Position 旧字段, 行为与旧版完全一致 (10000 - position)。
+func TestPhraseLayerLegacyPositionStillWorks(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "legacy.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	// 直接种子旧记录: Weight 字段缺失 (零值), 仅有 Position
+	if err := s.SeedPhrases([]store.PhraseRecord{
+		{Code: "leg", Text: "旧条目1", Type: "static", Position: 1, Enabled: true, IsSystem: true},
+		{Code: "leg", Text: "旧条目2", Type: "static", Position: 5, Enabled: true, IsSystem: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	pl := NewPhraseLayerEx("phrases", "", "", s)
+	if err := pl.LoadFromStore(s); err != nil {
+		t.Fatal(err)
+	}
+
+	results := pl.Search("leg", 10)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	// position=1 → weight 9999, position=5 → weight 9995, 前者靠前
+	if results[0].Text != "旧条目1" {
+		t.Fatalf("expected 旧条目1 first, got %q", results[0].Text)
+	}
+	if results[0].Weight != 9999 {
+		t.Fatalf("旧条目1 weight want 9999, got %d", results[0].Weight)
+	}
+	if results[1].Weight != 9995 {
+		t.Fatalf("旧条目2 weight want 9995, got %d", results[1].Weight)
 	}
 }

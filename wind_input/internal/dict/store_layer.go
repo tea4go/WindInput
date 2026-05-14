@@ -51,6 +51,7 @@ func (l *StoreUserLayer) Search(code string, limit int) []candidate.Candidate {
 }
 
 // SearchPrefix 前缀查询用户词。
+// 末尾过滤 cmdbar 仅精确条目 ($CC(), 保留 $CC1(。
 func (l *StoreUserLayer) SearchPrefix(prefix string, limit int) []candidate.Candidate {
 	prefix = strings.ToLower(prefix)
 	recs, err := l.store.SearchUserWordsPrefix(l.schemaID, prefix, limit)
@@ -58,7 +59,7 @@ func (l *StoreUserLayer) SearchPrefix(prefix string, limit int) []candidate.Cand
 		slog.Debug("StoreUserLayer.SearchPrefix error", "prefix", prefix, "error", err)
 		return nil
 	}
-	return userRecordsToCandidates(recs, "", limit)
+	return filterCmdbarExactOnly(userRecordsToCandidates(recs, "", limit))
 }
 
 // Add 添加词条。
@@ -170,6 +171,7 @@ func (l *StoreTempLayer) Search(code string, limit int) []candidate.Candidate {
 }
 
 // SearchPrefix 前缀查询临时词。
+// 末尾过滤 cmdbar 仅精确条目 ($CC(), 保留 $CC1(。
 func (l *StoreTempLayer) SearchPrefix(prefix string, limit int) []candidate.Candidate {
 	prefix = strings.ToLower(prefix)
 	recs, err := l.store.SearchTempWordsPrefix(l.schemaID, prefix, limit)
@@ -177,7 +179,7 @@ func (l *StoreTempLayer) SearchPrefix(prefix string, limit int) []candidate.Cand
 		slog.Debug("StoreTempLayer.SearchPrefix error", "prefix", prefix, "error", err)
 		return nil
 	}
-	return userRecordsToCandidates(recs, "", limit)
+	return filterCmdbarExactOnly(userRecordsToCandidates(recs, "", limit))
 }
 
 // Remove 删除临时词条。

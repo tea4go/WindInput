@@ -57,11 +57,12 @@ func (l *CodeTableLayer) Search(code string, limit int) []candidate.Candidate {
 
 // SearchPrefix 前缀查询。limit 透传到底层 LookupPrefix，复用 binReader 的 top-K
 // 与内存模式的 top-K，避免上层重复全量排序。
+// 末尾过滤 cmdbar 仅精确条目 ($CC(), 保留 $CC1(。
 func (l *CodeTableLayer) SearchPrefix(prefix string, limit int) []candidate.Candidate {
 	results := l.codeTable.LookupPrefix(prefix, limit)
 	if limit > 0 {
-		// 底层已用 top-K 排序好，直接返回。
-		return results
+		// 底层已用 top-K 排序好，直接返回 (再过滤一道)。
+		return filterCmdbarExactOnly(results)
 	}
 	// limit == 0：底层未排序，按层契约排序后返回。
 	sorted := make([]candidate.Candidate, len(results))
@@ -72,7 +73,7 @@ func (l *CodeTableLayer) SearchPrefix(prefix string, limit int) []candidate.Cand
 		}
 		return sorted[i].NaturalOrder < sorted[j].NaturalOrder
 	})
-	return sorted
+	return filterCmdbarExactOnly(sorted)
 }
 
 // GetCodeTable 获取底层 CodeTable（用于特殊操作）
@@ -131,6 +132,7 @@ func (l *SimpleDictLayer) Search(code string, limit int) []candidate.Candidate {
 // SearchPrefix 前缀查询
 // SimpleDict 主要用于拼音，前缀匹配需要遍历整张表；limit > 0 时用 min-heap
 // top-K 避免对全量做 O(N log N) 排序。
+// 末尾过滤 cmdbar 仅精确条目 ($CC(), 保留 $CC1(。
 func (l *SimpleDictLayer) SearchPrefix(prefix string, limit int) []candidate.Candidate {
 	prefix = strings.ToLower(prefix)
 	if limit > 0 {
@@ -142,7 +144,7 @@ func (l *SimpleDictLayer) SearchPrefix(prefix string, limit int) []candidate.Can
 				}
 			}
 		}
-		return picker.sorted()
+		return filterCmdbarExactOnly(picker.sorted())
 	}
 
 	var results []candidate.Candidate
@@ -157,7 +159,7 @@ func (l *SimpleDictLayer) SearchPrefix(prefix string, limit int) []candidate.Can
 		}
 		return results[i].NaturalOrder < results[j].NaturalOrder
 	})
-	return results
+	return filterCmdbarExactOnly(results)
 }
 
 // GetSimpleDict 获取底层 SimpleDict（用于特殊操作）

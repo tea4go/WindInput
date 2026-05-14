@@ -2,12 +2,14 @@ package dict
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/huanfeng/wind_input/internal/candidate"
+	"github.com/huanfeng/wind_input/internal/cmdbar"
 	"github.com/huanfeng/wind_input/internal/store"
 	"gopkg.in/yaml.v3"
 )
@@ -39,12 +41,41 @@ type PhraseLayer struct {
 	// 命令结果缓存（动态短语）
 	cmdCache    map[string][]candidate.Candidate
 	cmdCacheKey string
+
+	// cmdbarHook 由宿主（coordinator）注入，用于将包含 "$CC(" 的短语
+	// 交给命令直通车解析。短语 value 不含 "$CC(" 时仍走旧的 templateEngine
+	// 路径，保持完全兼容。
+	//   ok == false: hook 未注入或当前短语不需要走 cmdbar (回退旧路径)
+	//   err != nil:  解析或求值失败, 调用方应记 WARN 后退化为字面量
+	//   返回的 actions 直接挂到 Candidate.Actions, 闭包形式由 hook 自行构造
+	cmdbarHook CmdbarPhraseHook
+}
+
+// CmdbarPhraseHook 由 coordinator 装配时注入到 PhraseLayer,
+// 输入是短语 value 字符串 (如 `$CC("打开百度", open("https://baidu.com"))`)
+// 输出: display 候选显示文本, actions 选中触发的已解析动作列表 (含 Effect/Text
+// 两种 Kind, 见 cmdbar.ResolvedAction), ok 表示该 value 是否真的被 cmdbar
+// 处理 (false 时调用方退回旧模板路径)。
+type CmdbarPhraseHook func(value string) (display string, actions []cmdbar.ResolvedAction, ok bool, err error)
+
+// SetCmdbarHook 安装命令直通车 hook (允许为 nil, 等同卸载)。
+func (pl *PhraseLayer) SetCmdbarHook(h CmdbarPhraseHook) {
+	pl.mu.Lock()
+	defer pl.mu.Unlock()
+	pl.cmdbarHook = h
+	// hook 变化会影响动态短语候选, 清缓存
+	pl.cmdCache = make(map[string][]candidate.Candidate)
 }
 
 // PhraseEntry 短语条目
+//
+// Weight 是 resolve 后的最终权重 (0~10000), 由 resolvePhraseWeight 计算:
+// 显式 weight > position fallback (10000-position) > 默认 1000。
+// Position 保留是为了 yaml/store 旧记录兼容以及上下移动等顺序操作。
 type PhraseEntry struct {
 	Text     string // 输出文本（可含 $变量模板）
-	Position int    // 候选位置
+	Weight   int    // 候选权重 (0~10000, 与码表/拼音范化后同一区间)
+	Position int    // 候选位置（兼容字段, 仅在缺 weight 时回退用）
 	IsSystem bool   // 是否来自系统短语
 	Disabled bool   // 是否被禁用
 }
@@ -54,7 +85,8 @@ type PhraseGroup struct {
 	Code     string // 完整编码（如 "zzbd"）
 	Name     string // 显示名称（如 "标点符号"）
 	Texts    string // 原始字符列表
-	Position int    // 排序位置
+	Weight   int    // 排序权重 (0~10000)
+	Position int    // 排序位置（兼容字段）
 	IsSystem bool   // 是否来自系统短语
 	Disabled bool   // 是否被禁用
 }
@@ -64,14 +96,20 @@ type PhrasesFileConfig struct {
 	Phrases []PhraseFileEntry `yaml:"phrases"`
 }
 
-// PhraseFileEntry 短语文件中的单条配置
+// PhraseFileEntry 短语文件中的单条配置。
+//
+// 字符组短语 (一编码展开为 N 个独立字符候选) 改用 Text 字段携带
+// $AA("name", "chars") marker 表达, 不再使用 yaml 端的 texts/name 双字段。
+// 详见 internal/dict/aa_marker.go 与
+// docs/design/2026-05-12-command-bar-design.md §3.7。
 type PhraseFileEntry struct {
-	Code     string `yaml:"code"`
-	Text     string `yaml:"text"`
-	Texts    string `yaml:"texts,omitempty"` // 数组映射：每个字符展开为独立候选
-	Name     string `yaml:"name,omitempty"`  // 组显示名称（用于 texts 类型的候选展示）
-	Position int    `yaml:"position"`
-	Disabled bool   `yaml:"disabled,omitempty"`
+	Code string `yaml:"code"`
+	Text string `yaml:"text"`
+	// Weight 显式权重 (0~10000), 优先级高于 Position。
+	// 用 *int 以区分"未设置"和"显式设置为 0"。
+	Weight   *int `yaml:"weight,omitempty"`
+	Position int  `yaml:"position,omitempty"`
+	Disabled bool `yaml:"disabled,omitempty"`
 }
 
 // NewPhraseLayer 创建短语层（测试用简化版，不绑定 Store）
@@ -123,7 +161,7 @@ func (pl *PhraseLayer) Search(code string, limit int) []candidate.Candidate {
 		results = append(results, candidate.Candidate{
 			Text:     e.Text,
 			Code:     code,
-			Weight:   positionToWeight(e.Position),
+			Weight:   resolvePhraseWeight(e.Weight, e.Position),
 			IsPhrase: true, // 短语永远保留，但不计入 hasCommon 避免污染同编码码表字过滤
 		})
 	}
@@ -159,15 +197,8 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 	if entries, ok := pl.dynamicPhrases[code]; ok {
 		results := make([]candidate.Candidate, 0, len(entries))
 		for _, e := range entries {
-			expanded := pl.templateEngine.Expand(e.Text)
-			results = append(results, candidate.Candidate{
-				Text:           expanded,
-				Code:           code,
-				Weight:         positionToWeight(e.Position),
-				IsCommand:      true,
-				IsPhrase:       true,
-				PhraseTemplate: e.Text,
-			})
+			cand := pl.expandDynamicEntry(code, e)
+			results = append(results, cand)
 		}
 		sortByPosition(results)
 		pl.cmdCache[code] = results
@@ -180,17 +211,26 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 	// ── 情况 2：字符组精确匹配（texts 字段，如 zzbd → 展开为字符列表） ──
 	if group, ok := pl.phraseGroups[code]; ok && !group.Disabled {
 		entries := pl.staticPhrases[code]
+		// 字符组内所有字符共享 group 的 weight, 用 NaturalOrder = 字符在
+		// chars 字符串中的下标做 tie-break, 保证按数组顺序排列。
+		// 权重统一取自 group 字段, 不再用每个 char entry 的 e.Position。
+		groupWeight := resolvePhraseWeight(group.Weight, group.Position)
 		results := make([]candidate.Candidate, 0, len(entries))
-		for _, e := range entries {
+		for i, e := range entries {
+			_ = e.Position // 字符级 entry 的 position 仅记录展开顺序, 不参与权重计算
 			results = append(results, candidate.Candidate{
-				Text:      e.Text,
-				Code:      code,
-				Weight:    positionToWeight(e.Position),
-				IsCommand: true,
-				IsPhrase:  true,
+				Text:         e.Text,
+				Code:         code,
+				Weight:       groupWeight,
+				NaturalOrder: i,
+				IsCommand:    true,
+				IsPhrase:     true,
 			})
 		}
-		sortByPosition(results)
+		// 同权重场景下用 NaturalOrder 做 tie-break, 保证字符按 chars 数组顺序。
+		sort.Slice(results, func(i, j int) bool {
+			return candidate.Better(results[i], results[j])
+		})
 		pl.cmdCache[code] = results
 		if limit > 0 && len(results) > limit {
 			return results[:limit]
@@ -213,7 +253,7 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 			navResults = append(navResults, candidate.Candidate{
 				Text:      displayName,
 				Code:      groupCode,
-				Weight:    positionToWeight(group.Position),
+				Weight:    resolvePhraseWeight(group.Weight, group.Position),
 				Comment:   groupCode[len(code):],
 				IsPhrase:  true,
 				IsGroup:   true,
@@ -221,6 +261,7 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 			})
 		}
 	}
+
 	if len(navResults) > 0 {
 		sort.Slice(navResults, func(i, j int) bool {
 			return candidate.Better(navResults[i], navResults[j])
@@ -235,8 +276,14 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 	return nil
 }
 
-// SearchPrefix 前缀查询（仅静态短语）
-// 对 phraseGroups 中的条目，前缀搜索返回组名候选而非展开字符
+// SearchPrefix 前缀查询。
+//   - phraseGroups: 返回组名候选 (Comment 显示编码后缀)
+//   - 静态短语: 直接候选
+//   - 动态短语 (含 $CC marker): 展开为可执行命令候选, 末尾 filterCmdbarExactOnly
+//     再过滤 $CC( 仅精确条目, 留下 $CC1(
+//
+// 普通 $X 模板动态短语 (如 date → $Y-$M-$D) 不在前缀路径出现, 维持精确匹配
+// 语义 (通过 SearchCommand 触发)。
 func (pl *PhraseLayer) SearchPrefix(prefix string, limit int) []candidate.Candidate {
 	pl.mu.RLock()
 	defer pl.mu.RUnlock()
@@ -254,7 +301,7 @@ func (pl *PhraseLayer) SearchPrefix(prefix string, limit int) []candidate.Candid
 			results = append(results, candidate.Candidate{
 				Text:      displayName,
 				Code:      code,
-				Weight:    positionToWeight(group.Position),
+				Weight:    resolvePhraseWeight(group.Weight, group.Position),
 				Comment:   code[len(prefix):], // 显示编码后缀（如 zz→zzbd 显示 "bd"）
 				IsPhrase:  true,
 				IsGroup:   true,
@@ -273,16 +320,38 @@ func (pl *PhraseLayer) SearchPrefix(prefix string, limit int) []candidate.Candid
 				results = append(results, candidate.Candidate{
 					Text:     e.Text,
 					Code:     code,
-					Weight:   positionToWeight(e.Position),
+					Weight:   resolvePhraseWeight(e.Weight, e.Position),
 					IsPhrase: true,
 				})
 			}
 		}
 	}
 
+	// 3. 处理动态短语中的命令直通车 ($CC/$CC1)。仅扫含 cmdbar marker 的条目,
+	//    避免普通 $X 模板 (date/time 等) 污染前缀候选。末尾的 filterCmdbarExactOnly
+	//    会把 $CC( 过滤掉, 只留 $CC1( 实际参与前缀展开。
+	for dynCode, entries := range pl.dynamicPhrases {
+		if dynCode == prefix || !strings.HasPrefix(dynCode, prefix) {
+			continue
+		}
+		for _, e := range entries {
+			if !HasCmdbarMarker(e.Text) {
+				continue
+			}
+			cand := pl.expandDynamicEntry(dynCode, e)
+			if cand.Comment == "" {
+				cand.Comment = dynCode[len(prefix):]
+			}
+			results = append(results, cand)
+		}
+	}
+
 	sort.Slice(results, func(i, j int) bool {
 		return candidate.Better(results[i], results[j])
 	})
+
+	// 过滤 cmdbar 仅精确条目 ($CC(), 保留 $CC1(
+	results = filterCmdbarExactOnly(results)
 
 	if limit > 0 && len(results) > limit {
 		results = results[:limit]
@@ -338,19 +407,30 @@ func (pl *PhraseLayer) LoadFromStore(s *store.Store) error {
 
 		switch rec.Type {
 		case "array":
+			// 字符组短语: 优先解析 Text 字段中的 $AA("name", "chars") marker,
+			// 兼容回退到旧的 Texts/Name 字段 (migration 已把 bbolt 中旧记录改写,
+			// 这里的回退仅服务于尚未走过 migration 的内存路径如测试种子)。
+			name, chars, ok := ParseAAMarker(rec.Text)
+			if !ok {
+				name = rec.Name
+				chars = rec.Texts
+			}
 			pg := PhraseGroup{
 				Code:     code,
-				Name:     rec.Name,
-				Texts:    rec.Texts,
+				Name:     name,
+				Texts:    chars,
+				Weight:   rec.Weight,
 				Position: position,
 				IsSystem: rec.IsSystem,
 			}
 			pl.phraseGroups[code] = pg
-			// Expand array characters into static phrases (same logic as loadFile)
-			runes := []rune(rec.Texts)
+			// 字符级 entry 共享 group 的权重, 字符内 NaturalOrder 由 SearchCommand
+			// 在展开时按数组下标分配, 这里 Position 仅记录原始展开顺序。
+			runes := []rune(chars)
 			for idx, r := range runes {
 				arrEntry := PhraseEntry{
 					Text:     string(r),
+					Weight:   rec.Weight,
 					Position: position + idx,
 					IsSystem: rec.IsSystem,
 				}
@@ -360,6 +440,7 @@ func (pl *PhraseLayer) LoadFromStore(s *store.Store) error {
 		case "dynamic":
 			entry := PhraseEntry{
 				Text:     rec.Text,
+				Weight:   rec.Weight,
 				Position: position,
 				IsSystem: rec.IsSystem,
 			}
@@ -368,6 +449,7 @@ func (pl *PhraseLayer) LoadFromStore(s *store.Store) error {
 		default: // "static"
 			entry := PhraseEntry{
 				Text:     rec.Text,
+				Weight:   rec.Weight,
 				Position: position,
 				IsSystem: rec.IsSystem,
 			}
@@ -394,8 +476,9 @@ func ParsePhraseYAMLFile(path string) ([]PhraseFileEntry, error) {
 }
 
 // detectPhraseType determines the type string from a PhraseFileEntry.
+// 字符组短语通过 Text 字段的 $AA("name", "chars") marker 识别 (array)。
 func detectPhraseType(e PhraseFileEntry) string {
-	if e.Texts != "" {
+	if _, _, ok := ParseAAMarker(e.Text); ok {
 		return "array"
 	}
 	if HasVariable(e.Text) {
@@ -428,14 +511,88 @@ func (pl *PhraseLayer) GetCommandCount() int {
 	return count
 }
 
+// expandDynamicEntry 把一条动态短语条目展开成候选。
+// 含 cmdbar marker ($CC( 或 $CC1() 且已注入 cmdbarHook 时走命令直通车;
+// 否则保持旧 templateEngine 行为。
+// hook 报错时不阻断输入流, 退化为字面量短语并记 WARN (不带 value 内容)。
+// 调用方需持有 pl.mu (RLock 或 Lock 形态, 仅读字段不修改)。
+func (pl *PhraseLayer) expandDynamicEntry(code string, e PhraseEntry) candidate.Candidate {
+	value := e.Text
+	ve := ValueExpander{Hook: pl.cmdbarHook, TemplateEngine: pl.templateEngine}
+
+	// 含 $CC 但 hook 返回错: ValueExpander 会降级为字面量 (IsCommand=true)。
+	// PhraseLayer 仍负责记 WARN, 因为短语数量有限, 日志不会爆。
+	res := ve.Expand(value)
+	if res.IsCommand && len(res.Actions) == 0 && res.DisplayText == "" && pl.cmdbarHook != nil && HasCmdbarMarker(value) {
+		// IsCommand=true && Actions=nil && DisplayText="" 仅在 hook 报错时出现。
+		// (hook 成功时即使 Actions=nil, DisplayText 也非空; ok=false 时 IsCommand=false)
+		slog.Warn("phrase: cmdbar hook returned error, falling back to literal",
+			"code", code, "valueLen", len(value))
+	}
+
+	out := candidate.Candidate{
+		Text:           res.Text,
+		Code:           code,
+		Weight:         resolvePhraseWeight(e.Weight, e.Position),
+		IsCommand:      true,
+		IsPhrase:       true,
+		PhraseTemplate: e.Text,
+	}
+	if res.IsCommand {
+		out.DisplayText = res.DisplayText
+		out.Actions = res.Actions
+	}
+	return out
+}
+
 // ===== 辅助函数 =====
 
-// positionToWeight 将位置转换为权重（position 1 → 最高权重）
-func positionToWeight(position int) int {
-	if position <= 0 {
-		position = 1
+// resolvePhraseWeight 计算短语候选的最终权重 (0~10000)。
+// 优先级:
+//  1. 显式 weight > 0 → 直接使用 (clamp 到 NormalizedWeightMax)
+//  2. position > 0     → fallback 为 10000 - position (维持旧 yaml 行为)
+//  3. 两者都缺         → 默认 1000 (中位)
+//
+// 这与 WeightNormalizer 的目标值保持一致, 让短语 / 用户词库 / 范化后的
+// 码表+拼音权重都在同一 0~10000 区间比较。
+func resolvePhraseWeight(weight, position int) int {
+	if weight > 0 {
+		if weight > NormalizedWeightMax {
+			return NormalizedWeightMax
+		}
+		return weight
 	}
-	return 10000 - position
+	if weight == 0 && position > 0 {
+		w := 10000 - position
+		if w < 0 {
+			w = 0
+		}
+		return w
+	}
+	// weight 显式为 0 (用户禁用排序) 或两者都缺 → 用 0 表达"基本不出",
+	// 但只有"显式 0"才能命中这里 (position<=0 时), 否则走 position fallback。
+	// 实际"未设置"路径会走默认值 1000:
+	if weight == 0 && position == 0 {
+		return 1000
+	}
+	if weight < 0 {
+		return 0
+	}
+	return 1000
+}
+
+// resolveWeightFromFileEntry 把 yaml 解析出的 PhraseFileEntry 转成
+// 最终生效的权重整数 (0~10000)。
+func resolveWeightFromFileEntry(e PhraseFileEntry) int {
+	weight := 0
+	if e.Weight != nil {
+		weight = *e.Weight
+		// 显式设置为 0 也尊重 (用户主动禁用排序权重)
+		if weight <= 0 {
+			return 0
+		}
+	}
+	return resolvePhraseWeight(weight, e.Position)
 }
 
 // sortByPosition 按位置排序候选
