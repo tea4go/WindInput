@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"time"
@@ -59,21 +58,18 @@ func (a *App) ExportSchemaData(schemaID string, sections []string, schemaName st
 }
 
 // ExportPhrasesFile 导出全局短语为独立文件
+//
+// format 参数现仅接受 "winddict" (WindDict YAML 头 + TSV body); 旧版纯 yaml
+// 导出已下线, 因为它与新版短语 yaml 字段对不齐 (没有 weight, 还在用 type/texts/name)。
 func (a *App) ExportPhrasesFile(format string) (*ImportExportResult, error) {
-	ext := ".wdict.yaml"
-	filterName := "WindDict 文件 (*.wdict.yaml)"
-	filterPattern := "*.wdict.yaml"
-	if format == "yaml" {
-		ext = ".yaml"
-		filterName = "YAML 文件 (*.yaml)"
-		filterPattern = "*.yaml"
-	}
-
-	defaultFilename := fmt.Sprintf("phrases_%s%s", time.Now().Format("20060102"), ext)
+	_ = format // 保留入参以维持前端调用签名稳定
+	defaultFilename := fmt.Sprintf("phrases_%s.wdict.yaml", time.Now().Format("20060102"))
 	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
 		Title:           "导出短语",
 		DefaultFilename: defaultFilename,
-		Filters:         []wailsRuntime.FileFilter{{DisplayName: filterName, Pattern: filterPattern}},
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "WindDict 文件 (*.wdict.yaml)", Pattern: "*.wdict.yaml"},
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("打开保存对话框失败: %w", err)
@@ -87,12 +83,6 @@ func (a *App) ExportPhrasesFile(format string) (*ImportExportResult, error) {
 		return nil, err
 	}
 
-	if format == "yaml" {
-		// 使用旧版 YAML 格式导出（复用现有逻辑）
-		return a.exportPhrasesYAML(path, phrases)
-	}
-
-	// WindDict 格式
 	f, err := os.Create(path)
 	if err != nil {
 		return nil, fmt.Errorf("创建文件失败: %w", err)
@@ -236,6 +226,14 @@ func (a *App) collectExportData(schemaID string, sections []string) (*dictio.Exp
 }
 
 // collectPhrases 通过 RPC 收集全局短语
+//
+// 字符组短语 (Type=="array") store 里仍按 Texts/Name 分字段存放, 导出时
+// 重新拼回 $AA("name", "chars") marker 形式, 与新版 yaml 自描述格式一致。
+//
+// Weight 处理: 始终导出 effective weight (resolvePhraseWeightForUI 计算结果),
+// 不再单独导出 position 字段。这样保证"用户显式设的 weight 原样导出, 未设
+// weight 但有 position 的也按 fallback 公式得到稳定数值"; 导入端只读 weight,
+// 无需感知 position fallback, schema 更简洁, 来回等价。
 func (a *App) collectPhrases() ([]dictio.PhraseEntry, error) {
 	reply, err := a.rpcClient.PhraseList()
 	if err != nil {
@@ -245,41 +243,15 @@ func (a *App) collectPhrases() ([]dictio.PhraseEntry, error) {
 	var phrases []dictio.PhraseEntry
 	for _, p := range reply.Phrases {
 		text := p.Text
-		if p.Texts != "" {
-			text = p.Texts
+		if p.Type == "array" && p.Texts != "" {
+			text = fmt.Sprintf("$AA(%q, %q)", p.Name, p.Texts)
 		}
 		phrases = append(phrases, dictio.PhraseEntry{
-			Code: p.Code, Type: p.Type, Text: text,
-			Position: p.Position, Enabled: p.Enabled, Name: p.Name,
+			Code:    p.Code,
+			Text:    text,
+			Weight:  resolvePhraseWeightForUI(p.Weight, p.Position),
+			Enabled: p.Enabled,
 		})
 	}
 	return phrases, nil
-}
-
-// exportPhrasesYAML 使用旧版 YAML 格式导出短语
-func (a *App) exportPhrasesYAML(path string, phrases []dictio.PhraseEntry) (*ImportExportResult, error) {
-	// 转换为旧格式并调用现有导出逻辑
-	var buf bytes.Buffer
-	buf.WriteString("phrases:\n")
-	for _, p := range phrases {
-		buf.WriteString(fmt.Sprintf("  - code: %q\n", p.Code))
-		if p.Type == "array" {
-			buf.WriteString(fmt.Sprintf("    texts: %q\n", p.Text))
-			if p.Name != "" {
-				buf.WriteString(fmt.Sprintf("    name: %q\n", p.Name))
-			}
-		} else {
-			buf.WriteString(fmt.Sprintf("    text: %q\n", p.Text))
-		}
-		buf.WriteString(fmt.Sprintf("    position: %d\n", p.Position))
-		if !p.Enabled {
-			buf.WriteString("    disabled: true\n")
-		}
-	}
-
-	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
-		return nil, fmt.Errorf("写入文件失败: %w", err)
-	}
-
-	return &ImportExportResult{Count: len(phrases), Path: path}, nil
 }

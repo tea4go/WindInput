@@ -69,6 +69,16 @@ func (a *App) RemoveUserWord(code, text string) error {
 	return a.rpcClient.DictRemove("", code, text)
 }
 
+// UpdateUserWord 更新用户词条权重 (隐式当前方案)
+func (a *App) UpdateUserWord(code, text string, newWeight int) error {
+	return a.rpcClient.DictUpdate("", code, text, newWeight)
+}
+
+// UpdateUserWordForSchema 更新指定方案用户词条权重
+func (a *App) UpdateUserWordForSchema(schemaID, code, text string, newWeight int) error {
+	return a.rpcClient.DictUpdate(schemaID, code, text, newWeight)
+}
+
 // SearchUserDict 搜索用户词库
 func (a *App) SearchUserDict(query string, limit int) ([]UserWordItem, error) {
 	reply, err := a.rpcClient.DictSearch("", query, "", limit, 0)

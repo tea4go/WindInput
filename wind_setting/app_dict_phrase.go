@@ -16,15 +16,55 @@ import (
 // ========== 短语管理（通过 RPC）==========
 
 // PhraseItem 短语条目（前端用）
+//
+// Weight 为存储的显式权重 (0 表示未设置, 与 wind_input 的 PhraseEntry.Weight 语义一致);
+// EffectiveWeight 为最终生效权重 (resolvePhraseWeightForUI 计算: weight>0 → 自身;
+// weight==0 && position>0 → 10000-position; 否则默认 1000), 仅供 UI 展示用,
+// 不应被当作显式 weight 回写。
 type PhraseItem struct {
-	Code     string `json:"code"`
-	Text     string `json:"text,omitempty"`
-	Texts    string `json:"texts,omitempty"`
-	Name     string `json:"name,omitempty"`
-	Type     string `json:"type"`
-	Position int    `json:"position"`
-	Enabled  bool   `json:"enabled"`
-	IsSystem bool   `json:"is_system"`
+	Code            string `json:"code"`
+	Text            string `json:"text,omitempty"`
+	Texts           string `json:"texts,omitempty"`
+	Name            string `json:"name,omitempty"`
+	Type            string `json:"type"`
+	Position        int    `json:"position"`
+	Weight          int    `json:"weight,omitempty"`
+	EffectiveWeight int    `json:"effective_weight"`
+	Enabled         bool   `json:"enabled"`
+	IsSystem        bool   `json:"is_system"`
+}
+
+// resolvePhraseWeightForUI 计算 UI 展示用的生效权重 (0~10000)。
+// 与 wind_input/internal/dict.resolvePhraseWeight 语义保持一致, 这里冗余实现
+// 避免跨 module 依赖; 若该常量/逻辑后续调整, 两处需同步。
+const phraseWeightUIMax = 10000
+
+func resolvePhraseWeightForUI(weight, position int) int {
+	if weight > 0 {
+		if weight > phraseWeightUIMax {
+			return phraseWeightUIMax
+		}
+		return weight
+	}
+	if weight == 0 && position > 0 {
+		w := 10000 - position
+		if w < 0 {
+			w = 0
+		}
+		return w
+	}
+	if weight < 0 {
+		return 0
+	}
+	return 1000
+}
+
+// PhraseValidateValueResult cmdbar 值校验结果（前端用，字段与 rpcapi.PhraseValidateValueReply 一致）
+type PhraseValidateValueResult struct {
+	Kind         string `json:"kind"`
+	Display      string `json:"display,omitempty"`
+	ActionsCount int    `json:"actions_count,omitempty"`
+	ErrorMsg     string `json:"error_msg,omitempty"`
 }
 
 // GetPhrases 获取所有短语（通过 RPC）
@@ -37,29 +77,74 @@ func (a *App) GetPhrases() ([]PhraseItem, error) {
 	for i, p := range reply.Phrases {
 		items[i] = PhraseItem{
 			Code: p.Code, Text: p.Text, Texts: p.Texts, Name: p.Name,
-			Type: p.Type, Position: p.Position, Enabled: p.Enabled, IsSystem: p.IsSystem,
+			Type: p.Type, Position: p.Position, Weight: p.Weight,
+			EffectiveWeight: resolvePhraseWeightForUI(p.Weight, p.Position),
+			Enabled:         p.Enabled, IsSystem: p.IsSystem,
 		}
 	}
 	return items, nil
 }
 
-// AddPhrase 添加短语
-func (a *App) AddPhrase(code, text, texts, name, pType string, position int) error {
+// AddPhrase 添加短语 (weight 为显式权重 0~10000, 0 表示未设置走 position fallback)
+func (a *App) AddPhrase(code, text, texts, name, pType string, position, weight int) error {
 	return a.rpcClient.PhraseAdd(rpcapi.PhraseAddArgs{
-		Code: code, Text: text, Texts: texts, Name: name, Type: pType, Position: position,
+		Code: code, Text: text, Texts: texts, Name: name, Type: pType,
+		Position: position, Weight: weight,
 	})
 }
 
-// UpdatePhrase 更新短语
-func (a *App) UpdatePhrase(code, text, name, newCode, newText string, newPosition int, enabled *bool) error {
+// UpdatePhrase 更新短语 (newWeight 传 nil 表示不修改, 否则按 0~10000 写入)
+func (a *App) UpdatePhrase(code, text, name, newCode, newText string, newPosition int, newWeight *int, enabled *bool) error {
 	return a.rpcClient.PhraseUpdate(rpcapi.PhraseUpdateArgs{
-		Code: code, Text: text, Name: name, NewCode: newCode, NewText: newText, NewPosition: newPosition, Enabled: enabled,
+		Code: code, Text: text, Name: name,
+		NewCode: newCode, NewText: newText, NewPosition: newPosition,
+		NewWeight: newWeight, Enabled: enabled,
 	})
+}
+
+// ValidatePhraseValue 校验短语 value, 用于添加/编辑对话框实时预览 cmdbar/字符组等内容。
+func (a *App) ValidatePhraseValue(value string) (*PhraseValidateValueResult, error) {
+	reply, err := a.rpcClient.PhraseValidateValue(value)
+	if err != nil {
+		return nil, fmt.Errorf("校验短语 value 失败: %w", err)
+	}
+	return &PhraseValidateValueResult{
+		Kind:         reply.Kind,
+		Display:      reply.Display,
+		ActionsCount: reply.ActionsCount,
+		ErrorMsg:     reply.ErrorMsg,
+	}, nil
 }
 
 // RemovePhrase 删除短语
 func (a *App) RemovePhrase(code, text, name string) error {
 	return a.rpcClient.PhraseRemove(code, text, name)
+}
+
+// PhraseDeleteArg 批量删除短语的单条参数 (导出给 wails 前端使用)
+type PhraseDeleteArg struct {
+	Code string `json:"code"`
+	Text string `json:"text"`
+	Name string `json:"name"`
+}
+
+// RemovePhrases 批量删除短语 (单事务, 单次 reload, 单次事件)
+func (a *App) RemovePhrases(items []PhraseDeleteArg) (int, error) {
+	if len(items) == 0 {
+		return 0, nil
+	}
+	args := make([]rpcapi.PhraseRemoveArgs, 0, len(items))
+	for _, it := range items {
+		args = append(args, rpcapi.PhraseRemoveArgs{Code: it.Code, Text: it.Text, Name: it.Name})
+	}
+	reply, err := a.rpcClient.PhraseBatchRemove(args)
+	if err != nil {
+		return 0, err
+	}
+	if reply == nil {
+		return 0, nil
+	}
+	return reply.Count, nil
 }
 
 // SetPhraseEnabled 设置短语启用/禁用状态
@@ -424,4 +509,26 @@ func (a *App) CheckPhrasesModified() (bool, error) {
 // ReloadPhrases 重新加载短语（RPC 模式下由服务端管理）
 func (a *App) ReloadPhrases() error {
 	return nil
+}
+
+// ========== 短语编辑对话框：路径选择 ==========
+
+// PickExePath 弹出文件选择对话框, 只筛选 .exe, 返回所选路径或空串 (取消)。
+// 用于命令直通车 "命令·打开" 子编辑器的 "程序" 子类型。
+func (a *App) PickExePath() (string, error) {
+	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "选择程序",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "可执行文件 (*.exe)", Pattern: "*.exe"},
+			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
+		},
+	})
+}
+
+// PickAnyPath 弹出文件选择对话框, 不过滤类型, 返回所选路径或空串 (取消)。
+// 用于命令直通车 "命令·打开" 子编辑器的 "文件" 子类型。
+func (a *App) PickAnyPath() (string, error) {
+	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "选择文件",
+	})
 }

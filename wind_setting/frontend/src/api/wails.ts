@@ -32,8 +32,28 @@ export interface PhraseItem {
   name?: string;
   type: "static" | "dynamic" | "array";
   position: number;
+  weight?: number;
+  // 后端计算的生效权重 (weight>0 → 自身; weight==0 && position>0 → 10000-position; 否则默认 1000)
+  // 仅供表格 / 对话框展示, 保存时仍按 weight 字段提交 (允许 0)。
+  effective_weight: number;
   enabled: boolean;
   is_system: boolean;
+}
+
+// ── 短语 value 校验类型 ──
+export type PhraseValueKind =
+  | "command"
+  | "command-prefix"
+  | "array"
+  | "template"
+  | "literal"
+  | "error";
+
+export interface PhraseValidateValueReply {
+  kind: PhraseValueKind;
+  display?: string;
+  actions_count?: number;
+  error_msg?: string;
 }
 
 // ── 词频类型 ──
@@ -268,8 +288,9 @@ export async function addPhrase(
   name: string,
   type: string,
   position: number,
+  weight: number = 0,
 ): Promise<void> {
-  return App.AddPhrase(code, text, texts, name, type, position);
+  return App.AddPhrase(code, text, texts, name, type, position, weight);
 }
 
 export async function updatePhrase(
@@ -279,9 +300,28 @@ export async function updatePhrase(
   newCode: string,
   newText: string,
   newPosition: number,
+  newWeight: number | null,
   enabled: boolean | null,
 ): Promise<void> {
-  return App.UpdatePhrase(code, text, name, newCode, newText, newPosition, enabled);
+  return App.UpdatePhrase(
+    code,
+    text,
+    name,
+    newCode,
+    newText,
+    newPosition,
+    newWeight,
+    enabled,
+  );
+}
+
+// 校验短语 value (cmdbar 解析预览, debounce 调用)。
+export async function validatePhraseValue(
+  value: string,
+): Promise<PhraseValidateValueReply> {
+  return (await App.ValidatePhraseValue(
+    value,
+  )) as unknown as PhraseValidateValueReply;
 }
 
 export async function removePhrase(
@@ -290,6 +330,17 @@ export async function removePhrase(
   name: string,
 ): Promise<void> {
   return App.RemovePhrase(code, text, name);
+}
+
+export interface PhraseDeleteArg {
+  code: string;
+  text: string;
+  name: string;
+}
+
+// 批量删除短语 (单事务 + 单次 reload, 显著优于循环单删)
+export async function removePhrases(items: PhraseDeleteArg[]): Promise<number> {
+  return App.RemovePhrases(items as any);
 }
 
 export async function setPhraseEnabled(
@@ -303,6 +354,17 @@ export async function setPhraseEnabled(
 
 export async function resetPhrasesToDefault(): Promise<void> {
   return App.ResetPhrasesToDefault();
+}
+
+// 短语 cmd-open 子编辑器: 弹出原生文件选择对话框 (仅 .exe)。
+// 后端方法尚未出现在 wails 生成的 d.ts 中, 通过 window.go 兜底调用。
+export async function pickExePath(): Promise<string> {
+  return (await (window as any).go.main.App.PickExePath()) as string;
+}
+
+// 短语 cmd-open 子编辑器: 弹出原生文件选择对话框 (不过滤类型)。
+export async function pickAnyPath(): Promise<string> {
+  return (await (window as any).go.main.App.PickAnyPath()) as string;
 }
 
 export async function importPhrases(): Promise<ImportExportResult> {
@@ -399,6 +461,14 @@ export async function removeUserWord(
   text: string,
 ): Promise<void> {
   return App.RemoveUserWord(code, text);
+}
+
+export async function updateUserWord(
+  code: string,
+  text: string,
+  weight: number = 0,
+): Promise<void> {
+  return App.UpdateUserWord(code, text, weight);
 }
 
 export async function searchUserDict(
@@ -512,6 +582,15 @@ export async function removeUserWordForSchema(
   text: string,
 ): Promise<void> {
   return App.RemoveUserWordForSchema(schemaID, code, text);
+}
+
+export async function updateUserWordForSchema(
+  schemaID: string,
+  code: string,
+  text: string,
+  weight: number = 0,
+): Promise<void> {
+  return App.UpdateUserWordForSchema(schemaID, code, text, weight);
 }
 
 export async function searchUserDictBySchema(

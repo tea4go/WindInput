@@ -1,25 +1,24 @@
 <script setup lang="ts">
-import { h, ref, onMounted, onUnmounted, computed } from "vue";
+import { h, ref, computed, onMounted, onUnmounted } from "vue";
 import type { ColumnDef } from "@tanstack/vue-table";
 import {
   getPhraseList,
   addPhrase,
   updatePhrase,
   removePhrase,
+  removePhrases,
   setPhraseEnabled,
   resetPhrasesToDefault,
-  importPhrases,
-  exportPhrases,
   type PhraseItem,
 } from "@/api/wails";
 import { useToast } from "@/composables/useToast";
 import { useConfirm } from "@/composables/useConfirm";
 import DictDataTable from "./DictDataTable.vue";
+import PhraseFormBody from "./PhraseFormBody.vue";
+import { createEmptyPhraseFormState, type PhraseFormState } from "./phraseForm";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -40,32 +39,84 @@ const allPhrases = ref<PhraseItem[]>([]);
 const selectedKeys = ref<Set<string>>(new Set());
 const dialogVisible = ref(false);
 const editingPhrase = ref<PhraseItem | null>(null);
-const phraseIsArray = ref(false);
-const newPhrase = ref({ code: "", text: "", texts: "", name: "", position: 1 });
-
-// ── 右键菜单 ──
-const ctxMenu = ref({
-  visible: false,
-  x: 0,
-  y: 0,
-  item: null as PhraseItem | null,
-  canMoveUp: false,
-  canMoveDown: false,
-});
+const formState = ref<PhraseFormState>(createEmptyPhraseFormState());
+const composedText = ref("");
+const hasValidationError = ref(false);
+// 连续添加: 仅在添加场景下生效, 勾选后保存不关闭对话框, 自动清空表单。
+// 默认不勾选 (保存后关闭, 与编辑场景一致)。
+const continuousAdd = ref(false);
 
 function phraseKey(item: PhraseItem): string {
   return `${item.code}||${item.text || ""}||${item.name || ""}`;
 }
 
 function itemContent(item: PhraseItem): string {
-  return item.type === "array" ? (item.name || item.code) : (item.text || "");
+  return item.text || "";
 }
 
-// 同一 code 的条目，按 position 升序
-function sameCodeGroup(code: string): PhraseItem[] {
-  return allPhrases.value
-    .filter((p) => p.code === code)
-    .sort((a, b) => a.position - b.position);
+// ── 类型推断: 用于编辑时加载到合适的 editor ──
+function inferEditorTypeForLoad(text: string): PhraseFormState["editorType"] {
+  const t = (text ?? "").trim();
+  if (t.startsWith("$AA(")) return "array";
+  if (t.startsWith("$CC1(") || t.startsWith("$CC(")) {
+    const re =
+      /^\$CC(1)?\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*(open|run)\(\s*"((?:[^"\\]|\\.)*)"(?:\s*,\s*"((?:[^"\\]|\\.)*)")?\s*\)\s*\)$/;
+    if (re.test(t)) return "cmd-open";
+    return "cmd-raw";
+  }
+  return "normal";
+}
+
+function unquote(literal: string): string {
+  try {
+    return JSON.parse(`"${literal}"`);
+  } catch {
+    return literal;
+  }
+}
+
+function loadFormFromText(state: PhraseFormState, text: string) {
+  const t = (text ?? "").trim();
+  const kind = inferEditorTypeForLoad(t);
+  state.editorType = kind;
+  state.buffers.normal.text = text;
+  if (kind === "cmd-open") {
+    const re =
+      /^\$CC(1)?\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*(open|run)\(\s*"((?:[^"\\]|\\.)*)"(?:\s*,\s*"((?:[^"\\]|\\.)*)")?\s*\)\s*\)$/;
+    const m = t.match(re);
+    if (m) {
+      const prefix1 = !!m[1];
+      const display = unquote(m[2] ?? "");
+      const verb = m[3] as "open" | "run";
+      const target = unquote(m[4] ?? "");
+      const args = m[5] !== undefined ? unquote(m[5]) : "";
+      state.buffers.cmdOpen.display = display;
+      state.buffers.cmdOpen.target = target;
+      state.buffers.cmdOpen.args = args;
+      state.buffers.cmdOpen.prefixVisible = prefix1;
+      if (/^https?:\/\//i.test(target)) {
+        state.buffers.cmdOpen.subKind = "url";
+      } else if (verb === "run") {
+        state.buffers.cmdOpen.subKind = "app";
+      } else {
+        state.buffers.cmdOpen.subKind = "file";
+      }
+    }
+    return;
+  }
+  if (kind === "cmd-raw") {
+    state.buffers.cmdRaw.text = text;
+    return;
+  }
+  if (kind === "array") {
+    const arrayRE =
+      /^\$AA\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)$/;
+    const m = t.match(arrayRE);
+    if (m) {
+      state.buffers.array.name = unquote(m[1] ?? "");
+      state.buffers.array.chars = unquote(m[2] ?? "");
+    }
+  }
 }
 
 // ── Columns ──
@@ -101,7 +152,9 @@ const columns: ColumnDef<PhraseItem, any>[] = [
   {
     accessorKey: "code",
     header: "编码",
-    size: 140,
+    // 编码列: 容纳常见短编码 (date / zzbd) 不被压缩; 长编码 break-all 换行。
+    size: 100,
+    minSize: 80,
     cell: ({ row }) =>
       h(
         "span",
@@ -115,58 +168,39 @@ const columns: ColumnDef<PhraseItem, any>[] = [
   {
     id: "content",
     header: "内容",
-    // accessorFn 使 globalFilter 能搜索此列
+    // 内容列适度收窄, 允许 break-words 多行换行, 保留 hover title。
+    size: 220,
+    minSize: 160,
     accessorFn: (row) => itemContent(row),
-    cell: ({ row }) =>
-      row.original.type === "array"
-        ? h("span", {}, row.original.name || row.original.code)
-        : h("span", {}, row.original.text),
-  },
-  {
-    id: "type",
-    header: "类型",
-    size: 90,
     cell: ({ row }) => {
-      if (row.original.type === "array")
-        return h(
-          Badge,
-          {
-            variant: "secondary",
-            class:
-              "text-[10px] px-1.5 py-0 whitespace-nowrap bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0",
-          },
-          () => "数组",
-        );
-      if (row.original.type === "dynamic")
-        return h(
-          Badge,
-          {
-            variant: "secondary",
-            class:
-              "text-[10px] px-1.5 py-0 whitespace-nowrap bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-0",
-          },
-          () => "动态",
-        );
-      if (row.original.is_system)
-        return h(
-          Badge,
-          {
-            variant: "secondary",
-            class: "text-[10px] px-1.5 py-0 whitespace-nowrap",
-          },
-          () => "系统",
-        );
-      return "";
+      const text = row.original.text || "";
+      return h(
+        "span",
+        {
+          class: "text-sm block whitespace-normal break-words align-middle",
+          title: text,
+        },
+        text,
+      );
     },
   },
   {
-    accessorKey: "position",
-    header: "位置",
-    size: 60,
+    accessorKey: "weight",
+    header: "权重",
+    size: 80,
+    minSize: 60,
+    cell: ({ row }) => {
+      const w =
+        typeof row.original.effective_weight === "number"
+          ? row.original.effective_weight
+          : (row.original.weight ?? 0);
+      return h("span", { class: "font-mono text-sm tabular-nums" }, String(w));
+    },
   },
   {
     id: "actions",
-    size: 80,
+    size: 140,
+    minSize: 120,
     enableSorting: false,
     cell: ({ row }) =>
       h("div", { class: "flex gap-1" }, [
@@ -202,11 +236,10 @@ async function loadData() {
   emit("loading", true);
   try {
     const list = await getPhraseList();
-    // 先按编码字典序，再按位置升序
     list.sort((a, b) => {
       if (a.code < b.code) return -1;
       if (a.code > b.code) return 1;
-      return a.position - b.position;
+      return (b.weight ?? 0) - (a.weight ?? 0);
     });
     allPhrases.value = list;
     selectedKeys.value = new Set();
@@ -221,45 +254,79 @@ async function loadData() {
 // ── Dialog ──
 function openAddDialog() {
   editingPhrase.value = null;
-  phraseIsArray.value = false;
-  newPhrase.value = { code: "", text: "", texts: "", name: "", position: 1 };
+  formState.value = createEmptyPhraseFormState(1000);
+  hasValidationError.value = false;
+  composedText.value = "";
+  continuousAdd.value = false;
   dialogVisible.value = true;
 }
 
 function openEditDialog(item: PhraseItem) {
   editingPhrase.value = item;
-  phraseIsArray.value = item.type === "array";
-  newPhrase.value = {
-    code: item.code,
-    text: item.text || "",
-    texts: item.texts || "",
-    name: item.name || "",
-    position: item.position,
-  };
+  const eff =
+    typeof item.effective_weight === "number" && item.effective_weight > 0
+      ? item.effective_weight
+      : typeof item.weight === "number" && item.weight > 0
+        ? item.weight
+        : 1000;
+  const next = createEmptyPhraseFormState(eff);
+  next.code = item.code;
+  loadFormFromText(next, item.text || "");
+  formState.value = next;
+  hasValidationError.value = false;
+  composedText.value = item.text || "";
   dialogVisible.value = true;
 }
 
+function clampWeight(w: number): number {
+  if (!Number.isFinite(w)) return 1000;
+  return Math.max(0, Math.min(10000, Math.round(w)));
+}
+
 async function handleSave() {
-  const { code, text, texts, name, position } = newPhrase.value;
+  const code = formState.value.code;
+  const weight = formState.value.weight;
+  const text = composedText.value;
   if (!code.trim()) {
     toast("编码不能为空", "error");
     return;
   }
-  const type = phraseIsArray.value ? "array" : "static";
+  if (hasValidationError.value) {
+    toast("内容存在解析错误，请修正后再保存", "error");
+    return;
+  }
+  const w = clampWeight(weight);
   try {
     if (editingPhrase.value) {
       const oldCode = editingPhrase.value.code;
       const oldText = editingPhrase.value.text || "";
       const oldName = editingPhrase.value.name || "";
       const newCode = code !== oldCode ? code : "";
-      const newText = phraseIsArray.value ? texts : text;
-      await updatePhrase(oldCode, oldText, oldName, newCode, newText, position, null);
+      const newText = text;
+      await updatePhrase(
+        oldCode,
+        oldText,
+        oldName,
+        newCode,
+        newText,
+        0,
+        w,
+        null,
+      );
       toast("短语已更新");
     } else {
-      await addPhrase(code, text, texts, name, type, position);
+      await addPhrase(code, text, "", "", "static", 0, w);
       toast("短语已添加");
     }
-    dialogVisible.value = false;
+    // 编辑模式 / 非连续添加: 保存后关闭。
+    // 连续添加 (仅添加场景): 清空表单, 保留对话框继续录入。
+    if (editingPhrase.value || !continuousAdd.value) {
+      dialogVisible.value = false;
+    } else {
+      formState.value = createEmptyPhraseFormState(1000);
+      composedText.value = "";
+      hasValidationError.value = false;
+    }
     await loadData();
   } catch (e) {
     toast(`操作失败: ${e}`, "error");
@@ -305,9 +372,13 @@ async function handleBatchRemove() {
     selectedKeys.value.has(phraseKey(item)),
   );
   try {
-    for (const item of toDelete) {
-      await removePhrase(item.code, item.text || "", item.name || "");
-    }
+    await removePhrases(
+      toDelete.map((item) => ({
+        code: item.code,
+        text: item.text || "",
+        name: item.name || "",
+      })),
+    );
     toast(`已删除 ${toDelete.length} 条短语`);
     await loadData();
   } catch (e) {
@@ -330,73 +401,11 @@ async function handleReset() {
   }
 }
 
-// ── 右键菜单 ──
-function handleRowContextmenu(item: PhraseItem, event: MouseEvent) {
-  const group = sameCodeGroup(item.code);
-  const idx = group.findIndex((p) => phraseKey(p) === phraseKey(item));
-  ctxMenu.value = {
-    visible: true,
-    x: event.clientX,
-    y: event.clientY,
-    item,
-    canMoveUp: idx > 0,
-    canMoveDown: idx < group.length - 1,
-  };
-}
-
-function closeCtxMenu() {
-  ctxMenu.value.visible = false;
-}
-
-async function handleMoveUp() {
-  const item = ctxMenu.value.item;
-  closeCtxMenu();
-  if (!item) return;
-  const group = sameCodeGroup(item.code);
-  const idx = group.findIndex((p) => phraseKey(p) === phraseKey(item));
-  if (idx <= 0) return;
-  const prev = group[idx - 1];
-  const posA = item.position;
-  const posB = prev.position;
-  try {
-    await updatePhrase(item.code, item.text || "", item.name || "", "", "", posB, null);
-    await updatePhrase(prev.code, prev.text || "", prev.name || "", "", "", posA, null);
-    await loadData();
-  } catch (e) {
-    toast(`操作失败: ${e}`, "error");
-  }
-}
-
-async function handleMoveDown() {
-  const item = ctxMenu.value.item;
-  closeCtxMenu();
-  if (!item) return;
-  const group = sameCodeGroup(item.code);
-  const idx = group.findIndex((p) => phraseKey(p) === phraseKey(item));
-  if (idx >= group.length - 1) return;
-  const next = group[idx + 1];
-  const posA = item.position;
-  const posB = next.position;
-  try {
-    await updatePhrase(item.code, item.text || "", item.name || "", "", "", posB, null);
-    await updatePhrase(next.code, next.text || "", next.name || "", "", "", posA, null);
-    await loadData();
-  } catch (e) {
-    toast(`操作失败: ${e}`, "error");
-  }
-}
-
 onMounted(() => {
   loadData();
-  document.addEventListener("click", closeCtxMenu);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeCtxMenu();
-  });
 });
 
-onUnmounted(() => {
-  document.removeEventListener("click", closeCtxMenu);
-});
+onUnmounted(() => {});
 
 defineExpose({ loadData });
 </script>
@@ -411,7 +420,6 @@ defineExpose({ loadData });
     empty-text="暂无短语"
     search-empty-text="未找到匹配短语"
     :on-row-dblclick="openEditDialog"
-    :on-row-contextmenu="handleRowContextmenu"
     @update:selection="selectedKeys = $event"
   >
     <template #toolbar-start="{ selectedCount }">
@@ -430,113 +438,46 @@ defineExpose({ loadData });
     </template>
   </DictDataTable>
 
-  <!-- 右键上下文菜单 -->
-  <Teleport to="body">
-    <div
-      v-if="ctxMenu.visible"
-      class="fixed z-50 min-w-[140px] rounded-md border border-border bg-popover shadow-md py-1 text-sm"
-      :style="{ left: `${ctxMenu.x}px`, top: `${ctxMenu.y}px` }"
-      @click.stop
-    >
-      <div class="px-3 py-1 text-xs text-muted-foreground font-mono truncate max-w-[200px]">
-        {{ ctxMenu.item?.code }}
-      </div>
-      <div class="border-t border-border my-1" />
-      <button
-        class="w-full text-left px-3 py-1.5 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
-        :disabled="!ctxMenu.canMoveUp"
-        @click="handleMoveUp"
-      >
-        ↑ 上移
-      </button>
-      <button
-        class="w-full text-left px-3 py-1.5 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
-        :disabled="!ctxMenu.canMoveDown"
-        @click="handleMoveDown"
-      >
-        ↓ 下移
-      </button>
-    </div>
-  </Teleport>
-
   <!-- 添加/编辑对话框 -->
   <Dialog v-model:open="dialogVisible">
-    <DialogContent class="sm:max-w-[450px]">
-      <DialogHeader>
+    <DialogContent
+      class="max-w-xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden"
+    >
+      <DialogHeader class="px-6 pt-6 pb-4 border-b shrink-0">
         <DialogTitle>
           {{ editingPhrase ? "编辑短语" : "添加短语" }}
         </DialogTitle>
       </DialogHeader>
-      <div class="grid gap-4 py-4">
-        <div class="grid grid-cols-[80px_1fr] items-center gap-2">
-          <label class="text-sm font-medium text-right">编码</label>
-          <Input
-            v-model="newPhrase.code"
-            placeholder="如: zdy"
-          />
-        </div>
-        <div class="grid grid-cols-[80px_1fr] items-center gap-2">
-          <label class="text-sm font-medium text-right">类型</label>
-          <div class="flex gap-4">
-            <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-              <input
-                type="radio"
-                :checked="!phraseIsArray"
-                @change="phraseIsArray = false"
-              />
-              普通
-            </label>
-            <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-              <input
-                type="radio"
-                :checked="phraseIsArray"
-                @change="phraseIsArray = true"
-              />
-              数组
-            </label>
-          </div>
-        </div>
-        <template v-if="phraseIsArray">
-          <div class="grid grid-cols-[80px_1fr] items-center gap-2">
-            <label class="text-sm font-medium text-right">名称</label>
-            <Input v-model="newPhrase.name" placeholder="如: 特殊符号" />
-          </div>
-          <div class="grid grid-cols-[80px_1fr] items-start gap-2">
-            <label class="text-sm font-medium text-right pt-2">字符列表</label>
-            <textarea
-              v-model="newPhrase.texts"
-              rows="4"
-              placeholder="每行一个字符或词"
-              class="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
-            />
-          </div>
-        </template>
-        <template v-else>
-          <div class="grid grid-cols-[80px_1fr] items-start gap-2">
-            <label class="text-sm font-medium text-right pt-2">文本</label>
-            <textarea
-              v-model="newPhrase.text"
-              rows="3"
-              placeholder="如: 我的地址是xxx 或 $Y-$MM-$DD&#10;支持多行文本"
-              class="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
-            />
-          </div>
-        </template>
-        <div class="grid grid-cols-[80px_1fr] items-center gap-2">
-          <label class="text-sm font-medium text-right">位置</label>
-          <Input
-            v-model.number="newPhrase.position"
-            type="number"
-            min="1"
-            class="w-20"
-          />
-        </div>
+      <div class="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+        <PhraseFormBody
+          v-model="formState"
+          :show-code-gen="false"
+          code-label="编码"
+          code-placeholder="如: zdy"
+          @composed-text="composedText = $event"
+          @validation-error="hasValidationError = $event"
+        />
       </div>
-      <DialogFooter>
-        <Button variant="outline" @click="dialogVisible = false">取消</Button>
-        <Button @click="handleSave">保存</Button>
+      <DialogFooter
+        class="px-6 py-4 border-t shrink-0 bg-background flex items-center"
+      >
+        <label
+          v-if="!editingPhrase"
+          class="mr-auto flex items-center gap-2 text-sm text-muted-foreground select-none"
+        >
+          <Checkbox
+            :checked="continuousAdd"
+            @update:checked="(v: boolean) => (continuousAdd = v)"
+          />
+          <span>连续添加</span>
+        </label>
+        <Button variant="outline" size="sm" @click="dialogVisible = false">
+          取消
+        </Button>
+        <Button size="sm" :disabled="hasValidationError" @click="handleSave">
+          保存
+        </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>
-
 </template>

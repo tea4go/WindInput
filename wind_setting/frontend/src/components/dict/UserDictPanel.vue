@@ -38,6 +38,9 @@ const loading = ref(false);
 const addWordVisible = ref(false);
 const editText = ref("");
 const editCode = ref("");
+// editingItem 非 null 表示对话框为"编辑"模式, AddWordPage 据此切换标题、
+// 隐藏"连续添加" checkbox, 并改走 update 链路而非 add 新建。
+const editingItem = ref<UserWordItem | null>(null);
 const currentPage = ref(0);
 const totalCount = ref(0);
 const searchQuery = ref("");
@@ -161,17 +164,21 @@ function handleSearchInput(val: string) {
 function openAddDialog() {
   editText.value = "";
   editCode.value = "";
+  editingItem.value = null;
   addWordVisible.value = true;
 }
 
 function openEditDialog(item: UserWordItem) {
   editText.value = item.text;
   editCode.value = item.code;
+  // 复制一份, 避免 AddWordPage 内部对象引用变更影响表格行。
+  editingItem.value = { ...item };
   addWordVisible.value = true;
 }
 
 async function handleAddWordClose() {
   addWordVisible.value = false;
+  editingItem.value = null;
   await loadData();
   emit("schema-changed");
 }
@@ -283,6 +290,7 @@ onMounted(() => {
     :initialText="editText"
     :initialCode="editCode"
     :initialSchema="schemaId"
+    :editingItem="editingItem"
     @close="handleAddWordClose"
   />
 

@@ -1,97 +1,50 @@
 <template>
-  <div class="addword-overlay" @click.self="handleCancel">
-    <div class="addword-dialog">
-      <h3 class="addword-title">快捷加词</h3>
+  <Dialog :open="open" @update:open="onOpenUpdate">
+    <DialogContent
+      class="max-w-xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden"
+    >
+      <DialogHeader class="px-6 pt-6 pb-4 border-b shrink-0">
+        <DialogTitle>
+          {{ isEditing ? "编辑用户词库" : "添加用户词库"
+          }}{{ schemaName ? ` (${schemaName})` : "" }}
+        </DialogTitle>
+      </DialogHeader>
 
-      <div class="addword-form">
-        <div class="addword-field">
-          <label class="addword-label">词语</label>
-          <input
-            ref="textInput"
-            class="addword-input"
-            v-model="wordText"
-            placeholder="输入要添加的词语"
-            @input="onTextInput"
-          />
-        </div>
-
-        <!-- 有自动编码支持的方案（拼音/码表）：显示可编辑编码字段 + 刷新按钮 -->
-        <div v-if="hasAutoEncode" class="addword-field">
-          <label class="addword-label">
-            {{ codeLabel }}
-            <span class="addword-hint">{{ codeHint }}</span>
-          </label>
-          <div class="addword-code-row">
-            <input
-              class="addword-input addword-input-grow"
-              v-model="wordCode"
-              :placeholder="codePlaceholder"
-              :class="{ 'addword-input-generating': generatingCode }"
-            />
-            <button
-              class="addword-gen-btn"
-              type="button"
-              @click="autoGenerateCode"
-              :disabled="!wordText.trim() || generatingCode"
-              title="重新生成编码"
-            >
-              ↺
-            </button>
-          </div>
-        </div>
-
-        <!-- 其他方案：编码纯手动必填 -->
-        <div v-else class="addword-field">
-          <label class="addword-label">编码</label>
-          <input
-            class="addword-input"
-            v-model="wordCode"
-            placeholder="输入编码"
-          />
-        </div>
-
-        <div class="addword-field">
-          <label class="addword-label">方案</label>
-          <Select
-            :model-value="schemaID"
-            @update:model-value="schemaID = $event"
-          >
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="选择方案" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="s in schemas" :key="s.id" :value="s.id">
-                {{ s.name }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div class="addword-field">
-          <label class="addword-label">
-            权重
-            <span class="addword-hint"
-              >值越大排序越靠前，系统词中位约 1000</span
-            >
-          </label>
-          <input
-            class="addword-input addword-weight"
-            type="number"
-            v-model.number="wordWeight"
-            min="1"
-            max="10000"
-          />
-        </div>
+      <div class="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+        <PhraseFormBody
+          v-model="formState"
+          :show-code-gen="hasAutoEncode"
+          :code-generating="generatingCode"
+          :code-label="codeLabel"
+          :code-placeholder="codePlaceholder"
+          :code-hint="codeHint"
+          :on-generate-code="onClickGenerate"
+          @composed-text="onComposedTextChanged"
+          @validation-error="hasValidationError = $event"
+          @code-input="onCodeManualInput"
+        />
       </div>
 
-      <div class="addword-actions">
-        <Button variant="outline" @click="handleCancel">取消</Button>
-        <Button @click="handleAdd" :disabled="!canAdd || adding">
-          {{ adding ? "添加中..." : "添加" }}
+      <DialogFooter
+        class="px-6 py-4 border-t shrink-0 bg-background flex items-center"
+      >
+        <label
+          v-if="!isEditing"
+          class="mr-auto flex items-center gap-2 text-sm text-muted-foreground select-none"
+        >
+          <Checkbox
+            :checked="continuousAdd"
+            @update:checked="(v: boolean) => (continuousAdd = v)"
+          />
+          <span>连续添加</span>
+        </label>
+        <Button variant="outline" size="sm" @click="handleCancel">取消</Button>
+        <Button size="sm" @click="handleAdd" :disabled="!canAdd || adding">
+          {{ adding ? "保存中..." : "保存" }}
         </Button>
-      </div>
-    </div>
-  </div>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
@@ -99,13 +52,19 @@ import { ref, computed, onMounted, nextTick, watch } from "vue";
 import * as wailsApi from "../api/wails";
 import { useToast } from "../composables/useToast";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import PhraseFormBody from "@/components/dict/PhraseFormBody.vue";
+import {
+  createEmptyPhraseFormState,
+  type PhraseFormState,
+} from "@/components/dict/phraseForm";
 
 interface SchemaItem {
   id: string;
@@ -119,50 +78,79 @@ const props = defineProps<{
   initialCode?: string;
   initialSchema?: string;
   standalone?: boolean;
+  // 编辑模式: 传入 editingItem 后, 标题/按钮文案切到"编辑"且隐藏连续添加 checkbox
+  editingItem?: { text: string; code: string; weight?: number } | null;
 }>();
+
+const isEditing = computed(() => !!props.editingItem);
+const continuousAdd = ref(false);
+// 用户是否已手动编辑过编码字段; 为 true 时 watch(composedText) 不再自动重生成
+const codeManuallyEdited = ref(false);
 
 const emit = defineEmits<{
   close: [];
 }>();
 
-const wordText = ref(props.initialText ?? "");
-const wordCode = ref(props.initialCode ?? "");
+// shadcn Dialog 的开关由本组件内部 ref 控制, 关闭事件再外抛 close。
+// 首帧渲染优化: open 初始为 false, 等 onMounted 把 schemas / 自动生成的编码都
+// 准备好后再置 true, 避免"空白对话框 → 数据填充"的二次渲染。
+const open = ref(false);
+
+function onOpenUpdate(val: boolean) {
+  open.value = val;
+  if (!val) emit("close");
+}
+
+// 编辑模式: 用 editingItem.weight 作为初始权重 (>0 时); 否则默认 1200。
+const initialWeight =
+  props.editingItem && typeof props.editingItem.weight === "number" &&
+  props.editingItem.weight > 0
+    ? props.editingItem.weight
+    : 1200;
+const formState = ref<PhraseFormState>(createEmptyPhraseFormState(initialWeight));
+// 初始 text/code 注入
+formState.value.buffers.normal.text = props.initialText ?? "";
+formState.value.code = props.initialCode ?? "";
+
+const composedText = ref(formState.value.buffers.normal.text);
+const hasValidationError = ref(false);
+
 const schemaID = ref(props.initialSchema ?? "");
-const wordWeight = ref(1200);
 const schemas = ref<SchemaItem[]>([]);
 const { toast } = useToast();
 const adding = ref(false);
 const generatingCode = ref(false);
-const textInput = ref<HTMLInputElement | null>(null);
 
 const currentSchema = computed(() =>
   schemas.value.find((s) => s.id === schemaID.value),
 );
+const schemaName = computed(() => currentSchema.value?.name ?? "");
 const isPinyin = computed(() => currentSchema.value?.engineType === "pinyin");
 const isCodetable = computed(
   () => currentSchema.value?.engineType === "codetable",
 );
 
-// 有自动编码支持的方案
 const hasAutoEncode = computed(() => isPinyin.value || isCodetable.value);
 
 const codeLabel = computed(() => (isPinyin.value ? "拼音" : "编码"));
-const codeHint = computed(() =>
-  isPinyin.value ? "自动生成，多音字可手动修改" : "自动生成，可手动修改",
-);
 const codePlaceholder = computed(() =>
   isPinyin.value ? "全拼（如 nihao）" : "编码（如 abcd）",
 );
+const codeHint = computed(() =>
+  hasAutoEncode.value ? "(自动生成, 可手动修改)" : "",
+);
+
+const wordText = computed(() => composedText.value);
 
 const canAdd = computed(() => {
+  if (hasValidationError.value) return false;
   const hasText = wordText.value.trim().length >= 1;
-  const hasWeight = wordWeight.value > 0;
+  const w = formState.value.weight;
+  const hasWeight = w >= 0 && w <= 10000;
   if (isPinyin.value) {
-    // 拼音方案：编码可空（服务端自动生成）
     return hasText && hasWeight;
   }
-  // 码表及其他方案：编码必填
-  return hasText && wordCode.value.trim().length > 0 && hasWeight;
+  return hasText && formState.value.code.trim().length > 0 && hasWeight;
 });
 
 async function autoGenerateCode() {
@@ -176,7 +164,10 @@ async function autoGenerateCode() {
     } else if (isCodetable.value) {
       code = await wailsApi.encodeWordForSchema(schemaID.value, text);
     }
-    wordCode.value = code;
+    // 容错: 生成结果为空时保留现有编码, 不清空用户已输入或之前生成的内容
+    if (code) {
+      formState.value.code = code;
+    }
   } catch {
     // 生成失败时保留用户输入，不强制清空
   } finally {
@@ -184,23 +175,41 @@ async function autoGenerateCode() {
   }
 }
 
+// 点击 ↺ 按钮: 视为用户主动请求生成, 重置手改标记
+function onClickGenerate() {
+  codeManuallyEdited.value = false;
+  autoGenerateCode();
+}
+
+// 用户在编码字段输入 (来自 PhraseFormBody 的 code-input 事件)
+function onCodeManualInput() {
+  codeManuallyEdited.value = true;
+}
+
 let autoGenTimer: ReturnType<typeof setTimeout> | null = null;
 
-function onTextInput() {
+function onComposedTextChanged(text: string) {
+  composedText.value = text;
+}
+
+// 当内容文本变化, 且方案支持自动编码时, 防抖触发;
+// 用户手改过编码后不再自动覆盖。
+watch(composedText, () => {
   if (!hasAutoEncode.value) return;
+  if (codeManuallyEdited.value) return;
   if (autoGenTimer) clearTimeout(autoGenTimer);
   autoGenTimer = setTimeout(() => {
     autoGenerateCode();
   }, 300);
-}
+});
 
 // 切换方案时重新生成编码
 watch(schemaID, () => {
   if (hasAutoEncode.value && wordText.value.trim()) {
     autoGenerateCode();
   } else if (!hasAutoEncode.value) {
-    if (wordCode.value && !props.initialCode) {
-      wordCode.value = "";
+    if (formState.value.code && !props.initialCode) {
+      formState.value.code = "";
     }
   }
 });
@@ -209,12 +218,46 @@ async function handleAdd() {
   if (!canAdd.value || adding.value) return;
 
   const text = wordText.value.trim();
-  const code = wordCode.value.trim();
-  const weight = wordWeight.value;
+  const code = formState.value.code.trim();
+  const weight = formState.value.weight;
 
   adding.value = true;
   try {
-    if (schemaID.value) {
+    if (isEditing.value && props.editingItem) {
+      // 编辑模式: code/text 没变 → 仅更新权重; 否则先删旧条目再加新条目。
+      const oldCode = props.editingItem.code;
+      const oldText = props.editingItem.text;
+      const sameKey = oldCode === code && oldText === text;
+      if (sameKey) {
+        if (schemaID.value) {
+          await wailsApi.updateUserWordForSchema(
+            schemaID.value,
+            code,
+            text,
+            weight,
+          );
+        } else {
+          await wailsApi.updateUserWord(code, text, weight);
+        }
+      } else {
+        if (schemaID.value) {
+          await wailsApi.removeUserWordForSchema(
+            schemaID.value,
+            oldCode,
+            oldText,
+          );
+          await wailsApi.addUserWordForSchema(
+            schemaID.value,
+            code,
+            text,
+            weight,
+          );
+        } else {
+          await wailsApi.removeUserWord(oldCode, oldText);
+          await wailsApi.addUserWord(code, text, weight);
+        }
+      }
+    } else if (schemaID.value) {
       const existing = await wailsApi.getUserDictBySchema(schemaID.value);
       const found = existing.find((w) => w.code === code && w.text === text);
       if (found) {
@@ -230,12 +273,26 @@ async function handleAdd() {
     }
     await wailsApi.notifyReload("userdict");
     const displayCode = code || "(自动生成)";
-    toast(`已添加: ${text} (${displayCode})`);
+    toast(
+      isEditing.value
+        ? `已更新: ${text} (${displayCode})`
+        : `已保存: ${text} (${displayCode})`,
+    );
 
-    wordText.value = "";
-    wordCode.value = "";
-    await nextTick();
-    textInput.value?.focus();
+    // 编辑模式 / 非连续添加: 保存后关闭对话框
+    if (isEditing.value || !continuousAdd.value) {
+      adding.value = false;
+      open.value = false;
+      emit("close");
+      return;
+    }
+
+    // 连续添加: 清空 (保留方案 / 权重), 继续加词;
+    // 同时重置编码手改标记, 下次输入内容会自动重生成
+    formState.value.buffers.normal.text = "";
+    formState.value.code = "";
+    composedText.value = "";
+    codeManuallyEdited.value = false;
   } catch (e: any) {
     toast(`添加失败: ${e.message || e}`, "error");
   } finally {
@@ -244,6 +301,7 @@ async function handleAdd() {
 }
 
 function handleCancel() {
+  open.value = false;
   emit("close");
 }
 
@@ -271,132 +329,12 @@ onMounted(async () => {
   }
 
   // 初始化时若有词语但无编码，自动生成
-  if (hasAutoEncode.value && wordText.value.trim() && !wordCode.value) {
+  if (hasAutoEncode.value && wordText.value.trim() && !formState.value.code) {
     await autoGenerateCode();
   }
 
   await nextTick();
-  textInput.value?.focus();
-  textInput.value?.select();
+  // 所有依赖数据 (schemas / 编码) 已就绪, 此时再展示对话框, 避免首帧空白。
+  open.value = true;
 });
 </script>
-
-<style scoped>
-.addword-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-}
-
-.addword-dialog {
-  background: hsl(var(--card));
-  border-radius: 8px;
-  padding: 24px;
-  width: 340px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
-}
-
-.addword-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 18px;
-  color: hsl(var(--foreground));
-}
-
-.addword-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.addword-field {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.addword-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.addword-hint {
-  font-size: 11px;
-  font-weight: 400;
-  color: hsl(var(--muted-foreground));
-}
-
-.addword-input {
-  padding: 7px 10px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 6px;
-  font-size: 14px;
-  color: hsl(var(--foreground));
-  background: hsl(var(--card));
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.addword-input:focus {
-  border-color: hsl(var(--primary));
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.1);
-}
-
-.addword-input::placeholder {
-  color: hsl(var(--muted-foreground));
-}
-
-.addword-input-generating {
-  opacity: 0.6;
-}
-
-.addword-weight {
-  width: 120px;
-}
-
-.addword-code-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.addword-input-grow {
-  flex: 1;
-}
-
-.addword-gen-btn {
-  padding: 7px 10px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 6px;
-  font-size: 14px;
-  background: hsl(var(--muted));
-  color: hsl(var(--foreground));
-  cursor: pointer;
-  transition: background 0.15s;
-  line-height: 1;
-}
-
-.addword-gen-btn:hover:not(:disabled) {
-  background: hsl(var(--accent));
-}
-
-.addword-gen-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.addword-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 18px;
-}
-</style>

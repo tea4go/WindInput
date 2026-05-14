@@ -1,6 +1,8 @@
 <template>
   <Dialog :open="open" @update:open="$emit('update:open', $event)">
-    <DialogContent class="ie-dialog-outer p-0 gap-0 bg-card max-w-[min(480px,90vw)]">
+    <DialogContent
+      class="ie-dialog-outer p-0 gap-0 bg-card max-w-[min(480px,90vw)]"
+    >
       <!-- 固定高度内部容器 -->
       <div class="ie-dialog">
         <!-- 标题 -->
@@ -10,186 +12,266 @@
             <button
               :class="['ie-tab', { active: activeTab === 'import' }]"
               @click="activeTab = 'import'"
-            >导入</button>
+            >
+              导入
+            </button>
             <button
               :class="['ie-tab', { active: activeTab === 'export' }]"
               @click="activeTab = 'export'"
-            >导出</button>
+            >
+              导出
+            </button>
           </div>
         </div>
 
         <!-- 内容区（滚动） -->
         <div class="ie-body">
-        <!-- ===== 导入 ===== -->
-        <template v-if="activeTab === 'import'">
-          <!-- Step 1: 选择格式 -->
-          <div v-if="importStep === 'format'">
-            <label class="ie-field-label">导入格式</label>
-            <div class="ie-rich-dropdown" ref="importDropdownRef">
-              <button class="ie-rich-trigger" type="button" @click="importDropdownOpen = !importDropdownOpen">
-                <div class="ie-rich-trigger-main">
-                  <div class="ie-rich-trigger-title">{{ currentImportFormat.label }}</div>
-                  <div class="ie-rich-trigger-sub">{{ currentImportFormat.desc }}</div>
-                </div>
-                <ChevronDown class="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              </button>
-              <div v-if="importDropdownOpen" class="ie-rich-options">
+          <!-- ===== 导入 ===== -->
+          <template v-if="activeTab === 'import'">
+            <!-- Step 1: 选择格式 -->
+            <div v-if="importStep === 'format'">
+              <label class="ie-field-label">导入格式</label>
+              <div class="ie-rich-dropdown" ref="importDropdownRef">
                 <button
-                  v-for="fmt in importFormats" :key="fmt.value" type="button"
-                  class="ie-rich-option" :class="{ selected: importFormat === fmt.value }"
-                  @click="importFormat = fmt.value; importDropdownOpen = false"
+                  class="ie-rich-trigger"
+                  type="button"
+                  @click="importDropdownOpen = !importDropdownOpen"
                 >
-                  <div class="ie-rich-option-title">{{ fmt.label }}</div>
-                  <div class="ie-rich-option-sub">{{ fmt.desc }}</div>
+                  <div class="ie-rich-trigger-main">
+                    <div class="ie-rich-trigger-title">
+                      {{ currentImportFormat.label }}
+                    </div>
+                    <div class="ie-rich-trigger-sub">
+                      {{ currentImportFormat.desc }}
+                    </div>
+                  </div>
+                  <ChevronDown
+                    class="h-4 w-4 text-muted-foreground flex-shrink-0"
+                  />
                 </button>
+                <div v-if="importDropdownOpen" class="ie-rich-options">
+                  <button
+                    v-for="fmt in importFormats"
+                    :key="fmt.value"
+                    type="button"
+                    class="ie-rich-option"
+                    :class="{ selected: importFormat === fmt.value }"
+                    @click="
+                      importFormat = fmt.value;
+                      importDropdownOpen = false;
+                    "
+                  >
+                    <div class="ie-rich-option-title">{{ fmt.label }}</div>
+                    <div class="ie-rich-option-sub">{{ fmt.desc }}</div>
+                  </button>
+                </div>
+              </div>
+
+              <div class="ie-format-example" v-if="currentImportFormat.example">
+                <div class="ie-example-label">格式示例</div>
+                <pre class="ie-example-code">{{
+                  currentImportFormat.example
+                }}</pre>
               </div>
             </div>
 
-            <div class="ie-format-example" v-if="currentImportFormat.example">
-              <div class="ie-example-label">格式示例</div>
-              <pre class="ie-example-code">{{ currentImportFormat.example }}</pre>
-            </div>
-          </div>
+            <!-- Step 2: 预览确认 -->
+            <div v-if="importStep === 'preview'">
+              <div class="ie-preview-info">
+                <p v-if="preview?.schema_name">
+                  <strong>方案:</strong> {{ preview.schema_name }}
+                  <span v-if="preview.schema_id">
+                    ({{ preview.schema_id }})</span
+                  >
+                </p>
+                <p v-if="preview?.generator">
+                  <strong>来源:</strong> {{ preview.generator }}
+                </p>
+                <p v-if="preview?.exported_at">
+                  <strong>导出时间:</strong> {{ preview.exported_at }}
+                </p>
+              </div>
 
-          <!-- Step 2: 预览确认 -->
-          <div v-if="importStep === 'preview'">
-            <div class="ie-preview-info">
-              <p v-if="preview?.schema_name">
-                <strong>方案:</strong> {{ preview.schema_name }}
-                <span v-if="preview.schema_id"> ({{ preview.schema_id }})</span>
-              </p>
-              <p v-if="preview?.generator"><strong>来源:</strong> {{ preview.generator }}</p>
-              <p v-if="preview?.exported_at"><strong>导出时间:</strong> {{ preview.exported_at }}</p>
+              <!-- 目标方案选择（纯词库格式） -->
+              <div v-if="isWordOnlyFormat" class="ie-field">
+                <label class="ie-field-label">导入到方案</label>
+                <Select v-model="importTargetSchema">
+                  <SelectTrigger class="ie-select-trigger">
+                    <SelectValue placeholder="选择目标方案" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      v-for="sid in nonMixedSchemaIds"
+                      :key="sid"
+                      :value="sid"
+                    >
+                      {{ allSchemaNames[sid] || sid }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <!-- Section 选择 -->
+              <div v-if="preview?.sections" class="ie-section-grid">
+                <label
+                  v-for="(count, section) in preview.sections"
+                  :key="section"
+                  class="ie-section-item"
+                >
+                  <Checkbox
+                    :checked="selectedSections.includes(section as string)"
+                    @update:checked="toggleSection(section as string, $event)"
+                  />
+                  <span class="ie-section-name">{{
+                    sectionLabel(section as string)
+                  }}</span>
+                  <span class="ie-section-count">{{ count }}</span>
+                </label>
+              </div>
             </div>
 
-            <!-- 目标方案选择（纯词库格式） -->
-            <div v-if="isWordOnlyFormat" class="ie-field">
-              <label class="ie-field-label">导入到方案</label>
-              <Select v-model="importTargetSchema">
+            <!-- Step 3: 导入完成 -->
+            <div v-if="importStep === 'done'" class="ie-result-wrap">
+              <p class="ie-result">{{ importMessage }}</p>
+            </div>
+          </template>
+
+          <!-- ===== 导出 ===== -->
+          <template v-if="activeTab === 'export'">
+            <!-- 导出类型 -->
+            <div class="ie-radio-group">
+              <label
+                class="ie-radio-item"
+                :class="{ active: exportType === 'schema' }"
+              >
+                <input type="radio" value="schema" v-model="exportType" />
+                方案数据
+              </label>
+              <label
+                class="ie-radio-item"
+                :class="{ active: exportType === 'phrases' }"
+              >
+                <input type="radio" value="phrases" v-model="exportType" />
+                快捷短语
+              </label>
+              <label
+                class="ie-radio-item"
+                :class="{ active: exportType === 'backup' }"
+              >
+                <input type="radio" value="backup" v-model="exportType" />
+                全部备份 (ZIP)
+              </label>
+            </div>
+
+            <!-- 方案选择（仅方案数据模式） -->
+            <div v-if="exportType === 'schema'" class="ie-field">
+              <label class="ie-field-label">选择方案</label>
+              <Select v-model="exportSchemaId">
                 <SelectTrigger class="ie-select-trigger">
-                  <SelectValue placeholder="选择目标方案" />
+                  <SelectValue placeholder="选择方案" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem v-for="sid in nonMixedSchemaIds" :key="sid" :value="sid">
+                  <SelectItem
+                    v-for="sid in exportableSchemaIds ?? allSchemaIds"
+                    :key="sid"
+                    :value="sid"
+                  >
                     {{ allSchemaNames[sid] || sid }}
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <!-- Section 选择 -->
-            <div v-if="preview?.sections" class="ie-section-grid">
-              <label
-                v-for="(count, section) in preview.sections" :key="section"
-                class="ie-section-item"
-              >
-                <Checkbox
-                  :checked="selectedSections.includes(section as string)"
-                  @update:checked="toggleSection(section as string, $event)"
-                />
-                <span class="ie-section-name">{{ sectionLabel(section as string) }}</span>
-                <span class="ie-section-count">{{ count }}</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Step 3: 导入完成 -->
-          <div v-if="importStep === 'done'" class="ie-result-wrap">
-            <p class="ie-result">{{ importMessage }}</p>
-          </div>
-        </template>
-
-        <!-- ===== 导出 ===== -->
-        <template v-if="activeTab === 'export'">
-          <!-- 导出类型 -->
-          <div class="ie-radio-group">
-            <label class="ie-radio-item" :class="{ active: exportType === 'schema' }">
-              <input type="radio" value="schema" v-model="exportType" /> 方案数据
-            </label>
-            <label class="ie-radio-item" :class="{ active: exportType === 'phrases' }">
-              <input type="radio" value="phrases" v-model="exportType" /> 快捷短语
-            </label>
-            <label class="ie-radio-item" :class="{ active: exportType === 'backup' }">
-              <input type="radio" value="backup" v-model="exportType" /> 全部备份 (ZIP)
-            </label>
-          </div>
-
-          <!-- 方案选择（仅方案数据模式） -->
-          <div v-if="exportType === 'schema'" class="ie-field">
-            <label class="ie-field-label">选择方案</label>
-            <Select v-model="exportSchemaId">
-              <SelectTrigger class="ie-select-trigger">
-                <SelectValue placeholder="选择方案" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="sid in (exportableSchemaIds ?? allSchemaIds)"
-                  :key="sid"
-                  :value="sid"
+            <!-- 方案内容选择（两列） -->
+            <div v-if="exportType === 'schema'">
+              <label class="ie-field-label">导出内容</label>
+              <div class="ie-section-grid">
+                <label
+                  v-for="sec in exportableSections"
+                  :key="sec.key"
+                  class="ie-section-item ie-section-bordered"
+                  :class="{
+                    disabled:
+                      sec.disabled || (exportCounts[sec.key] ?? -1) === 0,
+                  }"
                 >
-                  {{ allSchemaNames[sid] || sid }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <!-- 方案内容选择（两列） -->
-          <div v-if="exportType === 'schema'">
-            <label class="ie-field-label">导出内容</label>
-            <div class="ie-section-grid">
-              <label
-                v-for="sec in exportableSections" :key="sec.key"
-                class="ie-section-item ie-section-bordered"
-                :class="{ disabled: sec.disabled || (exportCounts[sec.key] ?? -1) === 0 }"
-              >
-                <Checkbox
-                  :checked="exportSections.includes(sec.key)"
-                  :disabled="sec.disabled || (exportCounts[sec.key] ?? -1) === 0"
-                  @update:checked="toggleExportSection(sec.key, $event)"
-                />
-                <span class="ie-section-name">{{ sec.label }}</span>
-                <span v-if="sec.disabled" class="ie-section-count">-</span>
-                <span v-else class="ie-section-count">{{ exportCounts[sec.key] ?? '-' }}</span>
-              </label>
+                  <Checkbox
+                    :checked="exportSections.includes(sec.key)"
+                    :disabled="
+                      sec.disabled || (exportCounts[sec.key] ?? -1) === 0
+                    "
+                    @update:checked="toggleExportSection(sec.key, $event)"
+                  />
+                  <span class="ie-section-name">{{ sec.label }}</span>
+                  <span v-if="sec.disabled" class="ie-section-count">-</span>
+                  <span v-else class="ie-section-count">{{
+                    exportCounts[sec.key] ?? "-"
+                  }}</span>
+                </label>
+              </div>
             </div>
-          </div>
 
-          <!-- 短语信息 -->
-          <div v-if="exportType === 'phrases'" class="ie-preview-info">
-            <p>快捷短语共 <strong>{{ exportCounts.phrases ?? 0 }}</strong> 条</p>
-          </div>
+            <!-- 短语信息 -->
+            <div v-if="exportType === 'phrases'" class="ie-preview-info">
+              <p>
+                快捷短语共 <strong>{{ exportCounts.phrases ?? 0 }}</strong> 条
+              </p>
+            </div>
 
-          <!-- 导出结果 -->
-          <p v-if="exportMessage" class="ie-result">{{ exportMessage }}</p>
-        </template>
-      </div>
-
-      <!-- 按钮栏（固定底部） -->
-      <div class="ie-footer">
-        <template v-if="activeTab === 'import'">
-          <template v-if="importStep === 'format'">
-            <Button variant="outline" size="sm" @click="$emit('update:open', false)">取消</Button>
-            <Button size="sm" @click="selectFile">选择文件...</Button>
+            <!-- 导出结果 -->
+            <p v-if="exportMessage" class="ie-result">{{ exportMessage }}</p>
           </template>
-          <template v-if="importStep === 'preview'">
-            <Button variant="outline" size="sm" @click="importStep = 'format'">返回</Button>
-            <Button size="sm" :disabled="selectedSections.length === 0 || importing" @click="doImport">
-              {{ importing ? '导入中...' : '确认导入' }}
+        </div>
+
+        <!-- 按钮栏（固定底部） -->
+        <div class="ie-footer">
+          <template v-if="activeTab === 'import'">
+            <template v-if="importStep === 'format'">
+              <Button
+                variant="outline"
+                size="sm"
+                @click="$emit('update:open', false)"
+                >取消</Button
+              >
+              <Button size="sm" @click="selectFile">选择文件...</Button>
+            </template>
+            <template v-if="importStep === 'preview'">
+              <Button variant="outline" size="sm" @click="importStep = 'format'"
+                >返回</Button
+              >
+              <Button
+                size="sm"
+                :disabled="selectedSections.length === 0 || importing"
+                @click="doImport"
+              >
+                {{ importing ? "导入中..." : "确认导入" }}
+              </Button>
+            </template>
+            <template v-if="importStep === 'done'">
+              <Button size="sm" @click="resetImport">继续导入</Button>
+              <Button variant="outline" size="sm" @click="closeAndRefresh"
+                >关闭</Button
+              >
+            </template>
+          </template>
+          <template v-if="activeTab === 'export'">
+            <Button
+              variant="outline"
+              size="sm"
+              @click="$emit('update:open', false)"
+              >取消</Button
+            >
+            <Button
+              size="sm"
+              :disabled="exporting || !canExport"
+              @click="doExport"
+            >
+              {{ exporting ? "导出中..." : "导出..." }}
             </Button>
           </template>
-          <template v-if="importStep === 'done'">
-            <Button size="sm" @click="resetImport">继续导入</Button>
-            <Button variant="outline" size="sm" @click="closeAndRefresh">关闭</Button>
-          </template>
-        </template>
-        <template v-if="activeTab === 'export'">
-          <Button variant="outline" size="sm" @click="$emit('update:open', false)">取消</Button>
-          <Button size="sm" :disabled="exporting || !canExport" @click="doExport">
-            {{ exporting ? '导出中...' : '导出...' }}
-          </Button>
-        </template>
+        </div>
       </div>
-      </div><!-- .ie-dialog -->
+      <!-- .ie-dialog -->
     </DialogContent>
   </Dialog>
 </template>
@@ -197,11 +279,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { ChevronDown } from "lucide-vue-next";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -316,18 +394,6 @@ columns:
 工作`,
   },
   {
-    value: "phrase_yaml",
-    label: "短语 YAML (.yaml)",
-    desc: "旧版短语 YAML 格式",
-    example: `phrases:
-  - code: sj
-    text: "$time_now"
-    position: 1
-  - code: yx
-    texts: "a@b.com\\nb@c.com"
-    name: 常用邮箱`,
-  },
-  {
     value: "zip",
     label: "ZIP 备份包 (.zip)",
     desc: "由完整备份导出的 ZIP 包",
@@ -335,23 +401,31 @@ columns:
   },
 ];
 
-const currentImportFormat = computed(() =>
-  importFormats.find((f) => f.value === importFormat.value) || importFormats[0],
+const currentImportFormat = computed(
+  () =>
+    importFormats.find((f) => f.value === importFormat.value) ||
+    importFormats[0],
 );
 
 function sectionLabel(section: string): string {
   const labels: Record<string, string> = {
-    user_words: "用户词库", temp_words: "临时词库",
-    freq: "词频数据", shadow: "候选调整", phrases: "快捷短语",
+    user_words: "用户词库",
+    temp_words: "临时词库",
+    freq: "词频数据",
+    shadow: "候选调整",
+    phrases: "快捷短语",
   };
   return labels[section] || section;
 }
 
 function toggleSection(section: string, checked: boolean | "indeterminate") {
   if (checked === true) {
-    if (!selectedSections.value.includes(section)) selectedSections.value.push(section);
+    if (!selectedSections.value.includes(section))
+      selectedSections.value.push(section);
   } else {
-    selectedSections.value = selectedSections.value.filter((s) => s !== section);
+    selectedSections.value = selectedSections.value.filter(
+      (s) => s !== section,
+    );
   }
 }
 
@@ -371,12 +445,18 @@ async function selectFile() {
       }
       if (zipPreview.has_phrases) sections["phrases"] = zipPreview.phrase_count;
       preview.value = {
-        schema_id: "", schema_name: `${zipPreview.schemas.length} 个方案`,
-        generator: "", exported_at: "",
-        sections, source_file: path,
+        schema_id: "",
+        schema_name: `${zipPreview.schemas.length} 个方案`,
+        generator: "",
+        exported_at: "",
+        sections,
+        source_file: path,
       };
     } else {
-      preview.value = await wailsApi.previewImportFile(importFormat.value, path);
+      preview.value = await wailsApi.previewImportFile(
+        importFormat.value,
+        path,
+      );
     }
 
     selectedSections.value = Object.keys(preview.value?.sections || {});
@@ -394,12 +474,21 @@ async function doImport() {
     if (importFormat.value === "zip") {
       const zipPreview = await wailsApi.previewZipImport(importFilePath.value);
       result = await wailsApi.executeZipImport(
-        importFilePath.value, zipPreview.schemas.map((s) => s.schema_id), true, {},
+        importFilePath.value,
+        zipPreview.schemas.map((s) => s.schema_id),
+        true,
+        {},
       );
     } else {
-      const targetSchema = isWordOnlyFormat.value ? importTargetSchema.value : props.currentSchemaId;
+      const targetSchema = isWordOnlyFormat.value
+        ? importTargetSchema.value
+        : props.currentSchemaId;
       result = await wailsApi.executeImport(
-        importFilePath.value, importFormat.value, targetSchema, selectedSections.value, {},
+        importFilePath.value,
+        importFormat.value,
+        targetSchema,
+        selectedSections.value,
+        {},
       );
     }
     importMessage.value = `导入成功，共 ${result.count} 条`;
@@ -460,10 +549,9 @@ const exportableSections = computed(() => {
 //   - 全部备份：始终允许（备份本身可能包含至少一类数据）
 const canExport = computed(() => {
   if (exportType.value === "schema") {
-    if (!exportSchemaId.value || exportSections.value.length === 0) return false;
-    return exportSections.value.some(
-      (k) => (exportCounts.value[k] ?? 0) > 0,
-    );
+    if (!exportSchemaId.value || exportSections.value.length === 0)
+      return false;
+    return exportSections.value.some((k) => (exportCounts.value[k] ?? 0) > 0);
   }
   if (exportType.value === "phrases") {
     return (exportCounts.value.phrases ?? 0) > 0;
@@ -485,7 +573,9 @@ async function loadExportCounts() {
   const counts: Record<string, number> = {};
   try {
     const allStatuses = await wailsApi.getAllSchemaStatuses();
-    const s = allStatuses.find((s: any) => s.schema_id === exportSchemaId.value);
+    const s = allStatuses.find(
+      (s: any) => s.schema_id === exportSchemaId.value,
+    );
     if (s) {
       const isMixed = !props.nonMixedSchemaIds.includes(exportSchemaId.value);
       if (!isMixed) {
@@ -495,11 +585,15 @@ async function loadExportCounts() {
       counts.shadow = s.shadow_rules;
       counts.freq = s.freq_records;
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   try {
     const phrases = await wailsApi.getPhraseList();
     counts.phrases = phrases?.length ?? 0;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   exportCounts.value = counts;
 }
 
@@ -569,20 +663,32 @@ async function doExport() {
     let result: wailsApi.ImportExportResult;
     switch (exportType.value) {
       case "schema": {
-        const name = props.allSchemaNames[exportSchemaId.value] || exportSchemaId.value;
-        result = await wailsApi.exportSchemaData(exportSchemaId.value, exportSections.value, name);
+        const name =
+          props.allSchemaNames[exportSchemaId.value] || exportSchemaId.value;
+        result = await wailsApi.exportSchemaData(
+          exportSchemaId.value,
+          exportSections.value,
+          name,
+        );
         break;
       }
       case "phrases":
         result = await wailsApi.exportPhrasesFile("winddict");
         break;
       case "backup":
-        result = await wailsApi.exportFullBackup(props.allSchemaIds, props.allSchemaNames, true);
+        result = await wailsApi.exportFullBackup(
+          props.allSchemaIds,
+          props.allSchemaNames,
+          true,
+        );
         break;
       default:
         return;
     }
-    if (result.cancelled) { exportMessage.value = ""; return; }
+    if (result.cancelled) {
+      exportMessage.value = "";
+      return;
+    }
     exportMessage.value = `导出成功，共 ${result.count} 条`;
   } catch (e: unknown) {
     exportMessage.value = (e as Error).message || "导出失败";
@@ -726,7 +832,9 @@ async function doExport() {
   background: hsl(var(--background));
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .ie-rich-trigger:hover {
@@ -750,9 +858,6 @@ async function doExport() {
   font-size: 11px;
   color: hsl(var(--muted-foreground));
 }
-
-
-
 
 .ie-rich-options {
   position: absolute;
@@ -903,4 +1008,3 @@ async function doExport() {
   color: hsl(var(--foreground));
 }
 </style>
-

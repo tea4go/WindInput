@@ -422,18 +422,18 @@ func (a *App) writeImportResult(schemaID string, result *dictio.ImportResult, st
 }
 
 // writePhrases 批量写入短语
+//
+// 新版短语 yaml 不再单独存 type/texts/name, 类型由 Text 内容
+// 自描述 ($AA marker / $X 模板). 此处只透传 Code/Text/Weight/Position,
+// rpc 层 Phrase.Add 在 Type 为空时会从 Text 推断并填充 Texts/Name。
 func (a *App) writePhrases(phrases []dictio.PhraseEntry) (int, error) {
 	args := make([]rpcapi.PhraseAddArgs, len(phrases))
 	for i, p := range phrases {
-		text := p.Text
-		texts := ""
-		if p.Type == "array" {
-			texts = p.Text
-			text = ""
-		}
 		args[i] = rpcapi.PhraseAddArgs{
-			Code: p.Code, Text: text, Texts: texts,
-			Name: p.Name, Type: p.Type, Position: p.Position,
+			Code:     p.Code,
+			Text:     p.Text,
+			Weight:   p.Weight,
+			Position: p.Position,
 		}
 	}
 
