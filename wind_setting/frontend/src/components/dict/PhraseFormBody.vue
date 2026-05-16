@@ -29,11 +29,16 @@ import NormalEditor from "./editors/NormalEditor.vue";
 import CmdOpenEditor from "./editors/CmdOpenEditor.vue";
 import CmdRawEditor from "./editors/CmdRawEditor.vue";
 import ArrayEditor from "./editors/ArrayEditor.vue";
+import ArraySSEditor from "./editors/ArraySSEditor.vue";
 import type {
   CmdOpenBuffer,
   CmdOpenSubKind,
 } from "./editors/CmdOpenEditor.vue";
-import type { EditorType, PhraseFormState } from "./phraseForm";
+import type {
+  ArraySSBuffer,
+  EditorType,
+  PhraseFormState,
+} from "./phraseForm";
 
 const props = withDefaults(
   defineProps<{
@@ -110,6 +115,27 @@ function composeArray(b: { name: string; chars: string }): string {
   return `$AA(${escapeStr(b.name)}, ${escapeStr(b.chars)})`;
 }
 
+function composeArraySS(b: ArraySSBuffer): string {
+  const args: string[] = [escapeStr(b.name)];
+  for (const e of b.elements) {
+    if (e.kind === "string") {
+      args.push(escapeStr(e.text));
+    } else {
+      const disp = escapeStr(e.display);
+      let action: string;
+      if (e.subKind === "url" || e.subKind === "file") {
+        action = `open(${escapeStr(e.target)})`;
+      } else {
+        action = e.args.trim()
+          ? `run(${escapeStr(e.target)}, ${escapeStr(e.args)})`
+          : `run(${escapeStr(e.target)})`;
+      }
+      args.push(`$CC(${disp}, ${action})`);
+    }
+  }
+  return `$SS(${args.join(", ")})`;
+}
+
 // 编码生成按钮是否可用: 当前 editor 的"内容"非空才允许生成
 const hasContentText = computed<boolean>(() => {
   const s = state.value;
@@ -128,6 +154,11 @@ const hasContentText = computed<boolean>(() => {
         s.buffers.array.name.trim().length > 0 ||
         s.buffers.array.chars.trim().length > 0
       );
+    case "array-ss":
+      return (
+        s.buffers.arraySS.name.trim().length > 0 ||
+        s.buffers.arraySS.elements.length > 0
+      );
   }
   return false;
 });
@@ -143,6 +174,8 @@ const composedText = computed<string>(() => {
       return s.buffers.cmdRaw.text;
     case "array":
       return composeArray(s.buffers.array);
+    case "array-ss":
+      return composeArraySS(s.buffers.arraySS);
   }
   return "";
 });
@@ -166,6 +199,7 @@ function matchesCmdOpen(text: string): RegExpMatchArray | null {
 function inferType(text: string): EditorType {
   const t = (text ?? "").trim();
   if (t.startsWith("$AA(")) return "array";
+  if (t.startsWith("$SS(")) return "array-ss";
   if (t.startsWith("$CC1(") || t.startsWith("$CC(")) {
     if (matchesCmdOpen(t)) return "cmd-open";
     return "cmd-raw";
@@ -215,6 +249,19 @@ function parseArrayInto(
   if (!m) return false;
   buf.name = unquote(m[1] ?? "");
   buf.chars = unquote(m[2] ?? "");
+  return true;
+}
+
+// $SS 反向解析: 当前仅静态提取 name (第一个字符串字面量), elements
+// 由 cmdbar parser 在保存阶段重新求值; 用户切换到 array-ss 后看到 name
+// 但需要在 UI 中重新添加元素。完整反向解析含嵌套 $CC 留待后续完善。
+const ssNameRE = /^\$SS\(\s*"((?:[^"\\]|\\.)*)"/;
+
+function parseArraySSInto(text: string, buf: ArraySSBuffer): boolean {
+  const m = text.trim().match(ssNameRE);
+  if (!m) return false;
+  buf.name = unquote(m[1] ?? "");
+  // elements 暂留, 不清空 (用户切换回来时如果之前编辑过, 应保留)
   return true;
 }
 
@@ -269,6 +316,19 @@ function handleEditorTypeChange(next: EditorType) {
     s.buffers.array.name = "";
     s.buffers.array.chars = "";
     emitState();
+    return;
+  }
+  if (next === "array-ss") {
+    if (
+      inferred === "array-ss" &&
+      parseArraySSInto(sourceText, s.buffers.arraySS)
+    ) {
+      emitState();
+      return;
+    }
+    s.buffers.arraySS.name = "";
+    s.buffers.arraySS.elements = [];
+    emitState();
   }
 }
 
@@ -313,6 +373,7 @@ defineExpose({
             <SelectItem value="cmd-open">命令·打开</SelectItem>
             <SelectItem value="cmd-raw">命令·手动</SelectItem>
             <SelectItem value="array">字符组</SelectItem>
+            <SelectItem value="array-ss">字符串组</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -395,6 +456,10 @@ defineExpose({
       <ArrayEditor
         v-else-if="state.editorType === 'array'"
         v-model="state.buffers.array"
+      />
+      <ArraySSEditor
+        v-else-if="state.editorType === 'array-ss'"
+        v-model="state.buffers.arraySS"
       />
 
       <!-- 预览 (紧贴内容下方, 单行) -->

@@ -20,6 +20,9 @@ const (
 	tkRParen
 	tkComma
 	tkDot
+	tkLBrace   // '{' — opens an options-bag ObjectLit at expression position
+	tkRBrace   // '}' — closes an options-bag ObjectLit
+	tkColon    // ':' — separates key from value inside an ObjectLit
 	tkDollarCC // literal "$CC" prefix; only emitted at top-level scan
 )
 
@@ -81,6 +84,18 @@ func (l *Lexer) Tokenize() ([]Token, error) {
 			l.pos++
 		case c == '.':
 			l.tokens = append(l.tokens, Token{Kind: tkDot, Lexeme: ".", Offset: l.pos})
+			l.pos++
+		case c == '{':
+			// '{' at expression position opens an options-bag ObjectLit.
+			// Inside a string literal, `{...}` is handled by scanString as
+			// an interpolation; that path never reaches this branch.
+			l.tokens = append(l.tokens, Token{Kind: tkLBrace, Lexeme: "{", Offset: l.pos})
+			l.pos++
+		case c == '}':
+			l.tokens = append(l.tokens, Token{Kind: tkRBrace, Lexeme: "}", Offset: l.pos})
+			l.pos++
+		case c == ':':
+			l.tokens = append(l.tokens, Token{Kind: tkColon, Lexeme: ":", Offset: l.pos})
 			l.pos++
 		case c == '"' || c == '\'':
 			tok, err := l.scanString(c)

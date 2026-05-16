@@ -14,6 +14,7 @@ import (
 	"github.com/huanfeng/wind_input/internal/bridge"
 	"github.com/huanfeng/wind_input/internal/candidate"
 	"github.com/huanfeng/wind_input/internal/cmdbar"
+	cmdbarast "github.com/huanfeng/wind_input/internal/cmdbar/ast"
 	cmdbareval "github.com/huanfeng/wind_input/internal/cmdbar/eval"
 	cmdbarfuncs "github.com/huanfeng/wind_input/internal/cmdbar/funcs"
 	cmdbarparser "github.com/huanfeng/wind_input/internal/cmdbar/parser"
@@ -664,10 +665,10 @@ func (c *Coordinator) installCmdbarPhraseHook() {
 	if pl == nil {
 		return
 	}
-	hook := func(value string) (string, []cmdbar.ResolvedAction, bool, error) {
+	hook := func(value string) (string, []cmdbar.ResolvedAction, map[string]any, bool, error) {
 		phrase, err := cmdbarparser.Parse(value)
 		if err != nil {
-			return "", nil, true, err
+			return "", nil, nil, true, err
 		}
 		// hook 是从 phrase.SearchCommand 调用的, 而 SearchCommand 在
 		// HandleKeyEvent → handleAlphaKey → convert 链路中, c.mu 已被
@@ -681,9 +682,16 @@ func (c *Coordinator) installCmdbarPhraseHook() {
 		evalCtx := c.newCmdbarEvalContextLocked(c.inputBuffer)
 		display, actions, err := cmdbareval.Evaluate(phrase, evalCtx, cmdbar.DefaultRegistry)
 		if err != nil {
-			return "", nil, true, err
+			return "", nil, nil, true, err
 		}
-		return display, actions, true, nil
+		// 从 AST 取 modifiers (CommandPhrase 才有), 透传给 candidate.Modifiers,
+		// 替代 dict 层旧的 IsExactOnly 字符串扫描。LiteralPhrase / TemplatePhrase
+		// 没有 modifiers, 返回 nil 即可。
+		var modifiers map[string]any
+		if cp, ok := phrase.(cmdbarast.CommandPhrase); ok {
+			modifiers = cp.Modifiers
+		}
+		return display, actions, modifiers, true, nil
 	}
 	pl.SetCmdbarHook(dict.CmdbarPhraseHook(hook))
 
@@ -692,6 +700,34 @@ func (c *Coordinator) installCmdbarPhraseHook() {
 		Hook:           dict.CmdbarPhraseHook(hook),
 		TemplateEngine: dict.GetTemplateEngine(),
 	}
+
+	// 装配 $SS 数组 hook。与 phrase hook 同样持有 c.mu 已被调用方 (SearchCommand)
+	// 持有的假设, 不能再加锁。元素中嵌入的 $CC 也通过同一 evalCtx 求值。
+	arrayHook := func(value string) (string, []dict.CmdbarArrayElement, map[string]any, bool, error) {
+		phrase, err := cmdbarparser.Parse(value)
+		if err != nil {
+			return "", nil, nil, true, err
+		}
+		ap, ok := phrase.(cmdbarast.ArrayPhrase)
+		if !ok {
+			return "", nil, nil, false, nil
+		}
+		evalCtx := c.newCmdbarEvalContextLocked(c.inputBuffer)
+		name, evalElements, groupModifiers, err := cmdbareval.ExpandArray(ap, evalCtx, cmdbar.DefaultRegistry)
+		if err != nil {
+			return "", nil, nil, true, err
+		}
+		out := make([]dict.CmdbarArrayElement, 0, len(evalElements))
+		for _, e := range evalElements {
+			out = append(out, dict.CmdbarArrayElement{
+				Display:          e.Display,
+				Actions:          e.Actions,
+				ElementModifiers: e.ElementModifiers,
+			})
+		}
+		return name, out, groupModifiers, true, nil
+	}
+	pl.SetCmdbarArrayHook(dict.CmdbarArrayHook(arrayHook))
 }
 
 // initThemeMode initializes the dark mode state and starts the system theme watcher if needed

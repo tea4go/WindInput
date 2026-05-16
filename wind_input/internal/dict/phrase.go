@@ -49,14 +49,51 @@ type PhraseLayer struct {
 	//   err != nil:  解析或求值失败, 调用方应记 WARN 后退化为字面量
 	//   返回的 actions 直接挂到 Candidate.Actions, 闭包形式由 hook 自行构造
 	cmdbarHook CmdbarPhraseHook
+
+	// cmdbarArrayHook 由宿主装配, 用于处理 $SS 字符串数组短语。$SS 在
+	// SearchCommand 精确码命中时被调用, 把 marker text 展开成 N 个元素
+	// (含嵌入 $CC 元素的 display/actions 求值)。设计 §4.3。
+	cmdbarArrayHook CmdbarArrayHook
+}
+
+// CmdbarArrayHook 由 coordinator 装配, 解析 $SS 字符串数组短语:
+//   - value: 原 marker text (`$SS("name", ...)`)
+//   - name: $SS 的 group display name (与静态 ParseSSGroupName 等价)
+//   - elements: 每个元素的展开结果, 顺序保持 marker 内顺序
+//   - groupModifiers: $SS 的 modifier map (含 marker syntax sugar 默认值 + 显式)
+//   - ok: 该 value 是否真的被识别为 $SS (false 时 PhraseLayer 退回旧路径)
+//   - err: 解析或求值失败
+type CmdbarArrayHook func(value string) (name string, elements []CmdbarArrayElement, groupModifiers map[string]any, ok bool, err error)
+
+// CmdbarArrayElement 是 $SS 内一个元素的展开结果。string lit 元素的 Actions 为空;
+// 嵌入 $CC 元素的 Actions 是其动作链。ElementModifiers 是嵌入 $CC 自身的 modifiers
+// (group prefix 由 groupModifiers["prefix"] 控制, 嵌入 $CC 禁用 prefix)。
+type CmdbarArrayElement struct {
+	Display          string
+	Actions          []cmdbar.ResolvedAction
+	ElementModifiers map[string]any
+}
+
+// SetCmdbarArrayHook 安装 $SS 数组 hook (允许为 nil, 等同卸载)。
+func (pl *PhraseLayer) SetCmdbarArrayHook(h CmdbarArrayHook) {
+	pl.mu.Lock()
+	defer pl.mu.Unlock()
+	pl.cmdbarArrayHook = h
+	pl.cmdCache = make(map[string][]candidate.Candidate)
 }
 
 // CmdbarPhraseHook 由 coordinator 装配时注入到 PhraseLayer,
 // 输入是短语 value 字符串 (如 `$CC("打开百度", open("https://baidu.com"))`)
-// 输出: display 候选显示文本, actions 选中触发的已解析动作列表 (含 Effect/Text
-// 两种 Kind, 见 cmdbar.ResolvedAction), ok 表示该 value 是否真的被 cmdbar
-// 处理 (false 时调用方退回旧模板路径)。
-type CmdbarPhraseHook func(value string) (display string, actions []cmdbar.ResolvedAction, ok bool, err error)
+// 输出:
+//   - display: 候选显示文本
+//   - actions: 选中触发的已解析动作列表 (含 Effect/Text 两种 Kind, 见 cmdbar.ResolvedAction)
+//   - modifiers: options bag + marker syntax sugar 合并后的 modifier map
+//     (含 prefix/expand/nav/async/scope 等键; 详见
+//     docs/design/2026-05-16-cmdbar-followup.md §3.2)。candidate 进一步透传到
+//     dict 层的前缀过滤 (替代旧 IsExactOnly 字符串扫描)。
+//   - ok: 该 value 是否真的被 cmdbar 处理 (false 时调用方退回旧模板路径)
+//   - err: 解析或求值失败 (调用方应记 WARN 后退化为字面量)
+type CmdbarPhraseHook func(value string) (display string, actions []cmdbar.ResolvedAction, modifiers map[string]any, ok bool, err error)
 
 // SetCmdbarHook 安装命令直通车 hook (允许为 nil, 等同卸载)。
 func (pl *PhraseLayer) SetCmdbarHook(h CmdbarPhraseHook) {
@@ -83,17 +120,35 @@ type PhraseEntry struct {
 	Disabled bool   // 是否被禁用
 }
 
+// PhraseGroupKind 区分数组短语的元素粒度。
+//   - PhraseGroupKindAA: $AA marker, 每元素是一个 rune (单字符候选)
+//   - PhraseGroupKindSS: $SS marker, 每元素是一个字符串或嵌入的 $CC 命令
+//
+// 详见 docs/design/2026-05-16-cmdbar-followup.md §4.2 / §4.3。
+type PhraseGroupKind string
+
+const (
+	PhraseGroupKindAA PhraseGroupKind = "aa"
+	PhraseGroupKindSS PhraseGroupKind = "ss"
+)
+
 // PhraseGroup 数组类型短语组的元数据（texts 字段的条目）。
 // Weight / Position 的语义与 PhraseEntry 一致 (参见其 doc); 字符组内
-// 各字符共享 Weight, NaturalOrder 由展开位置决定。
+// 各元素共享 Weight, NaturalOrder 由展开位置决定。
+//
+// Kind 决定 SearchCommand 精确码命中后的展开路径:
+//   - aa: 用 staticPhrases[code] 的字符级 entry 展开
+//   - ss: 用 dynamicPhrases[code] 的原 marker text + ArrayHook 运行时展开
+//     (元素可含嵌入 $CC, 需要 eval context)
 type PhraseGroup struct {
-	Code     string // 完整编码（如 "zzbd"）
-	Name     string // 显示名称（如 "标点符号"）
-	Texts    string // 原始字符列表
-	Weight   int    // 排序权重 (0~10000)
-	Position int    // 同 code 内手动调整后的顺序 (与 PhraseEntry.Position 一致语义)
-	IsSystem bool   // 是否来自系统短语
-	Disabled bool   // 是否被禁用
+	Code     string          // 完整编码（如 "zzbd"）
+	Name     string          // 显示名称（如 "标点符号"）
+	Texts    string          // 原始字符列表 (仅 aa 类型, ss 为空)
+	Kind     PhraseGroupKind // 元素粒度: "aa" 或 "ss"
+	Weight   int             // 排序权重 (0~10000)
+	Position int             // 同 code 内手动调整后的顺序 (与 PhraseEntry.Position 一致语义)
+	IsSystem bool            // 是否来自系统短语
+	Disabled bool            // 是否被禁用
 }
 
 // PhrasesFileConfig 短语文件的 YAML 结构
@@ -200,30 +255,49 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 		return cached
 	}
 
-	// ── 情况 1：动态短语精确匹配（含 $ 变量） ──
+	// ── 情况 1：动态短语精确匹配（含 $ 变量, 或 $CC marker; 不含 $SS） ──
+	// $SS 短语虽然也存在于 dynamicPhrases 中 (保留原 marker text), 但其展开
+	// 走情况 2 的 ss 分支 (通过 cmdbarArrayHook), 所以这里跳过。
 	if entries, ok := pl.dynamicPhrases[code]; ok {
 		results := make([]candidate.Candidate, 0, len(entries))
 		positions := make([]int, 0, len(entries))
 		for _, e := range entries {
+			if HasSSMarker(e.Text) {
+				continue
+			}
 			cand := pl.expandDynamicEntry(code, e)
 			results = append(results, cand)
 			positions = append(positions, e.Position)
 		}
-		sortPhraseCandidates(results, positions)
-		pl.cmdCache[code] = results
-		if limit > 0 && len(results) > limit {
-			return results[:limit]
+		if len(results) > 0 {
+			sortPhraseCandidates(results, positions)
+			pl.cmdCache[code] = results
+			if limit > 0 && len(results) > limit {
+				return results[:limit]
+			}
+			return results
 		}
-		return results
+		// 全部都是 $SS entry: 落到情况 2 由 ss 分支处理。
 	}
 
-	// ── 情况 2：字符组精确匹配（texts 字段，如 zzbd → 展开为字符列表） ──
+	// ── 情况 2：字符组精确匹配 → Kind 分流 ──
 	if group, ok := pl.phraseGroups[code]; ok && !group.Disabled {
-		entries := pl.staticPhrases[code]
+		// 2a: $SS 字符串数组 (Kind=ss) — 通过 ArrayHook 运行时展开;
+		// 每条 entry 用自身 weight (expandSSGroup 内部取 entry.Weight)。
+		if group.Kind == PhraseGroupKindSS {
+			results := pl.expandSSGroup(code)
+			pl.cmdCache[code] = results
+			if limit > 0 && len(results) > limit {
+				return results[:limit]
+			}
+			return results
+		}
+
+		// 2b: $AA 字符组 (Kind=aa) — 用 staticPhrases 中的字符级 entry 展开。
 		// 字符组内所有字符共享 group 的 weight, 用 NaturalOrder = 字符在
 		// chars 字符串中的下标做 tie-break, 保证按数组顺序排列。
-		// 权重统一取自 group 字段, 不再用每个 char entry 的 e.Position。
 		groupWeight := resolvePhraseWeight(group.Weight)
+		entries := pl.staticPhrases[code]
 		results := make([]candidate.Candidate, 0, len(entries))
 		for i, e := range entries {
 			_ = e.Position // 字符级 entry 的 position 仅记录展开顺序, 不参与权重计算
@@ -416,7 +490,33 @@ func (pl *PhraseLayer) LoadFromStore(s *store.Store) error {
 
 		switch rec.Type {
 		case "array":
-			// 字符组短语: 优先解析 Text 字段中的 $AA("name", "chars") marker,
+			// $SS 字符串数组优先识别 (元素粒度是字符串, 含嵌入 $CC, 走 ArrayHook)
+			if HasSSMarker(rec.Text) {
+				ssName, ok := ParseSSGroupName(rec.Text)
+				if !ok {
+					// 静态扫描失败 (语法错误等), 用 code 兜底, 运行时 hook 再判断
+					ssName = code
+				}
+				pg := PhraseGroup{
+					Code:     code,
+					Name:     ssName,
+					Kind:     PhraseGroupKindSS,
+					Weight:   rec.Weight,
+					Position: position,
+					IsSystem: rec.IsSystem,
+				}
+				pl.phraseGroups[code] = pg
+				// $SS 元素运行时展开, 把原 marker text 放进 dynamicPhrases 备用
+				entry := PhraseEntry{
+					Text:     rec.Text,
+					Weight:   rec.Weight,
+					Position: position,
+					IsSystem: rec.IsSystem,
+				}
+				pl.dynamicPhrases[code] = append(pl.dynamicPhrases[code], entry)
+				break
+			}
+			// 字符组短语 ($AA): 优先解析 Text 字段中的 $AA("name", "chars") marker,
 			// 兼容回退到旧的 Texts/Name 字段 (migration 已把 bbolt 中旧记录改写,
 			// 这里的回退仅服务于尚未走过 migration 的内存路径如测试种子)。
 			name, chars, ok := ParseAAMarker(rec.Text)
@@ -428,6 +528,7 @@ func (pl *PhraseLayer) LoadFromStore(s *store.Store) error {
 				Code:     code,
 				Name:     name,
 				Texts:    chars,
+				Kind:     PhraseGroupKindAA,
 				Weight:   rec.Weight,
 				Position: position,
 				IsSystem: rec.IsSystem,
@@ -485,9 +586,13 @@ func ParsePhraseYAMLFile(path string) ([]PhraseFileEntry, error) {
 }
 
 // detectPhraseType determines the type string from a PhraseFileEntry.
-// 字符组短语通过 Text 字段的 $AA("name", "chars") marker 识别 (array)。
+// 字符组短语通过 Text 字段的 $AA / $SS marker 识别 (统一为 "array" 类型,
+// 子类 (aa/ss) 在 LoadFromStore 阶段根据 marker 再细分)。
 func detectPhraseType(e PhraseFileEntry) string {
 	if _, _, ok := ParseAAMarker(e.Text); ok {
+		return "array"
+	}
+	if HasSSMarker(e.Text) {
 		return "array"
 	}
 	if HasVariable(e.Text) {
@@ -520,6 +625,62 @@ func (pl *PhraseLayer) GetCommandCount() int {
 	return count
 }
 
+// expandSSGroup 把 $SS 字符串数组 group 在精确码命中时展开成 N 个 candidate。
+// 调用方必须持有 pl.mu (Lock 形态, 因为可能修改 cmdCache)。
+//
+// 实现细节:
+//   - 同一 code 可能有多条 $SS entry (yaml 里同 code 多次声明), 每条 entry 用
+//     自己的 weight (resolvePhraseWeight(entry.Weight)) 展开, 不共用 phraseGroup
+//     的元数据 weight。最终 N 个候选用 candidate.Better 排序: 主键 entry weight
+//     desc, 同 weight 内按 NaturalOrder asc (元素在 marker 内的顺序)。
+//   - cmdbarArrayHook 为 nil 或返回 err/ok=false 时该 entry 不产生候选, 但其他
+//     entry 继续展开。完全失败时返回空 slice (调用方上层会回退到模板/字面量)。
+//   - PhraseTemplate 字段保留原 $SS marker text, 给 candidate adjustments
+//     (右键 pin 等) 提供原始 entry 定位。
+func (pl *PhraseLayer) expandSSGroup(code string) []candidate.Candidate {
+	if pl.cmdbarArrayHook == nil {
+		slog.Warn("phrase: $SS group hit but no cmdbarArrayHook installed; group has 0 candidates",
+			"code", code)
+		return nil
+	}
+	entries := pl.dynamicPhrases[code]
+	var results []candidate.Candidate
+	for _, entry := range entries {
+		if !HasSSMarker(entry.Text) {
+			continue
+		}
+		_, elements, modifiers, ok, err := pl.cmdbarArrayHook(entry.Text)
+		if err != nil {
+			slog.Warn("phrase: $SS array hook returned error, skipping entry",
+				"code", code, "valueLen", len(entry.Text))
+			continue
+		}
+		if !ok {
+			continue
+		}
+		entryWeight := resolvePhraseWeight(entry.Weight)
+		for i, elem := range elements {
+			cand := candidate.Candidate{
+				Text:           elem.Display,
+				Code:           code,
+				Weight:         entryWeight,
+				NaturalOrder:   i,
+				IsCommand:      true,
+				IsPhrase:       true,
+				PhraseTemplate: entry.Text,
+				DisplayText:    elem.Display,
+				Actions:        elem.Actions,
+				Modifiers:      modifiers, // group-level modifiers
+			}
+			results = append(results, cand)
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return candidate.Better(results[i], results[j])
+	})
+	return results
+}
+
 // expandDynamicEntry 把一条动态短语条目展开成候选。
 // 含 cmdbar marker ($CC( 或 $CC1() 且已注入 cmdbarHook 时走命令直通车;
 // 否则保持旧 templateEngine 行为。
@@ -550,6 +711,7 @@ func (pl *PhraseLayer) expandDynamicEntry(code string, e PhraseEntry) candidate.
 	if res.IsCommand {
 		out.DisplayText = res.DisplayText
 		out.Actions = res.Actions
+		out.Modifiers = res.Modifiers
 	}
 	return out
 }

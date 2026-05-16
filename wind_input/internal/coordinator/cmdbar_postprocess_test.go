@@ -18,11 +18,11 @@ import (
 // 不构造完整 Coordinator, 仅装配 ValueExpander + 调单方法。
 func TestApplyValueExpansion(t *testing.T) {
 	called := 0
-	hook := dict.CmdbarPhraseHook(func(value string) (string, []cmdbar.ResolvedAction, bool, error) {
+	hook := dict.CmdbarPhraseHook(func(value string) (string, []cmdbar.ResolvedAction, map[string]any, bool, error) {
 		called++
 		return "打开百度", []cmdbar.ResolvedAction{
 			{Kind: cmdbar.ActionEffect, Run: func() (string, error) { return "", nil }},
-		}, true, nil
+		}, nil, true, nil
 	})
 	c := &Coordinator{
 		cmdbarValueExpander: &dict.ValueExpander{

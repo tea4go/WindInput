@@ -15,6 +15,58 @@ import (
 // cmdbar.ResolvedAction; ActionThunk 等价于 ActionEffect 形态的 Run。
 type ActionThunk func() error
 
+// ArrayElement is the result of expanding one $SS element. Display is
+// already evaluated (string lit element → 字面量, embedded $CC → 求值后
+// 的 display 字符串). Actions 是该元素自己的动作链 (string lit 元素时为 nil)。
+// ElementModifiers 是嵌入 $CC 的 modifiers (group 级 prefix 已在外层 ArrayPhrase
+// 解析时禁用, 这里只剩 async / scope 等元素级 modifier)。
+type ArrayElement struct {
+	Display          string
+	Actions          []cmdbar.ResolvedAction
+	ElementModifiers map[string]any
+}
+
+// ExpandArray evaluates an ast.ArrayPhrase by expanding each element to
+// an ArrayElement. String literal elements become a "上屏文本" candidate
+// (Display=字面量, Actions=nil); embedded CommandPhrase elements become a
+// "动作"候选 (Display=求值后字符串, Actions=该 CommandPhrase 的动作链)。
+//
+// 返回的 (name, elements, groupModifiers) 直接对应 ArrayPhrase 的字段;
+// 调用方 (dict layer / coordinator) 据此生成 N 个 candidate.Candidate。
+//
+// 设计 docs/design/2026-05-16-cmdbar-followup.md §4.3 / §4.4.5。
+func ExpandArray(phrase ast.ArrayPhrase, ctx cmdbar.EvalContext, reg *cmdbar.Registry) (name string, elements []ArrayElement, groupModifiers map[string]any, err error) {
+	if reg == nil {
+		reg = cmdbar.DefaultRegistry
+	}
+	out := make([]ArrayElement, 0, len(phrase.Elements))
+	for i, elemExpr := range phrase.Elements {
+		switch v := elemExpr.(type) {
+		case ast.StringLit:
+			disp, err := evalStringLit(v, ctx, reg)
+			if err != nil {
+				return "", nil, nil, fmt.Errorf("$SS element %d: %w", i+1, err)
+			}
+			out = append(out, ArrayElement{Display: disp})
+		case ast.CommandPhrase:
+			// 内层 CommandPhrase: 求 display + actions, 全套使用 Evaluate
+			// 但要传入 CommandPhrase 本身, 不是 ArrayPhrase。
+			disp, acts, err := Evaluate(v, ctx, reg)
+			if err != nil {
+				return "", nil, nil, fmt.Errorf("$SS element %d: %w", i+1, err)
+			}
+			out = append(out, ArrayElement{
+				Display:          disp,
+				Actions:          acts,
+				ElementModifiers: v.Modifiers,
+			})
+		default:
+			return "", nil, nil, fmt.Errorf("$SS element %d: unsupported expr %T", i+1, elemExpr)
+		}
+	}
+	return phrase.Name, out, phrase.Modifiers, nil
+}
+
 // Evaluate runs the phrase against ctx using reg as the function table.
 // It returns the rendered display text and the ordered list of resolved
 // actions. A nil reg defaults to cmdbar.DefaultRegistry.
@@ -39,6 +91,8 @@ func Evaluate(phrase ast.Phrase, ctx cmdbar.EvalContext, reg *cmdbar.Registry) (
 			return "", nil, err
 		}
 		return s, nil, nil
+	case ast.ArrayPhrase:
+		return "", nil, fmt.Errorf("eval: ArrayPhrase must be expanded via ExpandArray, not Evaluate")
 	case ast.CommandPhrase:
 		if err := assertPureDisplay(p.Display, reg); err != nil {
 			return "", nil, err

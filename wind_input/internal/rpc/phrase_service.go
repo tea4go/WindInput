@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/huanfeng/wind_input/internal/cmdbar"
+	cmdbarast "github.com/huanfeng/wind_input/internal/cmdbar/ast"
 	cmdbareval "github.com/huanfeng/wind_input/internal/cmdbar/eval"
 	cmdbarparser "github.com/huanfeng/wind_input/internal/cmdbar/parser"
 	"github.com/huanfeng/wind_input/internal/dict"
@@ -69,9 +70,15 @@ func (p *PhraseService) Add(args *rpcapi.PhraseAddArgs, reply *rpcapi.Empty) err
 	if args.Code == "" {
 		return fmt.Errorf("code is required")
 	}
+	// "array" 类型有两种子类:
+	//   - $AA 字符组: Text 留空, Texts+Name 必填 (旧路径)
+	//   - $SS 字符串数组: Text 含 marker, Texts/Name 留空 (2026-05-16)
+	// 因此 array 类型的校验是: 满足任意一种形态即可。
 	if args.Type == "array" {
-		if args.Texts == "" || args.Name == "" {
-			return fmt.Errorf("texts and name are required for array type")
+		hasAA := args.Texts != "" && args.Name != ""
+		hasSS := dict.HasSSMarker(args.Text)
+		if !hasAA && !hasSS {
+			return fmt.Errorf("array type requires either texts+name ($AA) or text with $SS marker")
 		}
 	} else {
 		if args.Text == "" {
@@ -90,7 +97,10 @@ func (p *PhraseService) Add(args *rpcapi.PhraseAddArgs, reply *rpcapi.Empty) err
 			pType = "array"
 			pTexts = chars
 			pName = name
-			pText = "" // array 类型 store 不再保存原始 marker 字符串
+			pText = "" // $AA store 不再保存原始 marker 字符串
+		} else if dict.HasSSMarker(pText) {
+			// $SS 字符串数组: 保留原 marker 文本 (含嵌套 $CC 元素), Texts/Name 留空
+			pType = "array"
 		} else if dict.HasVariable(pText) {
 			pType = "dynamic"
 		} else {
@@ -353,6 +363,26 @@ func (p *PhraseService) ValidateCmdbarValue(args *rpcapi.PhraseValidateValueArgs
 	if err != nil {
 		reply.Kind = "error"
 		reply.ErrorMsg = err.Error()
+		return nil
+	}
+
+	// $SS ArrayPhrase: 走 ExpandArray 单独求值 (Evaluate 会显式拒绝它,
+	// 因为返回签名是 (display, actions), 不适合多元素)。
+	if ap, ok := phrase.(cmdbarast.ArrayPhrase); ok {
+		ctx := &cmdbar.MemoryContext{}
+		name, elements, _, expErr := cmdbareval.ExpandArray(ap, ctx, cmdbar.DefaultRegistry)
+		if expErr != nil {
+			reply.Kind = "error"
+			reply.ErrorMsg = expErr.Error()
+			return nil
+		}
+		displayName := name
+		if displayName == "" {
+			displayName = "(未命名)"
+		}
+		reply.Kind = "array"
+		reply.Display = fmt.Sprintf("%s · %d 项", displayName, len(elements))
+		reply.ActionsCount = len(elements)
 		return nil
 	}
 

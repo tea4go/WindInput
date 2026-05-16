@@ -51,6 +51,17 @@ type Candidate struct {
 	//     仍然记一次 recordCommit(DisplayText) 以推入 history (供 last() 使用)。
 	DisplayText string   // 用于候选框显示的文本; 空回落到 Text
 	Actions     []Action // 选中时按顺序执行; 空则按普通候选处理
+
+	// Modifiers 是 cmdbar marker 的 options bag 解析结果, 包含 marker 后缀
+	// syntax sugar 的默认值 + yaml 显式 options 的合并 (显式覆盖默认)。
+	// 取值约定: bool / string / float64。常用 key:
+	//   - "prefix"  bool   是否允许前缀匹配 (取代旧 IsCmdbarExactOnly 字符串扫描)
+	//   - "expand"  string $AA/$SS 字符/字符串数组的展开策略
+	//   - "nav"     bool   字符/字符串数组前缀时是否出导航候选
+	//   - "async"   bool   动作是否异步执行
+	// 详见 docs/design/2026-05-16-cmdbar-followup.md §3.2 / §4.1。
+	// 当 candidate 不来自 cmdbar 命令时为 nil。
+	Modifiers map[string]any
 }
 
 // CandidateMeta 候选调试与提示元数据（引擎层按需填充，空值表示未记录）

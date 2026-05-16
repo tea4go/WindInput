@@ -27,10 +27,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/huanfeng/wind_input/internal/clipboard"
 	"github.com/huanfeng/wind_input/internal/cmdbar"
+	"github.com/huanfeng/wind_input/internal/cmdbar/ast"
 	"github.com/huanfeng/wind_input/internal/cmdbar/eval"
 	"github.com/huanfeng/wind_input/internal/cmdbar/funcs"
 	"github.com/huanfeng/wind_input/internal/cmdbar/parser"
@@ -134,6 +136,7 @@ func handleCommand(ctx *cmdbar.MemoryContext, line string) bool {
 		return false
 	case ":help", ":?":
 		fmt.Println(":set input <v>  | :set last <v>  | :set clip <v>")
+		fmt.Println(":select <n>     fire actions of element n from last $SS expansion (1-based)")
 		fmt.Println(":show           | :quit")
 		fmt.Println("any non-':' line is treated as a phrase and evaluated.")
 	case ":set":
@@ -157,6 +160,23 @@ func handleCommand(ctx *cmdbar.MemoryContext, line string) bool {
 	case ":show":
 		clip, _ := clipboard.GetText()
 		fmt.Printf("input=%q\nlast(1)=%q\nclip=%q\n", ctx.InputStr, ctx.History.Get(1), clip)
+	case ":select":
+		if len(parts) < 2 {
+			fmt.Println("usage: :select <n>")
+			return true
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil || n < 1 || n > len(lastArrayElements) {
+			fmt.Printf("invalid index %q (have %d elements)\n", parts[1], len(lastArrayElements))
+			return true
+		}
+		el := lastArrayElements[n-1]
+		fmt.Printf("firing element [%d]: %s\n", n, el.Display)
+		runActions(el.Actions)
+		// 模拟 IME 选词后 push history (与真实 PhraseLayer/coordinator 行为对齐)
+		if el.Display != "" {
+			ctx.History.Push(el.Display)
+		}
 	default:
 		fmt.Println("unknown command:", parts[0])
 	}
@@ -169,14 +189,53 @@ func evaluate(ctx *cmdbar.MemoryContext, src string) {
 		fmt.Println("parse error:", err)
 		return
 	}
+	// 2026-05-16: $SS ArrayPhrase 走 ExpandArray 展开为多元素列表, 每个元素
+	// 单独打印 display + actions。其他 phrase 类型 (LiteralPhrase /
+	// TemplatePhrase / CommandPhrase) 仍走单值 Evaluate 通路。
+	if ap, ok := ph.(ast.ArrayPhrase); ok {
+		evaluateArray(ctx, ap)
+		return
+	}
 	display, actions, err := eval.Evaluate(ph, ctx, cmdbar.DefaultRegistry)
 	if err != nil {
 		fmt.Println("eval error:", err)
 		return
 	}
 	fmt.Printf("display: %s\n", display)
-	// P5 后 actions 分为 ActionEffect / ActionText 两种。这里全部按顺序触发,
-	// ActionText 把 Run 返回的字符串当 "committed" 文本打印 (而非真的走 TSF)。
+	if cp, ok := ph.(ast.CommandPhrase); ok && len(cp.Modifiers) > 0 {
+		fmt.Printf("modifiers: %v\n", cp.Modifiers)
+	}
+	runActions(actions)
+}
+
+// evaluateArray 把 $SS ArrayPhrase 展开成 N 个候选并依次打印; 用户可输入
+// `:select <n>` 在 REPL 中选第 n 个候选并触发其 actions (类似真实 IME 选词)。
+func evaluateArray(ctx *cmdbar.MemoryContext, ap ast.ArrayPhrase) {
+	name, elements, modifiers, err := eval.ExpandArray(ap, ctx, cmdbar.DefaultRegistry)
+	if err != nil {
+		fmt.Println("expand error:", err)
+		return
+	}
+	fmt.Printf("$SS group: %q  (%d elements)\n", name, len(elements))
+	if len(modifiers) > 0 {
+		fmt.Printf("group modifiers: %v\n", modifiers)
+	}
+	for i, e := range elements {
+		actionsTag := ""
+		if len(e.Actions) > 0 {
+			actionsTag = fmt.Sprintf("  [%d actions]", len(e.Actions))
+		}
+		fmt.Printf("  [%d] %s%s\n", i+1, e.Display, actionsTag)
+	}
+	fmt.Println("(type ':select <n>' to fire actions of element n, or another phrase to continue)")
+	lastArrayElements = elements // 让 :select 命令能引用
+}
+
+// lastArrayElements 缓存最近一次 $SS 展开结果, 供 :select 命令使用。
+var lastArrayElements []eval.ArrayElement
+
+// runActions 按顺序执行 ResolvedAction 链, ActionText 收集为 "committed" 文本。
+func runActions(actions []cmdbar.ResolvedAction) {
 	var committed strings.Builder
 	for i, a := range actions {
 		switch a.Kind {

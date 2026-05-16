@@ -114,6 +114,49 @@ func (c Call) String() string {
 	return b.String()
 }
 
+// Pair is one key:value entry inside an ObjectLit. Value is restricted to
+// literal expressions (StringLit / NumberLit / Ident bool-or-name). The
+// restriction is enforced by the parser, not by the type system.
+//
+// 设计 (docs/design/2026-05-16-cmdbar-followup.md §3.1):
+//
+//	pair = ident ":" value
+//	value = string | number | "true" | "false" | ident
+type Pair struct {
+	Key   string
+	Value Expr
+}
+
+// ObjectLit is a `{key: value, ...}` trailing options bag, used in marker
+// call positions to carry modifier flags (prefix / expand / nav / async / ...).
+// Per §3.1, ObjectLit is only permitted as the last argument of a call;
+// the parser rejects mid-list ObjectLits.
+//
+// Pairs are kept in source order so consumers can preserve user intent
+// when re-emitting; duplicate keys are tolerated by the parser but the
+// last write wins when interpreted as a map.
+type ObjectLit struct {
+	Pairs []Pair
+}
+
+func (ObjectLit) exprNode() {}
+func (o ObjectLit) String() string {
+	var b strings.Builder
+	b.WriteByte('{')
+	for i, p := range o.Pairs {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(p.Key)
+		b.WriteString(": ")
+		if p.Value != nil {
+			b.WriteString(p.Value.String())
+		}
+	}
+	b.WriteByte('}')
+	return b.String()
+}
+
 // Phrase is a top-level AST node. A phrase is one of LiteralPhrase,
 // TemplatePhrase or CommandPhrase.
 type Phrase interface {
@@ -147,12 +190,26 @@ func (p TemplatePhrase) String() string {
 // CommandPhrase represents a `$CC(display, action...)` invocation.
 // Display is the candidate display expression; Actions is the (possibly
 // empty) ordered list of side-effecting action expressions.
+//
+// Modifiers carries the trailing options-bag values + marker syntax-sugar
+// defaults (e.g. `$CC1(...)` injects `{prefix: true}` here at parse time);
+// see docs/design/2026-05-16-cmdbar-followup.md §3.2 / §4.1. Nil when the
+// caller wrote neither marker suffix nor options bag. Values are typed
+// (string / float64 / bool) per the parser's literal-coercion rules.
 type CommandPhrase struct {
-	Display Expr
-	Actions []Expr
+	Display   Expr
+	Actions   []Expr
+	Modifiers map[string]any
 }
 
 func (CommandPhrase) phraseNode() {}
+
+// exprNode lets CommandPhrase appear as an element inside ArrayPhrase
+// (e.g. `$SS("name", $CC("d", open(...)), "literal")`). The parser only
+// admits embedded CommandPhrases in ArrayPhrase argument position; bare
+// `$CC(...)` is still parsed as a phrase via Parse().
+func (CommandPhrase) exprNode() {}
+
 func (p CommandPhrase) String() string {
 	var b strings.Builder
 	b.WriteString("$CC(")
@@ -163,6 +220,85 @@ func (p CommandPhrase) String() string {
 		b.WriteString(", ")
 		b.WriteString(a.String())
 	}
+	if len(p.Modifiers) > 0 {
+		b.WriteString(", {")
+		first := true
+		// Note: map iteration order is randomized; debug callers should
+		// canonicalize externally if they need stable output.
+		for k, v := range p.Modifiers {
+			if !first {
+				b.WriteString(", ")
+			}
+			first = false
+			b.WriteString(k)
+			b.WriteString(": ")
+			b.WriteString(formatModifierValue(v))
+		}
+		b.WriteByte('}')
+	}
 	b.WriteByte(')')
 	return b.String()
+}
+
+// ArrayPhrase represents a `$SS("name", elem1, elem2, ..., {options})`
+// invocation —— 字符串数组短语 (含命令嵌套)。
+//
+// 设计 (docs/design/2026-05-16-cmdbar-followup.md §4.3):
+//   - Name 是第一个参数 string lit, 用作前缀导航候选的显示名
+//   - Elements 是其余参数, 每个元素是 StringLit 或 embedded CommandPhrase
+//     (字符串字面量当作"上屏文本"候选, 嵌入的 CommandPhrase 当作"动作"候选)
+//   - Modifiers 同 CommandPhrase 路径, 含 marker 默认 + 显式 options 合并值
+//   - 嵌套深度上限 1: ArrayPhrase 不能嵌入 ArrayPhrase, 内部 CommandPhrase
+//     也不能再嵌入 marker (由 parser 在 parseArrayPhrase 内部检查)
+type ArrayPhrase struct {
+	Name      string
+	Elements  []Expr
+	Modifiers map[string]any
+}
+
+func (ArrayPhrase) phraseNode() {}
+func (p ArrayPhrase) String() string {
+	var b strings.Builder
+	b.WriteString("$SS(")
+	b.WriteByte('"')
+	b.WriteString(p.Name)
+	b.WriteByte('"')
+	for _, e := range p.Elements {
+		b.WriteString(", ")
+		b.WriteString(e.String())
+	}
+	if len(p.Modifiers) > 0 {
+		b.WriteString(", {")
+		first := true
+		for k, v := range p.Modifiers {
+			if !first {
+				b.WriteString(", ")
+			}
+			first = false
+			b.WriteString(k)
+			b.WriteString(": ")
+			b.WriteString(formatModifierValue(v))
+		}
+		b.WriteByte('}')
+	}
+	b.WriteByte(')')
+	return b.String()
+}
+
+// formatModifierValue renders a typed modifier value for round-trippable
+// debug output. Kept private to ast since the modifier value space is
+// intentionally narrow (string / float64 / bool only).
+func formatModifierValue(v any) string {
+	switch x := v.(type) {
+	case string:
+		return strconv.Quote(x)
+	case bool:
+		if x {
+			return "true"
+		}
+		return "false"
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	}
+	return "<?>"
 }

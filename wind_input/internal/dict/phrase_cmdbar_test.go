@@ -39,13 +39,13 @@ func TestPhraseLayerCmdbarHookFiresOnCC(t *testing.T) {
 
 	// 注入 hook: 返回固定 display + 1 个 ActionEffect。
 	var actionFired int32
-	hook := func(value string) (string, []cmdbar.ResolvedAction, bool, error) {
+	hook := func(value string) (string, []cmdbar.ResolvedAction, map[string]any, bool, error) {
 		return "打开百度", []cmdbar.ResolvedAction{
 			{Kind: cmdbar.ActionEffect, Run: func() (string, error) {
 				atomic.AddInt32(&actionFired, 1)
 				return "", nil
 			}},
-		}, true, nil
+		}, nil, true, nil
 	}
 	pl.SetCmdbarHook(hook)
 
@@ -92,8 +92,8 @@ func TestPhraseLayerCmdbarHookFallbackOnError(t *testing.T) {
 	}
 
 	pl := loadPhraseLayerFromYAML(t, systemFile, "")
-	pl.SetCmdbarHook(func(value string) (string, []cmdbar.ResolvedAction, bool, error) {
-		return "", nil, true, errSentinel
+	pl.SetCmdbarHook(func(value string) (string, []cmdbar.ResolvedAction, map[string]any, bool, error) {
+		return "", nil, nil, true, errSentinel
 	})
 
 	results := pl.SearchCommand("bad", 10)
@@ -123,9 +123,9 @@ func TestPhraseLayerCmdbarHookSkipsNonCC(t *testing.T) {
 	}
 	pl := loadPhraseLayerFromYAML(t, systemFile, "")
 	called := false
-	pl.SetCmdbarHook(func(value string) (string, []cmdbar.ResolvedAction, bool, error) {
+	pl.SetCmdbarHook(func(value string) (string, []cmdbar.ResolvedAction, map[string]any, bool, error) {
 		called = true
-		return "X", nil, true, nil
+		return "X", nil, nil, true, nil
 	})
 	results := pl.SearchCommand("rq", 10)
 	if called {
@@ -148,10 +148,10 @@ var errSentinel = sentinelErr("test sentinel error")
 
 // stubCmdbarHook 返回固定 display 的 hook, 便于 prefix_nav 测试断言展开行为。
 func stubCmdbarHook(display string) CmdbarPhraseHook {
-	return func(value string) (string, []cmdbar.ResolvedAction, bool, error) {
+	return func(value string) (string, []cmdbar.ResolvedAction, map[string]any, bool, error) {
 		return display, []cmdbar.ResolvedAction{
 			{Kind: cmdbar.ActionEffect, Run: func() (string, error) { return "", nil }},
-		}, true, nil
+		}, nil, true, nil
 	}
 }
 

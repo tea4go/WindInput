@@ -146,17 +146,40 @@ func cmdbarSource(c candidate.Candidate) string {
 	return c.Text
 }
 
-// filterCmdbarExactOnly 原地过滤掉 IsExactOnly 命中的候选,
+// candidateIsExactOnly 判断单个候选是否仅精确匹配 (在前缀搜索阶段应过滤掉)。
+//
+// 2026-05-16 优先级:
+//  1. candidate.Modifiers["prefix"] 存在 → 直接用 (新 options bag 路径,
+//     由 cmdbar parser 在解析期填充, 含 marker syntax sugar 默认值合并;
+//     prefix=true 表示候选愿意在前缀阶段出现, 即 *非* exact-only)
+//  2. 否则回退到 IsExactOnly(cmdbarSource(c)) 字符串扫描
+//     (用户词库/系统词库等未经过 cmdbar hook 的候选走此路径)
+//
+// 这套优先级让"显式 modifier" 永远胜过"marker 字符串推断", 保持新旧路径兼容。
+func candidateIsExactOnly(c candidate.Candidate) bool {
+	if c.Modifiers != nil {
+		if v, ok := c.Modifiers["prefix"]; ok {
+			if prefix, isBool := v.(bool); isBool {
+				return !prefix
+			}
+		}
+	}
+	return IsExactOnly(cmdbarSource(c))
+}
+
+// filterCmdbarExactOnly 原地过滤掉 exact-only 命中的候选,
 // 用 cs[:0] 共享底层数组节省分配。空切片直接返回。
 //
-// 函数名保留 (历史调用点多), 内部走 IsExactOnly 现代语义。
+// 函数名保留 (历史调用点多), 内部走 candidateIsExactOnly 综合判定:
+// 新候选 (PhraseLayer cmdbar hook 路径) 看 Modifiers, 老候选 (用户/系统词库)
+// 看 marker 字符串。
 func filterCmdbarExactOnly(cs []candidate.Candidate) []candidate.Candidate {
 	if len(cs) == 0 {
 		return cs
 	}
 	out := cs[:0]
 	for _, c := range cs {
-		if !IsExactOnly(cmdbarSource(c)) {
+		if !candidateIsExactOnly(c) {
 			out = append(out, c)
 		}
 	}

@@ -30,6 +30,10 @@ type ExpandResult struct {
 	DisplayText string
 	// Actions 是选中后要执行的已解析动作链 (Effect + Text 混合)
 	Actions []cmdbar.ResolvedAction
+	// Modifiers 是 cmdbar marker 的 options bag 合并结果 (含 marker syntax
+	// sugar 默认 + 显式 options); 仅在 IsCommand 为 true 且 hook 成功时填充。
+	// 调用方透传到 candidate.Candidate.Modifiers, 替代旧 IsExactOnly 字符串扫描。
+	Modifiers map[string]any
 	// IsCommand 为 true 表示原 value 是命令 (含 $CC); 即便解析失败也保留 true,
 	// 这样上层可标记 candidate.IsCommand=true 以走命令选中通路。
 	IsCommand bool
@@ -60,7 +64,7 @@ func HasExpandable(value string) bool {
 // coordinator 候选后处理可以选择忽略, 因为大量候选不希望污染日志)。
 func (ve *ValueExpander) Expand(value string) ExpandResult {
 	if HasCmdbarMarker(value) && ve.Hook != nil {
-		display, actions, ok, err := ve.Hook(value)
+		display, actions, modifiers, ok, err := ve.Hook(value)
 		if err != nil {
 			return ExpandResult{
 				Text:      value,
@@ -77,6 +81,7 @@ func (ve *ValueExpander) Expand(value string) ExpandResult {
 				Text:        text,
 				DisplayText: display,
 				Actions:     actions,
+				Modifiers:   modifiers,
 				IsCommand:   true,
 				Changed:     true,
 			}
