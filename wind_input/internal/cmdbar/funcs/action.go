@@ -23,16 +23,75 @@ import (
 // 时显式拦截构造为 ActionText (P5), 由 coordinator 走 TSF InsertText 通路
 // 落字, 不再经过 registry.Lookup; registry 中的 type stub 仅供 arity 元信息,
 // 不会真正被 Evaluate 调用。
+//
+// 2026-05-16 (PR-3) 命名宪法 (docs/design/2026-05-16-cmdbar-followup.md §1):
+//   - run → proc.run, shell → proc.shell, search → web.search 改 namespace
+//   - open / key.* / clip.* 保留 (符合规范或例外)
+//   - 旧名通过 aliasOf 注册为 Deprecated, Eval 仍指向同一实现, 保证用户
+//     已有 yaml 短语继续工作。
 func actionFuncs() []cmdbar.FuncSpec {
+	openSpec := cmdbar.FuncSpec{
+		Name: "open", Category: cmdbar.CategoryAction,
+		MinArgs: 1, MaxArgs: 1, Pure: false,
+		Description: "打开 URL / 程序 / 文件 (通用 ShellExecute 语义)",
+		ExampleSrc:  `open("https://baidu.com")`,
+		Eval:        fnOpen,
+	}
+	procRun := cmdbar.FuncSpec{
+		Name: "proc.run", Category: cmdbar.CategoryProc,
+		MinArgs: 1, MaxArgs: -1, Pure: false,
+		Description: "启动外部程序, 可带参数 (第一参为可执行文件, 余下参数为命令行参数)",
+		ExampleSrc:  `proc.run("notepad.exe")`,
+		Eval:        fnRun,
+	}
+	procShell := cmdbar.FuncSpec{
+		Name: "proc.shell", Category: cmdbar.CategoryProc,
+		MinArgs: 1, MaxArgs: 2, Pure: false,
+		Description: "通过 cmd /c 执行命令行; 第二参可选 flag (term/pwsh)",
+		ExampleSrc:  `proc.shell("echo hi")`,
+		Eval:        fnShell,
+	}
+	keyTap := cmdbar.FuncSpec{
+		Name: "key.tap", Category: cmdbar.CategoryKey,
+		MinArgs: 1, MaxArgs: 1, Pure: false,
+		Description: "模拟单次按键组合, 形如 Ctrl+C / Shift+End / Enter",
+		ExampleSrc:  `key.tap("Ctrl+C")`,
+		Eval:        fnKeyTap,
+	}
+	keySeq := cmdbar.FuncSpec{
+		Name: "key.seq", Category: cmdbar.CategoryKey,
+		MinArgs: 1, MaxArgs: -1, Pure: false,
+		Description: "顺序模拟多个按键组合",
+		ExampleSrc:  `key.seq("Home", "Shift+End", "Delete")`,
+		Eval:        fnKeySeq,
+	}
+	clipCopy := cmdbar.FuncSpec{
+		Name: "clip.copy", Category: cmdbar.CategoryClip,
+		MinArgs: 1, MaxArgs: 1, Pure: false,
+		Description: "把文本写入系统剪贴板",
+		ExampleSrc:  `clip.copy(last())`,
+		Eval:        fnClipCopy,
+	}
+	clipPaste := cmdbar.FuncSpec{
+		Name: "clip.paste", Category: cmdbar.CategoryClip,
+		MinArgs: 0, MaxArgs: 0, Pure: false,
+		Description: "模拟 Ctrl+V 粘贴剪贴板内容",
+		ExampleSrc:  `clip.paste()`,
+		Eval:        fnClipPaste,
+	}
+	webSearch := cmdbar.FuncSpec{
+		Name: "web.search", Category: cmdbar.CategoryWeb,
+		MinArgs: 2, MaxArgs: 2, Pure: false,
+		Description: "用搜索引擎搜索 (engine ∈ baidu/bing/google/zdic)",
+		ExampleSrc:  `web.search("baidu", last())`,
+		Eval:        fnSearch,
+	}
 	return []cmdbar.FuncSpec{
-		{Name: "open", MinArgs: 1, MaxArgs: 1, Pure: false, Eval: fnOpen},
-		{Name: "run", MinArgs: 1, MaxArgs: -1, Pure: false, Eval: fnRun},
-		{Name: "shell", MinArgs: 1, MaxArgs: 2, Pure: false, Eval: fnShell},
-		{Name: "key.tap", MinArgs: 1, MaxArgs: 1, Pure: false, Eval: fnKeyTap},
-		{Name: "key.seq", MinArgs: 1, MaxArgs: -1, Pure: false, Eval: fnKeySeq},
-		{Name: "clip.copy", MinArgs: 1, MaxArgs: 1, Pure: false, Eval: fnClipCopy},
-		{Name: "clip.paste", MinArgs: 0, MaxArgs: 0, Pure: false, Eval: fnClipPaste},
-		{Name: "search", MinArgs: 2, MaxArgs: 2, Pure: false, Eval: fnSearch},
+		openSpec, procRun, procShell, keyTap, keySeq, clipCopy, clipPaste, webSearch,
+		// 旧名 alias (向后兼容):
+		aliasOf(procRun, "run"),
+		aliasOf(procShell, "shell"),
+		aliasOf(webSearch, "search"),
 	}
 }
 

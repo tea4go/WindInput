@@ -16,19 +16,46 @@ import (
 
 // §3.1 value functions.
 
+// §3.1 取值函数. 它们 Pure=true (可在 $CC display 中使用), 但都依赖
+// EvalContext 外部状态 (input/history/clipboard/time/foreground), 所以
+// Deterministic=false (同一表达式两次求值结果可能不同, 缓存优化时要看
+// Deterministic 而不是 Pure)。
 func valueFuncs() []cmdbar.FuncSpec {
+	v := cmdbar.CategoryValue
 	return []cmdbar.FuncSpec{
-		{Name: "code", MinArgs: 0, MaxArgs: 1, Pure: true, Eval: fnCode},
-		{Name: "tail", MinArgs: 2, MaxArgs: 2, Pure: true, Eval: fnTail},
-		{Name: "last", MinArgs: 0, MaxArgs: 1, Pure: true, Eval: fnLast},
-		{Name: "clip", MinArgs: 0, MaxArgs: 1, Pure: true, Eval: fnClip},
-		{Name: "sel", MinArgs: 0, MaxArgs: 0, Pure: true, Eval: fnSel},
-		{Name: "app", MinArgs: 0, MaxArgs: 0, Pure: true, Eval: fnApp},
-		{Name: "title", MinArgs: 0, MaxArgs: 0, Pure: true, Eval: fnTitle},
-		{Name: "date", MinArgs: 1, MaxArgs: 2, Pure: true, Eval: fnDate},
-		{Name: "time", MinArgs: 0, MaxArgs: 1, Pure: true, Eval: fnTime},
-		{Name: "now", MinArgs: 0, MaxArgs: 0, Pure: true, Eval: fnNow},
-		{Name: "env", MinArgs: 1, MaxArgs: 1, Pure: true, Eval: fnEnv},
+		{Name: "code", Category: v, MinArgs: 0, MaxArgs: 1, Pure: true, Deterministic: false,
+			Description: "触发候选时的输入编码; code(n) 从第 n 字符 (1 起) 切到末尾",
+			ExampleSrc:  `code()`, Eval: fnCode},
+		{Name: "tail", Category: v, MinArgs: 2, MaxArgs: 2, Pure: true, Deterministic: true,
+			Description: "字符串 s 从第 n 字符 (1 起) 切到末尾",
+			ExampleSrc:  `tail(code, 2)`, Eval: fnTail},
+		{Name: "last", Category: v, MinArgs: 0, MaxArgs: 1, Pure: true, Deterministic: false,
+			Description: "最近一次上屏文本; last(n) 取倒数第 n 次, n≥1",
+			ExampleSrc:  `last()`, Eval: fnLast},
+		{Name: "clip", Category: v, MinArgs: 0, MaxArgs: 1, Pure: true, Deterministic: false,
+			Description: "当前剪贴板内容; clip(n) 取历史第 n 条 (1-based, 容量 9)",
+			ExampleSrc:  `clip()`, Eval: fnClip},
+		{Name: "sel", Category: v, MinArgs: 0, MaxArgs: 0, Pure: true, Deterministic: false,
+			Description: "当前前台应用中选中的文本 (无选区返回空, 当前为占位实现)",
+			ExampleSrc:  `sel()`, Eval: fnSel},
+		{Name: "app", Category: v, MinArgs: 0, MaxArgs: 0, Pure: true, Deterministic: false,
+			Description: "当前前台进程名 (basename)",
+			ExampleSrc:  `app()`, Eval: fnApp},
+		{Name: "title", Category: v, MinArgs: 0, MaxArgs: 0, Pure: true, Deterministic: false,
+			Description: "当前前台窗口标题",
+			ExampleSrc:  `title()`, Eval: fnTitle},
+		{Name: "date", Category: v, MinArgs: 1, MaxArgs: 2, Pure: true, Deterministic: false,
+			Description: "日期; fmt 用 YYYY MM DD HH mm ss; offset 形如 '+1d' '-2w' '+3M' '-1y'",
+			ExampleSrc:  `date("YYYY-MM-DD", "+1d")`, Eval: fnDate},
+		{Name: "time", Category: v, MinArgs: 0, MaxArgs: 1, Pure: true, Deterministic: false,
+			Description: "当前时间; 默认 fmt='HH:mm:ss'",
+			ExampleSrc:  `time("HH:mm")`, Eval: fnTime},
+		{Name: "now", Category: v, MinArgs: 0, MaxArgs: 0, Pure: true, Deterministic: false,
+			Description: "当前日期时间, 等价 date('YYYY-MM-DD HH:mm:ss')",
+			ExampleSrc:  `now()`, Eval: fnNow},
+		{Name: "env", Category: v, MinArgs: 1, MaxArgs: 1, Pure: true, Deterministic: false,
+			Description: "读取环境变量",
+			ExampleSrc:  `env("HOME")`, Eval: fnEnv},
 	}
 }
 

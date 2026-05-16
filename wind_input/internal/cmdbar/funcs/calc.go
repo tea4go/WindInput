@@ -10,12 +10,16 @@ import (
 	"github.com/huanfeng/wind_input/internal/cmdbar"
 )
 
-// §3.3 calc + num.
-
+// §3.3 calc + num. 全部 Pure=true 且 Deterministic=true。
 func calcFuncs() []cmdbar.FuncSpec {
+	c := cmdbar.CategoryCalc
 	return []cmdbar.FuncSpec{
-		{Name: "calc", MinArgs: 1, MaxArgs: 1, Pure: true, Eval: fnCalc},
-		{Name: "num", MinArgs: 2, MaxArgs: 2, Pure: true, Eval: fnNum},
+		{Name: "calc", Category: c, MinArgs: 1, MaxArgs: 1, Pure: true, Deterministic: true,
+			Description: "数学表达式求值 (支持 + - * / % 与括号; 空输入静默返回空)",
+			ExampleSrc:  `calc(tail(code, 2))`, Eval: fnCalc},
+		{Name: "num", Category: c, MinArgs: 2, MaxArgs: 2, Pure: true, Deterministic: true,
+			Description: "进制转换 (2/8/10/16); num('0xff', 10) → '255'",
+			ExampleSrc:  `num("0xff", 10)`, Eval: fnNum},
 	}
 }
 

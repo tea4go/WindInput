@@ -13,7 +13,7 @@
 |------|-------------|
 | `context.go` | `EvalContext` 接口 (含 `Services()`) 与 `MemoryContext` 测试实现; 含环形 `History` (容量自定, 默认 16) |
 | `services.go` | 动作函数所需依赖接口集: `ClipboardService` / `KeyInjector` / `URLOpener` / `ProcessRunner` (含 `Shell` + `ShellEx(cmd, flags)`) / `DictService` / `IMEController` / `SearchEngine` 与 `Services` 聚合; `ErrServiceUnavailable` 用于缺失服务降级 |
-| `registry.go` | `FuncSpec` 元信息 + 线程安全 `Registry`; 默认注册 §3.4-§3.5 副作用函数 stub (Pure=false, Eval 返回 ErrNotImplemented), 等 `funcs.RegisterActions` 调用后被真实实现覆盖 |
+| `registry.go` | `FuncSpec` 元信息 + 线程安全 `Registry`; 2026-05-16 (PR-3) 扩展 Category / Deterministic / Deprecated / AliasOf / Description / ExampleSrc 字段; `ListFuncs()` 返回完整 spec 列表供 wind_setting 渲染函数手册; 默认注册命名宪法新名 (proc.run / proc.shell / dict.add / setting.open / web.search) 与旧名 alias (run/shell/dict.addword/ime.setting/search) 为 Pure=false stub, 等 `funcs.RegisterActions` 调用后被真实实现覆盖 |
 | `ast/ast.go` | `Expr` / `Phrase` 节点定义 (`StringLit`/`NumberLit`/`Ident`/`Call`/`ObjectLit` + `LiteralPhrase`/`TemplatePhrase`/`CommandPhrase`/`ArrayPhrase`); `CommandPhrase` 同时实现 Expr (用于嵌入 `$SS` 元素位置) 与 Phrase 接口, 带 `Modifiers map[string]any` 字段 (2026-05-16 引入, 详见 follow-up §3.2); `ObjectLit` 是 trailing options bag 字面量; `ArrayPhrase` 是 `$SS(name, elem...)` 字符串数组短语, Elements 类型为 `[]Expr` (StringLit 或 CommandPhrase) |
 | `parser/lexer.go` | 手写词法; 字符串内 `{...}` 切出 interp 段, 支持 `\" \\ \{ \} \( \) \n \t \r` 转义; 表达式位置 (字符串外) `{` `}` `:` 作为 ObjectLit 标点 token |
 | `parser/parser.go` | 入口 `Parse(src) (Phrase, error)`; 顶层 `findTopLevelMarker` 识别 `$CC(` / `$CC1(` / `$SS(` 三种 marker (与 `{` interpolation 互斥), 分流到 `parseCommandPhrase` 或 `parseArrayPhrase`; marker syntax sugar (`$CC1` ≡ `$CC + {prefix:true}`, `$SS` 隐含 `{prefix:true, expand:"exact", nav:true}`) 在 `markerDefaults` 表里, parser 自动合并显式 options; `parseArrayPhrase` 用 `splitArrayArgs` 按顶层 `,` 切元素, 每个 span 自识别 `$CC(` 走 embedded CommandPhrase 路径, 嵌套深度上限 1 (内层 `$CC` 禁用 prefix modifier) |
@@ -22,8 +22,10 @@
 | `funcs/value.go` | §3.1 取值函数 (`code/tail/last/clip/sel/app/title/date/time/now/env`); `code` 返回触发候选时的 inputBuffer 快照, 旧名 `input` 已迁移 |
 | `funcs/text.go` | §3.2 文本处理 (`len/upper/lower/trim/sub/replace/regex/split/concat/reverse/url/html/json/base64/default`); `t2s/s2t/pinyin` 为占位 stub |
 | `funcs/calc.go` | §3.3 `calc` (递归下降算术求值, 支持 `+ - * / % ( )`, 空输入静默返回 `""` 无错) 与 `num` (2/8/10/16 进制互转) |
-| `funcs/action.go` | §3.4 动作: `open / run / shell / key.tap / key.seq / clip.copy / clip.paste / search`; 每个函数从 `ctx.Services()` 取依赖, 缺失返回 `ErrServiceUnavailable`。`type` 在 P5 后由 eval 直接拦截为 `ActionText`, 不再走 registry。`shell(cmd[, flags])` 第二参可选 flag 字符串 (逗号分隔, 白名单 `term`/`pwsh`), 走 `Proc.ShellEx`; 1 参形式保留 `Proc.Shell` 旧通路 |
-| `funcs/register.go` | `init` 把纯函数注册到 `DefaultRegistry`; `RegisterActions(reg)` 用真实 §3.4 实现覆盖 stub (调用方需主动调用, 避免对 Services 的隐式依赖) |
+| `funcs/action.go` | §3.4 动作主名: `open / proc.run / proc.shell / key.tap / key.seq / clip.copy / clip.paste / web.search` (PR-3 命名宪法); 旧名 alias `run/shell/search` 通过 `aliasOf` helper 共享同一 Eval。`type` 由 eval 拦截为 `ActionText` 不走 registry。每个函数从 `ctx.Services()` 取依赖, 缺失返回 `ErrServiceUnavailable`。`proc.shell(cmd[, flags])` 第二参可选 flag (term/pwsh) 走 `Proc.ShellEx` |
+| `funcs/dict_ime.go` | §3.4 主名: `dict.add / ime.toggle / setting.open`; 旧名 alias `dict.addword / ime.setting` 共享同一 Eval。fn 实现 (fnDictAddword/fnIMESetting) 名字暂保留旧称, 不影响外部调用语义 |
+| `funcs/help.go` | `help(name)` 内建函数: 查 DefaultRegistry 返回该函数 Description 字符串; alias 名返回时附带"-> 新名"提示 |
+| `funcs/register.go` | `init` 把 §3.1-§3.3 + help 注册到 `DefaultRegistry`; `RegisterActions(reg)` 用真实 §3.4 实现覆盖 stub。`aliasOf(canonical, oldName)` helper 把 spec 拷贝改名 + 标 Deprecated, 供命名宪法迁移使用 |
 
 ## Subdirectories
 | Directory | Purpose |

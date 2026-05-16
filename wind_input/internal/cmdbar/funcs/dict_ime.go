@@ -16,11 +16,39 @@ import (
 // dictIMEActionFuncs 返回 P4 新增动作的 FuncSpec 列表。
 // 与 actionFuncs() 一同被 RegisterActions 写入 Registry, 覆盖原本的
 // stub 实现 (registerSideEffectStubs 注册的 ErrNotImplemented)。
+//
+// 2026-05-16 (PR-3) 命名宪法:
+//   - dict.addword → dict.add (verb 用 "add", namespace 已含 dict 语义)
+//   - ime.setting → setting.open (setting 独立 namespace, verb 统一 "open")
+//   - ime.toggle 保留 (符合 namespace.verb 规范)
+//
+// 旧名通过 aliasOf 注册为 Deprecated, Eval 复用同一实现。
 func dictIMEActionFuncs() []cmdbar.FuncSpec {
+	dictAdd := cmdbar.FuncSpec{
+		Name: "dict.add", Category: cmdbar.CategoryDict,
+		MinArgs: 1, MaxArgs: 2, Pure: false,
+		Description: "把文本加入用户词库; code 可选, 不传时按当前方案规则自动推导",
+		ExampleSrc:  `dict.add(clip())`,
+		Eval:        fnDictAddword,
+	}
+	imeToggle := cmdbar.FuncSpec{
+		Name: "ime.toggle", Category: cmdbar.CategoryIME,
+		MinArgs: 1, MaxArgs: 1, Pure: false,
+		Description: "切换 IME 状态 (cn-en / fullshape / layout / candwin)",
+		ExampleSrc:  `ime.toggle("cn-en")`,
+		Eval:        fnIMEToggle,
+	}
+	settingOpen := cmdbar.FuncSpec{
+		Name: "setting.open", Category: cmdbar.CategorySetting,
+		MinArgs: 1, MaxArgs: 1, Pure: false,
+		Description: "打开 wind_setting 设置窗口的指定页面",
+		ExampleSrc:  `setting.open("dict")`,
+		Eval:        fnIMESetting,
+	}
 	return []cmdbar.FuncSpec{
-		{Name: "dict.addword", MinArgs: 1, MaxArgs: 2, Pure: false, Eval: fnDictAddword},
-		{Name: "ime.toggle", MinArgs: 1, MaxArgs: 1, Pure: false, Eval: fnIMEToggle},
-		{Name: "ime.setting", MinArgs: 1, MaxArgs: 1, Pure: false, Eval: fnIMESetting},
+		dictAdd, imeToggle, settingOpen,
+		aliasOf(dictAdd, "dict.addword"),
+		aliasOf(settingOpen, "ime.setting"),
 	}
 }
 
