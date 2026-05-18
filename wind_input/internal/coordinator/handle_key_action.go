@@ -646,6 +646,11 @@ func (c *Coordinator) handleSelectChar(charIndex int) *bridge.KeyEventResult {
 	}
 
 	cand := c.candidates[index]
+	// 数组未展开 nav: cand.Text 是"组名" (例如"标点符号"), 不可作以词定字源。
+	// 直接 Consumed 让用户先选 nav 进入展开 (与标点顶字一致, 2026-05-18)。
+	if cand.IsGroup {
+		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+	}
 	runes := []rune(cand.Text)
 
 	// 候选词长度不足时返回 nil，由调用方按 overflow 策略处理
@@ -671,7 +676,8 @@ func (c *Coordinator) handleSelectChar(charIndex int) *bridge.KeyEventResult {
 
 	// 用户词频学习 & 造词回调
 	// 注意：以词定字应传实际选的单字，而非完整词，否则造词策略会误判为多字词
-	if c.engineMgr != nil && !cand.IsCommand {
+	// 跳过条件用 Actions: 短语/字符组也应触发学习, 仅副作用命令跳过。
+	if c.engineMgr != nil && len(cand.Actions) == 0 {
 		selectedCode := c.inputBuffer
 		if cand.Code != "" {
 			selectedCode = cand.Code

@@ -68,7 +68,11 @@ func loadPhraseLayerFromYAML(t *testing.T, systemFile, userFile string) *PhraseL
 	return pl
 }
 
-func TestPhraseLayerSearchCommandMarksIsCommand(t *testing.T) {
+// TestPhraseLayerSearchCommandTemplateNotCommand 验证模板变量短语 ($uuid/$Y/$M
+// 等无副作用 Actions 的展开) 不再被打上 IsCommand。IsCommand 严格收缩为
+// "有副作用 Actions" 后, 这些纯文本候选应保持 IsCommand=false, 让上层
+// doSelectCandidate 能记入 inputHistory / 触发学习。
+func TestPhraseLayerSearchCommandTemplateNotCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 	systemFile := filepath.Join(tmpDir, "system.phrases.yaml")
 	content := `phrases:
@@ -88,8 +92,14 @@ func TestPhraseLayerSearchCommandMarksIsCommand(t *testing.T) {
 	}
 
 	for i, c := range results {
-		if !c.IsCommand {
-			t.Fatalf("candidate[%d] should be marked IsCommand=true", i)
+		if c.IsCommand {
+			t.Fatalf("candidate[%d]: 模板变量短语不应标 IsCommand=true (无 Actions)", i)
+		}
+		if !c.IsPhrase {
+			t.Fatalf("candidate[%d] should keep IsPhrase=true", i)
+		}
+		if len(c.Actions) != 0 {
+			t.Fatalf("candidate[%d]: 模板变量短语 Actions 应为空, got %d", i, len(c.Actions))
 		}
 	}
 }
@@ -280,11 +290,15 @@ func TestSearchCommandGroupExactMatch(t *testing.T) {
 		t.Fatalf("expected 4 chars for SearchCommand('zzbd'), got %d", len(results))
 	}
 	for i, c := range results {
-		if !c.IsCommand {
-			t.Fatalf("candidate[%d] should have IsCommand=true", i)
+		// IsCommand 严格表"有副作用 Actions"; $AA 字符成员是纯文本, 不应被标 IsCommand
+		if c.IsCommand {
+			t.Fatalf("candidate[%d]: $AA 字符成员不应标 IsCommand=true (纯文本)", i)
 		}
 		if !c.IsPhrase {
 			t.Fatalf("candidate[%d] should have IsPhrase=true", i)
+		}
+		if !c.IsGroupMember {
+			t.Fatalf("candidate[%d] should have IsGroupMember=true", i)
 		}
 		if c.IsGroup {
 			t.Fatalf("candidate[%d] should NOT have IsGroup=true (exact match returns chars)", i)

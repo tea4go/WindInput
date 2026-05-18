@@ -133,7 +133,7 @@ func (e *Engine) convertCore(input string, maxCandidates int, skipFilter bool) *
 	//
 	// 双拼模式：短语编码以原始键序列定义（如 "zzbd"），需用 originalInput 查询，
 	// 而非双拼转换后的全拼字符串。ConsumedLength 直接设为原始输入长度，
-	// shuangpinPostprocess 中跳过对 IsCommand 候选的长度重映射。
+	// shuangpinPostprocess 中跳过对 IsPhrase 候选的长度重映射。
 	{
 		cmdKey := queryInput
 		cmdConsumedLen := len(input)
@@ -618,9 +618,12 @@ func (e *Engine) shuangpinPostprocess(result *PinyinConvertResult, spResult *shu
 	result.FullPinyinInput = spResult.fullPinyin
 
 	// 回映所有候选的 ConsumedLength（全拼位置→双拼位置）。
-	// IsCommand 候选已在步骤 0 中直接设置为原始输入长度，无需重映射。
+	// 短语候选（含 $AA/$SS/动态命令）已在步骤 0 中按 originalInput 长度直接赋值，
+	// 编码即原始 raw 序列，无需做全拼→双拼的位置回映。判定用 IsPhrase 而非
+	// IsCommand —— 收紧 IsCommand 仅表"有副作用 Actions"后，PhraseLayer 出口的
+	// 普通短语 / $AA / $SS 成员不再标 IsCommand，但仍需跳过重映射。
 	for i := range result.Candidates {
-		if result.Candidates[i].IsCommand {
+		if result.Candidates[i].IsPhrase {
 			continue
 		}
 		fpConsumed := result.Candidates[i].ConsumedLength

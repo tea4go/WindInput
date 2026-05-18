@@ -354,7 +354,9 @@ func (c *Coordinator) applyValueExpansion(cand *candidate.Candidate) {
 	if res.IsCommand {
 		cand.DisplayText = res.DisplayText
 		cand.Actions = res.Actions
-		cand.IsCommand = true
+		// IsCommand 严格表示"有副作用 Actions": ValueExpander 在 hook 报错时会降级
+		// 为字面量 (res.IsCommand=true 但 Actions=nil), 那种情况不应被当作命令分发。
+		cand.IsCommand = len(res.Actions) > 0
 	}
 }
 
@@ -841,7 +843,9 @@ func (c *Coordinator) doSelectCandidate(index int) *bridge.KeyEventResult {
 		cand.ConsumedLength > 0 && cand.ConsumedLength < len(c.inputBuffer) {
 
 		consumedCode := c.inputBuffer[:cand.ConsumedLength]
-		if !cand.IsCommand {
+		// 仅纯文本候选触发学习；带副作用 Actions 的命令候选不走学习路径
+		// (L931 会把它分发到 commitCmdbarCandidate)。
+		if len(cand.Actions) == 0 {
 			mgr := c.engineMgr
 			go mgr.OnCandidateSelected(consumedCode, originalText, cand.Source)
 		}
@@ -878,7 +882,10 @@ func (c *Coordinator) doSelectCandidate(index int) *bridge.KeyEventResult {
 	}
 
 	// ── 完全消费：学习回调（异步执行，不阻塞键事件响应路径）──────────────
-	if c.engineMgr != nil && !cand.IsCommand {
+	// 跳过条件用 Actions 而非 IsCommand: PhraseLayer 出口的普通短语 / $AA / $SS
+	// 成员 / 模板变量 (uuid/date 等) 都应纳入学习, 只有有副作用的 cmdbar 命令
+	// (Actions 非空) 才跳过 (它们走 L931 commitCmdbarCandidate)。
+	if c.engineMgr != nil && len(cand.Actions) == 0 {
 		var learnCode, learnText string
 		if (isPinyin || isMixed) && len(c.confirmedSegments) > 0 {
 			learnCode = segCode + c.inputBuffer
@@ -895,8 +902,11 @@ func (c *Coordinator) doSelectCandidate(index int) *bridge.KeyEventResult {
 		go mgr.OnCandidateSelected(learnCode, learnText, learnSource)
 	}
 
-	// ── 输入历史记录（用于加词推荐）────────────────────────────────────────
-	if c.inputHistory != nil && !cand.IsCommand {
+	// ── 输入历史记录（用于加词推荐 / z 键重复上屏 / 快捷输入重复）──────────
+	// 跳过条件用 Actions 而非 IsCommand: 普通短语 / $AA / $SS 成员 / 模板变量
+	// 都应入历史, 只有有副作用的 cmdbar 命令 (Actions 非空) 才跳过 (它们走
+	// L931 commitCmdbarCandidate, 由 commitCmdbarCandidate 选择性记录)。
+	if c.inputHistory != nil && len(cand.Actions) == 0 {
 		histText := originalText
 		histCode := c.inputBuffer
 		if (isPinyin || isMixed) && len(c.confirmedSegments) > 0 {

@@ -174,6 +174,14 @@ func (c *Coordinator) handlePunctuation(r rune, afterDigit bool, prevChar rune) 
 			}
 			candidate := c.candidates[highlightedIndex]
 
+			// 数组未展开 nav (IsGroup=true): 高亮是导航条目而非可上屏文本,
+			// 顶字会把 "数组名" + 标点一并写入. 直接吞掉标点, 让用户先选 nav
+			// 进入二级展开后再操作 (与用户对话敲定的策略, 2026-05-18)。
+			// 详见 docs/design/candidate-actions.md。
+			if candidate.IsGroup {
+				return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+			}
+
 			// 命令直通车候选: 先让 commitCmdbarCandidate 跑动作 (text/effect),
 			// 把它返回的 text (可能为空) 与标点合并后一并 InsertText。
 			// 注意 commitCmdbarCandidate 已经 clearState + hideUI, 不再走下方
@@ -225,7 +233,9 @@ func (c *Coordinator) handlePunctuation(r rune, afterDigit bool, prevChar rune) 
 
 			// 标点顶字上屏：先 flush 旧序列，再将候选追加到新序列
 			// 两步必须顺序执行，合并到同一 goroutine 避免并发乱序
-			if c.engineMgr != nil && !candidate.IsCommand {
+			// 跳过条件用 Actions 而非 IsCommand: 短语 / $AA / $SS 等都应学习,
+			// 只有有副作用的 cmdbar 命令 (Actions 非空) 才跳过 (上方 L181 已分发)。
+			if c.engineMgr != nil && len(candidate.Actions) == 0 {
 				learnCode := c.inputBuffer
 				learnText := candidate.Text
 				learnSource := candidate.Source

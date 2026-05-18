@@ -47,8 +47,12 @@ func TestPhraseLayerSSGroup_ExactExpands(t *testing.T) {
 		if results[i].NaturalOrder != i {
 			t.Errorf("idx %d: NaturalOrder = %d, want %d", i, results[i].NaturalOrder, i)
 		}
-		if !results[i].IsCommand || !results[i].IsPhrase {
-			t.Errorf("idx %d: should be marked IsCommand & IsPhrase", i)
+		// 纯 string lit 元素无 Actions → IsCommand 应为 false; 仅 IsPhrase 标记保留
+		if results[i].IsCommand {
+			t.Errorf("idx %d: $SS string lit 元素不应标 IsCommand=true (纯文本)", i)
+		}
+		if !results[i].IsPhrase {
+			t.Errorf("idx %d: should be marked IsPhrase", i)
 		}
 		// IsGroupMember=true: $SS 元素候选右键菜单全 disable (2026-05-17)
 		if !results[i].IsGroupMember {

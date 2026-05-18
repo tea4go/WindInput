@@ -227,10 +227,15 @@ func PhraseCandidateID(code, template string) string {
 // Search 精确查询静态短语（不含变量的短语）。
 //
 // staticPhrases 同时承载两类 entry:
-//   - 普通静态短语 (text=字面文本): IsCommand 由调用方按需标记, IsGroupMember=false
-//   - $AA 字符组**展开后**的字符级 entry (text=单字符): IsCommand=true,
-//     IsGroupMember=true — 因为 staticPhrases[code] 同时被 SearchCommand 路径
-//     (情况 2b) 用于字符组精确匹配, 字段必须一致。
+//   - 普通静态短语 (text=字面文本): IsGroupMember=false
+//   - $AA 字符组**展开后**的字符级 entry (text=单字符): IsGroupMember=true,
+//     GroupCode/GroupName/GroupTemplate 由反查 phraseGroups 填入 — 因为
+//     staticPhrases[code] 同时被 SearchCommand 路径 (情况 2b) 用于字符组精确
+//     匹配, 字段必须一致。
+//
+// IsCommand 不再由 PhraseLayer 标记 (2026-05-18): IsCommand 已收紧为
+// "有副作用 Actions"语义, 短语/字符组成员属纯文本候选, 应保留 IsCommand=false
+// 以走 doSelectCandidate 的历史 + 学习路径。
 //
 // 判断依据: code 在 pl.phraseGroups 里登记为 PhraseGroupKindAA → 字符组路径。
 func (pl *PhraseLayer) Search(code string, limit int) []candidate.Candidate {
@@ -268,7 +273,6 @@ func (pl *PhraseLayer) Search(code string, limit int) []candidate.Candidate {
 		// 让 coordinator collapse 路径能按 GroupTemplate 区分多 group。
 		// TODO: 未来支持组内成员原地编辑 (允许在 IME 内改 chars 数组顺序)
 		if g, ok := groupByRaw[e.GroupRawText]; ok {
-			cand.IsCommand = true
 			cand.IsGroupMember = true
 			cand.GroupCode = code
 			cand.GroupName = g.Name
@@ -380,7 +384,6 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 						Code:           code,
 						Weight:         groupWeight,
 						NaturalOrder:   idx,
-						IsCommand:      true,
 						IsPhrase:       true,
 						IsGroupMember:  true,
 						GroupCode:      code,
@@ -773,7 +776,7 @@ func (pl *PhraseLayer) expandSSGroupSingle(group PhraseGroup) []candidate.Candid
 			Code:           group.Code,
 			Weight:         entryWeight,
 			NaturalOrder:   i,
-			IsCommand:      true,
+			IsCommand:      len(elem.Actions) > 0,
 			IsPhrase:       true,
 			IsGroupMember:  true,
 			GroupCode:      group.Code,
@@ -813,7 +816,7 @@ func (pl *PhraseLayer) expandDynamicEntry(code string, e PhraseEntry) candidate.
 		Text:           res.Text,
 		Code:           code,
 		Weight:         resolvePhraseWeight(e.Weight),
-		IsCommand:      true,
+		IsCommand:      len(res.Actions) > 0,
 		IsPhrase:       true,
 		PhraseTemplate: e.Text,
 		ID:             PhraseCandidateID(code, e.Text),
