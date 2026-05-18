@@ -1,11 +1,46 @@
 package dict
 
 import (
+	"fmt"
+	"log/slog"
 	"sort"
+	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/huanfeng/wind_input/internal/candidate"
 )
+
+// uintptrOf 返回指针的整数形式 (调试日志用), 便于区分多 CompositeDict 实例。
+func uintptrOf(p any) uintptr {
+	switch v := p.(type) {
+	case *CompositeDict:
+		return uintptr(unsafe.Pointer(v))
+	default:
+		return 0
+	}
+}
+
+// layerHit LookupCommand 调试日志条目, 见 formatLayerTrace。
+type layerHit struct {
+	name      string
+	supported bool
+	count     int
+}
+
+// formatLayerTrace 把 LookupCommand 内部 layer 命中记录拍扁为单行字符串,
+// 例: "user:pinyin=0|phrase=93|codetable-system=skip"
+func formatLayerTrace(trace []layerHit) string {
+	parts := make([]string, 0, len(trace))
+	for _, t := range trace {
+		if !t.supported {
+			parts = append(parts, fmt.Sprintf("%s=skip", t.name))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s=%d", t.name, t.count))
+		}
+	}
+	return strings.Join(parts, "|")
+}
 
 // CompositeDict 聚合词库
 // 按优先级组合多个词库层，实现分层叠加查询
@@ -382,18 +417,34 @@ func (c *CompositeDict) LookupPrefix(prefix string, limit int) []candidate.Candi
 
 // LookupCommand 实现 dict.CommandSearchable 接口
 // 仅查找特殊命令（uuid, date 等），不返回普通词条
+//
+// 调试日志 (2026-05-18): 遍历过程中记录每层是否实现 SearchCommand 与其返回
+// 数量, 用于排查 "PhraseLayer 突然查不到 zzbd nav" 类瞬时窗口问题
+// (schema 切换 / 临时拼音状态机残留 / 多 CompositeDict 实例)。
 func (c *CompositeDict) LookupCommand(code string) []candidate.Candidate {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	trace := make([]layerHit, 0, len(c.layers))
+	defer func() {
+		// 在锁释放前算 trace 字符串; DEBUG 级别, 无原文。
+		slog.Debug("composite.LookupCommand trace",
+			"code", code, "dictPtr", uintptrOf(c), "layerCount", len(c.layers),
+			"trace", formatLayerTrace(trace))
+	}()
+
 	for _, layer := range c.layers {
-		if cl, ok := layer.(interface {
+		cl, supported := layer.(interface {
 			SearchCommand(code string, limit int) []candidate.Candidate
-		}); ok {
-			results := cl.SearchCommand(code, 0)
-			if len(results) > 0 {
-				return results
-			}
+		})
+		if !supported {
+			trace = append(trace, layerHit{name: layer.Name(), supported: false})
+			continue
+		}
+		results := cl.SearchCommand(code, 0)
+		trace = append(trace, layerHit{name: layer.Name(), supported: true, count: len(results)})
+		if len(results) > 0 {
+			return results
 		}
 	}
 	return nil
