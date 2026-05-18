@@ -2,7 +2,56 @@ package parser
 
 import (
 	"testing"
+	"time"
 )
+
+// timeAfter 给 Tokenize 死循环回归测试一个 2 秒上限; 正常单次 Tokenize 是
+// 微秒级。变量化便于未来按 CI 慢机调整。
+func timeAfter() <-chan time.Time { return time.After(2 * time.Second) }
+
+// TestLexer_FullWidthQuoteDoesNotInfiniteLoop 是 2026-05-18 OOM 事故的回归测试。
+// 历史 bug: dispatch 用 `isIdentStart(rune(c))` 单字节 cast, 多字节 UTF-8 首字节
+// (如全角引号 `"` = E2 80 9C 的 0xE2 = U+00E2 'â') 被误判为字母 → 进入 scanIdent →
+// scanIdent 用 utf8.DecodeRuneInString 正确解码 U+201C, 发现不是 ident-cont 立刻
+// break → l.pos 不前进 → 外层 for 死循环 + 无限 append → 内存几秒涨到 10GB+。
+//
+// 修复后: 非 ASCII 字节走 default 分支, 返回 "unexpected character" 错误。
+func TestLexer_FullWidthQuoteDoesNotInfiniteLoop(t *testing.T) {
+	src := "“百度”" // “百度” (全角引号包中文)
+	done := make(chan struct{})
+	var toks []Token
+	var err error
+	go func() {
+		toks, err = NewLexer(src).Tokenize()
+		close(done)
+	}()
+	select {
+	case <-done:
+		if err == nil {
+			t.Fatalf("expected error on full-width quote input, got tokens=%v", toks)
+		}
+	case <-timeAfter():
+		t.Fatal("Tokenize did not terminate: lexer is in an infinite loop (regression of full-width quote OOM bug)")
+	}
+}
+
+// TestLexer_NonASCIIBytesReportedAsError 验证常见非 ASCII 首字节 (中文字符、全角
+// 标点) 在表达式上下文都能稳定报错, 而不是误进 ident 路径。
+func TestLexer_NonASCIIBytesReportedAsError(t *testing.T) {
+	cases := []string{
+		"“",      // “
+		"”",      // ”
+		"中",      // 中
+		"（",      // （ 全角左括号
+		"foo(“)", // foo("
+	}
+	for _, src := range cases {
+		_, err := NewLexer(src).Tokenize()
+		if err == nil {
+			t.Errorf("expected error tokenizing %q, got nil", src)
+		}
+	}
+}
 
 func TestLexer_BasicTokens(t *testing.T) {
 	cases := []struct {

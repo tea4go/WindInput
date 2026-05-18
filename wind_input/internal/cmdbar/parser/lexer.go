@@ -113,7 +113,14 @@ func (l *Lexer) Tokenize() ([]Token, error) {
 				continue
 			}
 			return nil, fmt.Errorf("unexpected character %q at offset %d", c, l.pos)
-		case isIdentStart(rune(c)):
+		case isASCIIIdentStart(c):
+			// 仅用 ASCII 字节判定 ident 起始 (函数名/关键字一律 ASCII)。
+			// 历史 bug: 这里曾用 `isIdentStart(rune(c))`, 把单字节直接 cast 成 rune,
+			// 对 UTF-8 多字节首字节 (如全角引号 `"` = E2 80 9C 的首字节 0xE2 = 'â')
+			// 命中 unicode.IsLetter, 进入 scanIdent; 而 scanIdent 用 utf8.DecodeRuneInString
+			// 正确解码后发现不是 ident-cont, 立即 break, 不前进 pos —— 外层 for 循环
+			// 永远看到同一字节, 形成无限 append 死循环, 内存爆涨。
+			// 详见 docs/design/command-bar-followup.md (Lexer 字节/UTF-8 边界一致性)。
 			tok := l.scanIdent()
 			l.tokens = append(l.tokens, tok)
 		default:
@@ -125,8 +132,12 @@ func (l *Lexer) Tokenize() ([]Token, error) {
 	return l.tokens, nil
 }
 
-func isIdentStart(r rune) bool {
-	return r == '_' || unicode.IsLetter(r)
+// isASCIIIdentStart 只判定 ASCII 字节是否为 ident 起始。dispatch 阶段必须用
+// 字节级判定 (不能 rune(c) 单字节 cast), 否则 UTF-8 多字节首字节会被误判为
+// Latin Supplement 字母, 与 scanIdent 内部的 utf8.DecodeRuneInString 视角冲突,
+// 产生 "判进入但不消费" 的死循环。
+func isASCIIIdentStart(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 func isIdentCont(r rune) bool {
@@ -141,6 +152,12 @@ func (l *Lexer) scanIdent() Token {
 			break
 		}
 		l.pos += sz
+	}
+	// 防御: 若调用方误判 ident 起始导致 scanIdent 不前进, 强制吞一个字节
+	// 让 Tokenize 收尾时报 "empty identifier" 错误而不是死循环。dispatch 已用
+	// isASCIIIdentStart 收紧, 这条分支正常不应触达。
+	if l.pos == start && start < len(l.src) {
+		l.pos++
 	}
 	return Token{Kind: tkIdent, Lexeme: l.src[start:l.pos], Offset: start}
 }
