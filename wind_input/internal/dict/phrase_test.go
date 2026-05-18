@@ -561,6 +561,14 @@ func TestPhraseAAGroupCharsCarryGroupName(t *testing.T) {
 		if c.GroupName != "标点符号" {
 			t.Errorf("Search char[%d]=%q: GroupName want '标点符号', got %q", i, c.Text, c.GroupName)
 		}
+		// NaturalOrder 必须与 SearchCommand 路径一致 (按 chars 数组顺序 0/1/2),
+		// 否则 codetable engine Phase 1 dedup (Search+SearchCommand 同时调) 后
+		// 保留 Search 出口, NaturalOrder=0 会让五笔下字符组展开顺序乱掉。
+		// 用户反馈 2026-05-19。
+		if c.NaturalOrder != i {
+			t.Errorf("Search char[%d]=%q: NaturalOrder want %d, got %d (must match SearchCommand path)",
+				i, c.Text, i, c.NaturalOrder)
+		}
 	}
 }
 

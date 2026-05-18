@@ -260,6 +260,12 @@ func (pl *PhraseLayer) Search(code string, limit int) []candidate.Candidate {
 
 	results := make([]candidate.Candidate, 0, len(entries))
 	positions := make([]int, 0, len(entries))
+	// groupIdx 按 GroupRawText 分别维护当前 group 内的 0-based 成员序号 (NaturalOrder),
+	// 让 Search 出口字符组成员的 NaturalOrder 与 SearchCommand 情况 2 (phrase.go:382)
+	// 保持一致。否则 codetable engine Phase 1 同时调 Search + SearchCommand, dedup
+	// 按 text 保留先入栈的 Search 结果, NaturalOrder=0 压住 SearchCommand 出口的
+	// NaturalOrder=idx, 字符组展开顺序在五笔下乱掉 (用户反馈 2026-05-19)。
+	groupIdx := make(map[string]int, len(groupByRaw))
 	for _, e := range entries {
 		cand := candidate.Candidate{
 			Text:           e.Text,
@@ -277,6 +283,8 @@ func (pl *PhraseLayer) Search(code string, limit int) []candidate.Candidate {
 			cand.GroupCode = code
 			cand.GroupName = g.Name
 			cand.GroupTemplate = g.RawText
+			cand.NaturalOrder = groupIdx[e.GroupRawText]
+			groupIdx[e.GroupRawText]++
 		}
 		results = append(results, cand)
 		positions = append(positions, e.Position)
