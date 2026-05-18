@@ -62,6 +62,40 @@ func (l *StoreUserLayer) SearchPrefix(prefix string, limit int) []candidate.Cand
 	return filterCmdbarExactOnly(userRecordsToCandidates(recs, "", limit, false))
 }
 
+// SearchCommand 用户词库中 text 含 cmdbar marker ($AA/$SS/$CC) 的精确码命中。
+//
+// 设计 (2026-05-18): 让用户在"用户词库"(全拼方案下也叫"全拼词库")添加
+// 形如 zzbb = $AA("字符数组", "1234567890") 的条目, 也能在拼音/混合引擎下
+// 通过 LookupCommand 路径触达 — 否则 user dict 仅按音节查询, 非拼音 raw 码
+// (如 "zzbb") 永远查不到。
+//
+// 出口候选保留 $AA marker 字面 text, 由 coordinator.expandAACandidates 统一
+// 展开为 nav / 字符成员 (那里识别 user dict 来源, 走 IsUserDict 删除文案分支)。
+//
+// 当前仅支持精确码匹配; 前缀 nav 不支持 (避免全表扫描 user dict, 实现成本高)。
+// 用户若需 zz → "zzbb 字符数组" nav 体验, 应改用 PhraseLayer (短语词库)。
+func (l *StoreUserLayer) SearchCommand(code string, limit int) []candidate.Candidate {
+	code = strings.ToLower(code)
+	recs, err := l.store.GetUserWords(l.schemaID, code)
+	if err != nil {
+		slog.Debug("StoreUserLayer.SearchCommand error", "code", code, "error", err)
+		return nil
+	}
+	if len(recs) == 0 {
+		return nil
+	}
+	filtered := make([]store.UserWordRecord, 0, len(recs))
+	for _, rec := range recs {
+		if HasAAMarker(rec.Text) || HasSSMarker(rec.Text) || HasCmdbarMarker(rec.Text) {
+			filtered = append(filtered, rec)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return userRecordsToCandidates(filtered, code, limit, false)
+}
+
 // Add 添加词条。
 func (l *StoreUserLayer) Add(code string, text string, weight int) error {
 	return l.store.AddUserWord(l.schemaID, strings.ToLower(code), text, weight)

@@ -80,6 +80,60 @@ func TestStoreUserLayer_SearchAndAdd(t *testing.T) {
 	}
 }
 
+// TestStoreUserLayer_SearchCommand 验证用户词库中 $AA / $SS / $CC marker 条目
+// 通过 SearchCommand 暴露到 CompositeDict.LookupCommand 路径 (2026-05-18)。
+// 修复点见用户反馈 #7: 全拼词库中 zzbb=$AA(...) 之前永远查不到。
+func TestStoreUserLayer_SearchCommand(t *testing.T) {
+	s := openTestStore(t)
+	layer := NewStoreUserLayer(s, testSchema)
+
+	// 三种 marker + 一条不含 marker 的普通词
+	if err := layer.Add("zzbb", `$AA("字符数组", "1234567890")`, 100); err != nil {
+		t.Fatalf("Add zzbb: %v", err)
+	}
+	if err := layer.Add("url", `$SS("网址", "https://a.com")`, 100); err != nil {
+		t.Fatalf("Add url: %v", err)
+	}
+	if err := layer.Add("cobd", `$CC("打开百度", open("https://baidu.com"))`, 100); err != nil {
+		t.Fatalf("Add cobd: %v", err)
+	}
+	if err := layer.Add("plain", "普通用户词", 100); err != nil {
+		t.Fatalf("Add plain: %v", err)
+	}
+
+	// $AA 精确码命中
+	aa := layer.SearchCommand("zzbb", 0)
+	if len(aa) != 1 {
+		t.Fatalf("SearchCommand('zzbb') = %d results, want 1", len(aa))
+	}
+	if !HasAAMarker(aa[0].Text) {
+		t.Errorf("SearchCommand('zzbb')[0].Text = %q, want to contain $AA marker", aa[0].Text)
+	}
+	if !aa[0].Meta.IsUserDict {
+		t.Errorf("SearchCommand('zzbb')[0].Meta.IsUserDict should be true (user dict origin)")
+	}
+
+	// $SS 精确码命中
+	if ss := layer.SearchCommand("url", 0); len(ss) != 1 || !HasSSMarker(ss[0].Text) {
+		t.Errorf("SearchCommand('url') failed to surface $SS entry, got %d results", len(ss))
+	}
+
+	// $CC 精确码命中
+	if cc := layer.SearchCommand("cobd", 0); len(cc) != 1 || !HasCmdbarMarker(cc[0].Text) {
+		t.Errorf("SearchCommand('cobd') failed to surface $CC entry, got %d results", len(cc))
+	}
+
+	// 普通词 (无 marker) 不应通过 SearchCommand 返回
+	if plain := layer.SearchCommand("plain", 0); len(plain) != 0 {
+		t.Errorf("SearchCommand('plain') = %d results, want 0 (no cmdbar marker)", len(plain))
+	}
+
+	// 不存在的 code
+	if none := layer.SearchCommand("nope", 0); len(none) != 0 {
+		t.Errorf("SearchCommand('nope') = %d results, want 0", len(none))
+	}
+}
+
 // TestStoreUserLayer_MetaIsUserDict 用户词库返回的候选 Meta.IsUserDict=true,
 // IsTempDict=false。让 UI 右键菜单文案能区分"删除用户词" vs "删除临时词"。
 // 详见 docs/design/candidate-actions.md §2.1。
