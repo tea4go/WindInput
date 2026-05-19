@@ -634,6 +634,10 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 	case !hasShift && c.isSelectKey2(key, data.KeyCode):
 		// Handle 2nd candidate selection key (e.g., semicolon)
 		// Shift 时不触发选择（Shift+; 应输出 : 而非选候选）
+		// 双拼模式下，若该键是当前方案的韵母键且有未上屏编码，优先送入引擎
+		if len(c.inputBuffer) > 0 && c.isShuangpinFinalKey(key) {
+			return c.handleAlphaKey(key)
+		}
 		if len(c.inputBuffer) > 0 {
 			pageStart := (c.currentPage - 1) * c.candidatesPerPage
 			idx := pageStart + 1
@@ -657,6 +661,10 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 	case !hasShift && c.isSelectKey3(key, data.KeyCode):
 		// Handle 3rd candidate selection key (e.g., quote)
 		// Shift 时不触发选择（Shift+' 应输出 " 而非选候选）
+		// 双拼模式下，若该键是当前方案的韵母键且有未上屏编码，优先送入引擎
+		if len(c.inputBuffer) > 0 && c.isShuangpinFinalKey(key) {
+			return c.handleAlphaKey(key)
+		}
 		if len(c.inputBuffer) > 0 {
 			pageStart := (c.currentPage - 1) * c.candidatesPerPage
 			idx := pageStart + 2

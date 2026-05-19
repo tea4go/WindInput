@@ -873,3 +873,28 @@ func (c *Coordinator) convertPunct(r rune, afterDigit bool, prevChar rune) strin
 	}
 	return punctText
 }
+
+// isShuangpinFinalKey 判断当前引擎是否为双拼模式，且给定键（单字节字符）
+// 在当前方案的韵母映射表（FinalMap）中有映射。
+// coordinator 层在候选选词热键匹配前用此方法做 guard：
+// 有未上屏编码 + 双拼模式 + 该键为韵母键 → 应优先送入引擎，而非触发选词。
+func (c *Coordinator) isShuangpinFinalKey(key string) bool {
+	if len(key) != 1 || c.engineMgr == nil {
+		return false
+	}
+	eng := c.engineMgr.GetCurrentEngine()
+	if eng == nil {
+		return false
+	}
+	var pe *pinyin.Engine
+	switch e := eng.(type) {
+	case *pinyin.Engine:
+		pe = e
+	case *mixed.Engine:
+		pe = e.GetPinyinEngine()
+	}
+	if pe == nil {
+		return false
+	}
+	return pe.IsShuangpinFinalKey(key[0])
+}
