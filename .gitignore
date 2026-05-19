@@ -104,3 +104,6 @@ docs/superpowers
 
 # node
 node_modules
+
+# C# plugin
+*.csproj.lscache
