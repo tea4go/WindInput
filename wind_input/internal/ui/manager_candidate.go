@@ -308,6 +308,9 @@ func (m *Manager) doHide() {
 	}
 	m.window.ResetHoverIndex()
 	m.window.ResetDragPinned()
+	// 重置鼠标移动追踪：候选窗再次出现时，必须等用户真正挪动鼠标后才能触发 tooltip，
+	// 防止"光标恰好停在新候选区域上 → 不动也立刻弹 tooltip"。
+	m.window.ResetMouseTracking()
 }
 
 // UpdatePosition updates the window position

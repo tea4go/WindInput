@@ -788,6 +788,13 @@ func (c *Coordinator) compositionUpdateResultWith(text string, caretPos int) *br
 }
 
 func (c *Coordinator) hideUI() {
+	// 取消任何待显示的 tooltip 查询 goroutine，并清空 hover 索引；
+	// 否则在长延时（如 800ms）下，候选窗已隐藏但延时还未到，goroutine
+	// 仍会 fire ShowTooltipText，导致 tooltip 独自出现在屏幕上。
+	c.cancelTooltipQuery()
+	c.tooltipMu.Lock()
+	c.tooltipHoverIdx = -1
+	c.tooltipMu.Unlock()
 	if c.uiManager != nil {
 		c.uiManager.Hide()
 		c.uiManager.HideTooltip()
