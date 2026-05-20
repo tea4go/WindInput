@@ -13,6 +13,7 @@
 |------|-------------|
 | `bump-version.ps1` | 版本号管理脚本：读取 VERSION 文件，按 major/minor/patch/prerelease 规则递增版本号，同步更新所有版本号引用文件（VERSION、go.mod、CMakeLists.txt 等） |
 | `check_band.ps1` | DWM Window Band 诊断工具：枚举系统窗口并显示各窗口的 Band 等级，用于调试 Win11 开始菜单候选框 z-order 问题和验证 HostWindow 机制 |
+| `probe_ime_mode.ps1` | TSF 中/英文模式探针：用 `WM_IME_CONTROL/IMC_GETCONVERSIONMODE` 跨线程查询前台窗口当前 IME 状态，实时输出 `CN/EN`，用于验证 `GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION` 是否正确暴露给 KBLSwitch / Win11 任务栏等外部观察者 |
 
 ## Usage
 
@@ -47,6 +48,24 @@ scripts\check_band.ps1 -Loop
 # 显示所有窗口（含 Band=0/1 的普通窗口）
 scripts\check_band.ps1 -All
 ```
+
+### probe_ime_mode.ps1
+
+```powershell
+# 在另一个终端运行；保持本脚本窗口不获焦，用鼠标点击想观察的应用（cmd / Notepad++ / WPS / 浏览器等）
+pwsh -File scripts\probe_ime_mode.ps1
+```
+
+每 200ms 输出一行，例如：
+
+```
+13:45:01.234  CN  open=1 conv=0x0001  imeWnd=0x000A0188  win=[xxx.txt - Notepad++]
+13:45:02.451  EN  open=1 conv=0x0000  imeWnd=0x000A0188  win=[xxx.txt - Notepad++]
+```
+
+- `CN/EN` 由 `IME_CMODE_NATIVE` 位决定，即我们写入的 `GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION`。
+- 模式切换瞬间应翻转；若超过 1 秒未变或始终为同一值，说明 compartment 未正确暴露。
+- 注意：Win11 新版 Notepad / 部分 WinUI 应用不使用 IMM 桥，会显示 `EN/conv=0x0000` 与实际状态无关；改用 cmd、Notepad++、Chrome 等传统 IMM 应用做验证窗口。
 
 ## For AI Agents
 

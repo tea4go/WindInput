@@ -319,6 +319,17 @@ private:
     BOOL _InitKeyboardDisabledCompartment();
     void _UninitKeyboardDisabledCompartment();
 
+    // Compartment event sink (GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION)
+    // 用 IME_CMODE_NATIVE 位向外界（KBLSwitch / 任务栏 / 第三方）表达中/英文状态。
+    // OPENCLOSE 始终 TRUE 是内部约定（保证英文模式仍触发 OnTestKeyDown），
+    // 真实的中英文模式由本 compartment 暴露。
+    DWORD _dwConversionSinkCookie;
+    BOOL _bInConversionChange;  // Guard against re-entrant OnChange for conversion compartment
+
+    BOOL _InitConversionCompartment();
+    void _UninitConversionCompartment();
+    BOOL _SetConversionMode(BOOL bChinese);
+
     BOOL _InitThreadMgrEventSink();
     void _UninitThreadMgrEventSink();
 

@@ -734,6 +734,8 @@ CTextService::CTextService()
     , _bInCompartmentChange(FALSE)
     , _bKeyboardDisabled(FALSE)
     , _dwKeyboardDisabledSinkCookie(TF_INVALID_COOKIE)
+    , _dwConversionSinkCookie(TF_INVALID_COOKIE)
+    , _bInConversionChange(FALSE)
 {
     ZeroMemory(&_cachedCaretRect, sizeof(_cachedCaretRect));
     ZeroMemory(&_cachedCompStartRect, sizeof(_cachedCompStartRect));
@@ -934,6 +936,18 @@ STDAPI CTextService::ActivateEx(ITfThreadMgr* pThreadMgr, TfClientId tfClientId,
         WIND_LOG_INFO(L"KeyboardDisabledCompartment initialized\n");
     }
 
+    // Initialize INPUTMODE_CONVERSION compartment — exposes real Chinese/English mode
+    // to external observers (KBLSwitch, Win11 taskbar). OPENCLOSE stays TRUE for our
+    // internal OnTestKeyDown needs; this compartment carries the actual mode signal.
+    if (!_InitConversionCompartment())
+    {
+        WIND_LOG_WARN(L"_InitConversionCompartment failed (non-fatal)\n");
+    }
+    else
+    {
+        WIND_LOG_INFO(L"ConversionCompartment initialized\n");
+    }
+
     // Update caret position before notifying activation
     // This ensures status indicators appear at the correct position immediately
     SendCaretPositionUpdate();
@@ -979,6 +993,7 @@ STDAPI CTextService::Deactivate()
     // Release compartment event sinks
     _UninitOpenCloseCompartment();
     _UninitKeyboardDisabledCompartment();
+    _UninitConversionCompartment();
 
     // 卸载 RegisterHotKey 隐藏窗口（必须在 KeyEventSink 释放之前，因为 WM_HOTKEY
     // 路径会回调 KeyEventSink）
@@ -1740,6 +1755,8 @@ void CTextService::_SyncStateFromResponse(const ServiceResponse& response)
 
     // Keep compartment always OPEN so TSF calls OnTestKeyDown even in English mode.
     _SetOpenCloseCompartment(TRUE);
+    // Sync真实中英文模式到 INPUTMODE_CONVERSION compartment（供 KBLSwitch / 任务栏读取）
+    _SetConversionMode(_bChineseMode);
 
     // Sync full status to LangBarItemButton
     if (_pLangBarItemButton != nullptr)
@@ -2010,6 +2027,78 @@ STDAPI CTextService::OnChange(REFGUID rguid)
     }
 
     // ================================================================
+    // GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION
+    //
+    // 外部工具（如 KBLSwitch 按应用锁定中英文）会写入此 compartment。
+    // 我们读取 IME_CMODE_NATIVE 位并按需切换内部模式，使外部锁定生效。
+    // ================================================================
+    if (IsEqualGUID(rguid, GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION))
+    {
+        if (_bInConversionChange)
+            return S_OK;  // 自身写入引起的通知，跳过
+
+        ITfCompartmentMgr* pCompMgr = nullptr;
+        HRESULT hr = _pThreadMgr->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompMgr);
+        if (FAILED(hr) || pCompMgr == nullptr)
+            return S_OK;
+
+        ITfCompartment* pCompartment = nullptr;
+        hr = pCompMgr->GetCompartment(GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION, &pCompartment);
+        pCompMgr->Release();
+
+        if (FAILED(hr) || pCompartment == nullptr)
+            return S_OK;
+
+        VARIANT var;
+        VariantInit(&var);
+        hr = pCompartment->GetValue(&var);
+        pCompartment->Release();
+
+        if (FAILED(hr) || var.vt != VT_I4)
+            return S_OK;
+
+        BOOL bWantChinese = ((DWORD)var.lVal & IME_CMODE_NATIVE) ? TRUE : FALSE;
+        if (bWantChinese == _bChineseMode)
+            return S_OK;  // 与当前一致，无需切换
+
+        WIND_LOG_INFO_FMT(L"Compartment CONVERSION changed externally: %s -> %s\n",
+            _bChineseMode ? L"Chinese" : L"English",
+            bWantChinese ? L"Chinese" : L"English");
+
+        // 与 OPENCLOSE 路径一致：清状态、通知 Go 服务、刷新 LangBar。
+        if (_pKeyEventSink != nullptr)
+            _pKeyEventSink->FlushEnglishStats();
+
+        EndComposition();
+        ResetComposingState();
+
+        BOOL newChineseMode = bWantChinese;
+        if (_pIPCClient != nullptr && _pIPCClient->IsConnected())
+        {
+            ServiceResponse response;
+            if (_pIPCClient->SendSystemModeSwitch(newChineseMode != FALSE, response))
+            {
+                if (response.type == ResponseType::CommitText && !response.text.empty())
+                    CommitText(response.text);
+                if (response.type == ResponseType::ModeChanged || response.type == ResponseType::CommitText)
+                    newChineseMode = response.IsChineseMode() ? TRUE : FALSE;
+            }
+        }
+
+        _bChineseMode = newChineseMode;
+        _UpdateAddWordHotkeyState();
+
+        if (_pLangBarItemButton != nullptr)
+            _pLangBarItemButton->UpdateLangBarButton(_bChineseMode);
+
+        // 若 Go 服务把模式仲裁成了与外部请求不同的值，回写 compartment 保持一致。
+        if (newChineseMode != bWantChinese)
+            _SetConversionMode(newChineseMode);
+
+        return S_OK;
+    }
+
+    // ================================================================
     // GUID_COMPARTMENT_KEYBOARD_OPENCLOSE
     // ================================================================
     if (!IsEqualGUID(rguid, GUID_COMPARTMENT_KEYBOARD_OPENCLOSE))
@@ -2103,6 +2192,9 @@ STDAPI CTextService::OnChange(REFGUID rguid)
     _SetOpenCloseCompartment(TRUE);
     _bInCompartmentChange = FALSE;
 
+    // 同步真实中英文模式到 INPUTMODE_CONVERSION（KBLSwitch / 任务栏读取此 compartment）
+    _SetConversionMode(_bChineseMode);
+
     WIND_LOG_INFO_FMT(L"Mode toggled via system compartment -> %s (compartment kept open)\n",
         _bChineseMode ? L"Chinese" : L"English");
 
@@ -2177,6 +2269,135 @@ void CTextService::_UninitKeyboardDisabledCompartment()
 
     _dwKeyboardDisabledSinkCookie = TF_INVALID_COOKIE;
     WIND_LOG_DEBUG(L"Compartment KEYBOARD_DISABLED sink unadvised\n");
+}
+
+// ============================================================================
+// Compartment event sink for GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION
+//
+// 此 compartment 是 Windows 标准的「中/英文模式」对外通信通道：
+//   - IME_CMODE_NATIVE 位置 1：当前为本地（中文）输入
+//   - IME_CMODE_NATIVE 位置 0：当前为字母（英文）输入
+// 第三方工具（KBLSwitch 等按应用锁中英文）与 Win11 任务栏语言指示器都
+// 读写此 compartment。OPENCLOSE 在内部约定下始终为 TRUE，不应承担模式信号。
+// ============================================================================
+
+// IME_CMODE_NATIVE from imm.h. 不引入 imm.h，避免拉入整个 IMM32 头文件。
+#ifndef IME_CMODE_NATIVE
+#define IME_CMODE_NATIVE 0x0001
+#endif
+
+BOOL CTextService::_InitConversionCompartment()
+{
+    if (_pThreadMgr == nullptr)
+        return FALSE;
+
+    ITfCompartmentMgr* pCompMgr = nullptr;
+    HRESULT hr = _pThreadMgr->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompMgr);
+    if (FAILED(hr) || pCompMgr == nullptr)
+        return FALSE;
+
+    ITfCompartment* pCompartment = nullptr;
+    hr = pCompMgr->GetCompartment(GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION, &pCompartment);
+    pCompMgr->Release();
+
+    if (FAILED(hr) || pCompartment == nullptr)
+        return FALSE;
+
+    // Sync initial value to current internal mode.
+    VARIANT var;
+    var.vt = VT_I4;
+    var.lVal = _bChineseMode ? IME_CMODE_NATIVE : 0;
+    _bInConversionChange = TRUE;
+    pCompartment->SetValue(_tfClientId, &var);
+    _bInConversionChange = FALSE;
+
+    ITfSource* pSource = nullptr;
+    hr = pCompartment->QueryInterface(IID_ITfSource, (void**)&pSource);
+    pCompartment->Release();
+
+    if (FAILED(hr) || pSource == nullptr)
+        return FALSE;
+
+    hr = pSource->AdviseSink(IID_ITfCompartmentEventSink, (ITfCompartmentEventSink*)this, &_dwConversionSinkCookie);
+    pSource->Release();
+
+    if (FAILED(hr))
+    {
+        _dwConversionSinkCookie = TF_INVALID_COOKIE;
+        return FALSE;
+    }
+
+    WIND_LOG_DEBUG_FMT(L"Compartment INPUTMODE_CONVERSION sink advised, initial=%d\n", _bChineseMode);
+    return TRUE;
+}
+
+void CTextService::_UninitConversionCompartment()
+{
+    if (_dwConversionSinkCookie == TF_INVALID_COOKIE || _pThreadMgr == nullptr)
+        return;
+
+    ITfCompartmentMgr* pCompMgr = nullptr;
+    if (SUCCEEDED(_pThreadMgr->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompMgr)) && pCompMgr != nullptr)
+    {
+        ITfCompartment* pCompartment = nullptr;
+        if (SUCCEEDED(pCompMgr->GetCompartment(GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION, &pCompartment)) && pCompartment != nullptr)
+        {
+            ITfSource* pSource = nullptr;
+            if (SUCCEEDED(pCompartment->QueryInterface(IID_ITfSource, (void**)&pSource)) && pSource != nullptr)
+            {
+                pSource->UnadviseSink(_dwConversionSinkCookie);
+                pSource->Release();
+            }
+            pCompartment->Release();
+        }
+        pCompMgr->Release();
+    }
+
+    _dwConversionSinkCookie = TF_INVALID_COOKIE;
+    WIND_LOG_DEBUG(L"Compartment INPUTMODE_CONVERSION sink unadvised\n");
+}
+
+BOOL CTextService::_SetConversionMode(BOOL bChinese)
+{
+    if (_pThreadMgr == nullptr)
+        return FALSE;
+
+    ITfCompartmentMgr* pCompMgr = nullptr;
+    HRESULT hr = _pThreadMgr->QueryInterface(IID_ITfCompartmentMgr, (void**)&pCompMgr);
+    if (FAILED(hr) || pCompMgr == nullptr)
+        return FALSE;
+
+    ITfCompartment* pCompartment = nullptr;
+    hr = pCompMgr->GetCompartment(GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION, &pCompartment);
+    pCompMgr->Release();
+
+    if (FAILED(hr) || pCompartment == nullptr)
+        return FALSE;
+
+    // 仅维护 IME_CMODE_NATIVE 位，保留外界可能写入的其他位（FULLSHAPE/SYMBOL 等）。
+    VARIANT cur;
+    VariantInit(&cur);
+    DWORD prev = 0;
+    if (SUCCEEDED(pCompartment->GetValue(&cur)) && cur.vt == VT_I4)
+        prev = (DWORD)cur.lVal;
+
+    DWORD next = bChinese ? (prev | IME_CMODE_NATIVE) : (prev & ~IME_CMODE_NATIVE);
+    if (next == prev)
+    {
+        pCompartment->Release();
+        return TRUE;  // 无需写入，避免触发多余 OnChange
+    }
+
+    _bInConversionChange = TRUE;
+
+    VARIANT var;
+    var.vt = VT_I4;
+    var.lVal = (LONG)next;
+    hr = pCompartment->SetValue(_tfClientId, &var);
+    pCompartment->Release();
+
+    _bInConversionChange = FALSE;
+    return SUCCEEDED(hr);
 }
 
 void CTextService::_DoFullStateSync()
@@ -3244,6 +3465,9 @@ void CTextService::HandleCtrlSpaceToggle()
 
     // Do NOT call _SetOpenCloseCompartment here: compartment stays at 1 always,
     // so the system never gets a chance to desync its internal toggle state.
+    // 但需要把真实模式写入 INPUTMODE_CONVERSION，让 KBLSwitch / 任务栏感知。
+    _SetConversionMode(_bChineseMode);
+
     WIND_LOG_INFO_FMT(L"Mode toggled via Ctrl+Space interception -> %s (compartment unchanged)\n",
         _bChineseMode ? L"Chinese" : L"English");
 }
@@ -3269,6 +3493,7 @@ void CTextService::ToggleInputMode()
     // This allows English stats collection, auto-pair, and other features to work.
     // The actual key pass-through is handled by pfEaten=FALSE in OnTestKeyDown.
     _SetOpenCloseCompartment(TRUE);
+    _SetConversionMode(_bChineseMode);
 
     // Update language bar button
     if (_pLangBarItemButton != nullptr)
@@ -3292,6 +3517,7 @@ void CTextService::SetInputMode(BOOL bChineseMode)
 
     // Keep compartment always OPEN so TSF calls OnTestKeyDown even in English mode.
     _SetOpenCloseCompartment(TRUE);
+    _SetConversionMode(_bChineseMode);
 
     // Update language bar button
     if (_pLangBarItemButton != nullptr)
@@ -3445,6 +3671,7 @@ void CTextService::UpdateFullStatus(BOOL bChineseMode, BOOL bFullWidth, BOOL bCh
 
     // Keep compartment always OPEN so TSF calls OnTestKeyDown even in English mode.
     _SetOpenCloseCompartment(TRUE);
+    _SetConversionMode(_bChineseMode);
 
     if (_pLangBarItemButton != nullptr)
     {
