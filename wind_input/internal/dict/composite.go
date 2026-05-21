@@ -58,6 +58,16 @@ type CompositeDict struct {
 	sortMode candidate.CandidateSortMode
 }
 
+// seenIdxPool 复用 searchInternal 中的去重 map。每次按键都会触发一轮 search，
+// map 反复 make/丢弃在 alloc_space 中占据非常显著的份额（profile 中 ~227 MB 累计）。
+// Put 时调用 clear() 确保下次取出是空 map。
+var seenIdxPool = sync.Pool{
+	New: func() any {
+		m := make(map[string]int, 128)
+		return &m
+	},
+}
+
 // defaultPrefixSafeLimit 根据前缀长度计算底层 layer 的安全候选上限。
 // 短前缀候选池天然庞大，给更大的窗口避免按字母序遍历时把高权重候选挡在外面；
 // 长前缀候选自然收敛，无需放大。
@@ -164,14 +174,27 @@ func (c *CompositeDict) searchInternal(code string, limit int, isPrefix bool) []
 	// 1. 遍历所有层收集候选词
 	// 去重策略：保留高优先级层（先出现）的词条信息，但继承后续层中同 Text 词条的更高权重。
 	// 这确保用户词不会因为低权重而丢失码表词的自然排序位置。
-	seenIdx := make(map[string]int) // Text -> index in results
-	var results []candidate.Candidate
+	seenIdxPtr := seenIdxPool.Get().(*map[string]int)
+	seenIdx := *seenIdxPtr
+	defer func() {
+		clear(seenIdx)
+		seenIdxPool.Put(seenIdxPtr)
+	}()
 
 	// 前缀查询对底层传递安全限制，避免短前缀（如单字母"s"）触发全量 Trie 遍历。
 	// 精确匹配不受影响（候选数天然有限）。
 	// 上限按前缀长度分级：越短的前缀允许越大的窗口，避免高权重候选被字母序截断
 	// （例如 jidian 词库中 `swy` 段会被一律 cap 在 ~600 条以前）。
 	prefixSafeLimit := defaultPrefixSafeLimit(len(code))
+
+	// results 预分配：典型场景 1~3 layer，每 layer 上限 200~800，按 prefixSafeLimit 估容量。
+	// 精确匹配 (非 prefix) 候选数天然小，给一个保守初值即可。
+	resultsCap := 64
+	if isPrefix {
+		resultsCap = prefixSafeLimit * len(c.layers)
+	}
+	results := make([]candidate.Candidate, 0, resultsCap)
+
 	for _, layer := range c.layers {
 		var layerResults []candidate.Candidate
 		if isPrefix {

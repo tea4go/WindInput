@@ -182,12 +182,17 @@ func (r *WdatReader) readLeaf(leafBase uint32, leafIdx uint32) LeafRecord {
 	}
 }
 
-// readEntries 从指定 entryBase 读取 LeafRecord 对应的候选词
-func (r *WdatReader) readEntries(entryBase uint32, leaf LeafRecord, code string) []candidate.Candidate {
+// appendEntries 将 LeafRecord 对应的候选词追加到 dst 后返回新切片。
+// 调用方提供 dst 可避免每次新建底层数组——前缀扫描/简拼合并等聚合场景大量受益。
+func (r *WdatReader) appendEntries(dst []candidate.Candidate, entryBase uint32, leaf LeafRecord, code string) []candidate.Candidate {
 	count := int(leaf.EntryLen)
-	candidates := make([]candidate.Candidate, 0, count)
+	if cap(dst)-len(dst) < count {
+		grown := make([]candidate.Candidate, len(dst), len(dst)+count)
+		copy(grown, dst)
+		dst = grown
+	}
 	base := int(entryBase) + int(leaf.EntryOff)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		eOff := base + i*EntryRecordSize
 		textOff := byteOrder.Uint32(r.data[eOff : eOff+4])
 		textLen := byteOrder.Uint16(r.data[eOff+4 : eOff+6])
@@ -196,14 +201,20 @@ func (r *WdatReader) readEntries(entryBase uint32, leaf LeafRecord, code string)
 		strStart := int(r.strBase) + int(textOff)
 		text := string(r.data[strStart : strStart+int(textLen)])
 
-		candidates = append(candidates, candidate.Candidate{
+		dst = append(dst, candidate.Candidate{
 			Text:         text,
 			Code:         code,
 			Weight:       int(weight),
 			NaturalOrder: i,
 		})
 	}
-	return candidates
+	return dst
+}
+
+// readEntries 是 appendEntries 的便捷封装：分配新切片并返回。
+// 用于不需要累积的调用点（如单次 Lookup）。
+func (r *WdatReader) readEntries(entryBase uint32, leaf LeafRecord, code string) []candidate.Candidate {
+	return r.appendEntries(nil, entryBase, leaf, code)
 }
 
 // Lookup 精确查找编码，返回候选词列表
@@ -253,7 +264,7 @@ func (r *WdatReader) scanPrefix(prefix string, limit int) []candidate.Candidate 
 	var all []candidate.Candidate
 	for _, leafIdx := range leafIndices {
 		leaf := r.readLeaf(r.leafBase, leafIdx)
-		all = append(all, r.readEntries(r.entryBase, leaf, "")...)
+		all = r.appendEntries(all, r.entryBase, leaf, "")
 	}
 	sort.Slice(all, func(i, j int) bool {
 		return candidate.Better(all[i], all[j])
@@ -304,8 +315,7 @@ func (r *WdatReader) LookupAbbrev(code string, limit int) []candidate.Candidate 
 	var all []candidate.Candidate
 	for _, leafIdx := range leafIndices {
 		leaf := r.readLeaf(r.abbrevLeafBase, leafIdx)
-		entries := r.readEntries(r.abbrevEntryBase, leaf, code)
-		all = append(all, entries...)
+		all = r.appendEntries(all, r.abbrevEntryBase, leaf, code)
 	}
 
 	sort.Slice(all, func(i, j int) bool {
