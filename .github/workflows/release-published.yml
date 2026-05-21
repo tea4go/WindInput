@@ -99,24 +99,22 @@ jobs:
             exit 0
           fi
           echo "Purging previous version: $PREV_VERSION"
-          wrangler r2 object delete "$R2_BUCKET/WindInput-${PREV_VERSION}-Setup.exe" --remote || true
-          wrangler r2 object delete "$R2_BUCKET/WindInput-${PREV_VERSION}-Release.md" --remote || true
+          wrangler r2 object delete "$R2_BUCKET/WindInput-${PREV_VERSION}-Setup.exe" || true
+          wrangler r2 object delete "$R2_BUCKET/WindInput-${PREV_VERSION}-Release.md" || true
 
       - name: Upload installer to R2
         if: steps.gate.outputs.skip != 'true'
         run: |
           wrangler r2 object put "$R2_BUCKET/WindInput-${VERSION}-Setup.exe" \
             --file "./dl/WindInput-${VERSION}-Setup.exe" \
-            --content-type "application/octet-stream" \
-            --remote
+            --content-type "application/octet-stream"
 
       - name: Upload release notes to R2
         if: steps.gate.outputs.skip != 'true'
         run: |
           wrangler r2 object put "$R2_BUCKET/WindInput-${VERSION}-Release.md" \
             --file "./dl/WindInput-${VERSION}-Release.md" \
-            --content-type "text/markdown; charset=utf-8" \
-            --remote
+            --content-type "text/markdown; charset=utf-8"
 
       - name: Update latest.json on R2
         if: steps.gate.outputs.skip != 'true'
@@ -134,5 +132,4 @@ jobs:
           cat latest.json
           wrangler r2 object put "$R2_BUCKET/latest.json" \
             --file latest.json \
-            --content-type "application/json; charset=utf-8" \
-            --remote
+            --content-type "application/json; charset=utf-8"
