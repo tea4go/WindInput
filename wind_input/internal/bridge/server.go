@@ -410,12 +410,39 @@ func (r *pipeReader) release() {
 
 // pipeWriter wraps windows.Handle for io.Writer.
 // mu serializes concurrent WriteFile calls on the same handle:
-// broadcast goroutines (PushStateToAllClients) may write to the
-// same client handle in parallel, and Windows named-pipe writes
-// are not guaranteed to be thread-safe without serialization.
+// the per-client push writer goroutine (drains outbound) and targeted
+// sync sends (PushCommitText 等) can both write to the same handle.
+// Windows 命名管道写入未保证线程安全，必须 Mutex 互斥。
+//
+// outbound 仅 push pipe 客户端非 nil。它把"广播"路径变成
+// per-client 单 writer goroutine：
+//   - 旧设计每次广播都 go func()，slow client 会导致 goroutine 堆到数百个
+//     （历史 pprof 见 725 个 stuck），且无法 drop。
+//   - 新设计每个 push client 仅一个 writer goroutine。enqueueBroadcast 满则丢弃
+//     （状态/配置同步语义幂等，下次推就是最新值，丢一条无害）。
+//
+// TODO(隐患1): WriteFile 当前仍是同步阻塞。slow client（活着但读得慢）会让
+// 该 client 的 writer goroutine 卡死在内核里。后续需改成 overlapped I/O +
+// GetOverlappedResultEx 超时 + CancelIoEx，前提是 push pipe 改用
+// FILE_FLAG_OVERLAPPED。
 type pipeWriter struct {
-	handle windows.Handle
-	mu     sync.Mutex
+	handle    windows.Handle
+	mu        sync.Mutex
+	outbound  chan []byte
+	closeOnce sync.Once
+}
+
+// pushOutboundBufferSize: per-client 广播队列容量。
+// 状态推送/配置同步在快速 toggle 场景下可能短时连发；16 给一个不易满的窗口，
+// 真挂 client 时也能快速识别为"持续 drop"并丢弃，不会无限制堆积。
+const pushOutboundBufferSize = 16
+
+// newPushPipeWriter creates a pipeWriter for push pipe clients with an outbound queue.
+func newPushPipeWriter(h windows.Handle) *pipeWriter {
+	return &pipeWriter{
+		handle:   h,
+		outbound: make(chan []byte, pushOutboundBufferSize),
+	}
 }
 
 func (w *pipeWriter) Write(p []byte) (int, error) {
@@ -427,4 +454,28 @@ func (w *pipeWriter) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	return int(bytesWritten), nil
+}
+
+// enqueueBroadcast 非阻塞地把一条广播消息丢到该 client 的 outbound 队列。
+// 返回 false 表示该 client 队列已满（client 卡顿或已死），调用方应当 drop+log。
+// 调用方不需要持有任何锁。
+func (w *pipeWriter) enqueueBroadcast(msg []byte) bool {
+	if w == nil || w.outbound == nil {
+		return false
+	}
+	select {
+	case w.outbound <- msg:
+		return true
+	default:
+		return false
+	}
+}
+
+// shutdown 关闭 outbound 队列，writer goroutine 在 drain 完后 range 退出。
+// 多次调用安全（closeOnce）。bridge pipe 写入器（outbound 为 nil）调用为 no-op。
+func (w *pipeWriter) shutdown() {
+	if w == nil || w.outbound == nil {
+		return
+	}
+	w.closeOnce.Do(func() { close(w.outbound) })
 }

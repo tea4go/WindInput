@@ -63,7 +63,7 @@ func (s *Server) startPushPipeListener() {
 			continue
 		}
 
-		writer := &pipeWriter{handle: handle}
+		writer := newPushPipeWriter(handle)
 
 		// Get the client's process ID for targeted push
 		pushProcessID, err := getNamedPipeClientProcessId(handle)
@@ -89,6 +89,8 @@ func (s *Server) startPushPipeListener() {
 		s.logger.Info("Push pipe client connected", "clientID", clientID, "processID", pushProcessID)
 
 		// Notify the newly-connected TSF client that the service is ready.
+		// 在启动 writer goroutine 之前同步发送，确保 SERVICE_READY 是该 client
+		// 收到的第一条消息（不会被后续 enqueueBroadcast 抢前面去）。
 		encoded := s.codec.EncodeServiceReady()
 		if err := s.codec.WriteMessage(writer, encoded); err != nil {
 			s.logger.Warn("Failed to send CMD_SERVICE_READY to new push client",
@@ -96,6 +98,11 @@ func (s *Server) startPushPipeListener() {
 		} else {
 			s.logger.Debug("CMD_SERVICE_READY sent to new push client", "clientID", clientID)
 		}
+
+		// Per-client writer goroutine：消费 outbound 队列，把广播路径从
+		// "每次都 go func()"改成"单 worker 串行"。slow client 不会再让
+		// goroutine 堆积。outbound 关闭后 range 退出，writer 自然终止。
+		go s.pushWriterLoop(handle, writer, clientID, pushProcessID)
 
 		// 单 goroutine 完成两件事：
 		//   1) 阻塞读 8 字节 token 握手
@@ -165,6 +172,35 @@ func (s *Server) startPushPipeListener() {
 	}
 }
 
+// pushWriterLoop 是 per-client 广播 worker。范围迭代 outbound，串行写入；
+// 写失败时清理 handle 并退出。outbound 被 shutdown() 关闭后 range 自然退出。
+//
+// 不再像旧设计那样"每次广播都 go func()"——pprof 曾观测到 725 个 goroutine
+// 堵在 sync.Mutex.Lock 上，slow/dead client 把广播 goroutine 无限堆积。
+// 新设计下每个 client 至多 1 个 writer goroutine。
+func (s *Server) pushWriterLoop(h windows.Handle, writer *pipeWriter, cid int, pid uint32) {
+	for msg := range writer.outbound {
+		if err := s.codec.WriteMessage(writer, msg); err != nil {
+			if isPipeClosed(err) {
+				s.logger.Debug("Push pipe writer exiting on peer close",
+					"clientID", cid, "processID", pid, "error", err)
+			} else {
+				s.logger.Warn("Push pipe writer aborting on write error",
+					"clientID", cid, "processID", pid, "error", err)
+			}
+			// Phase-2 reader 多数情况下已经清理过了；cleanupPushHandle 用返回值
+			// 做并发安全的"二选一"，CloseHandle 不会被双关。
+			s.pushMu.Lock()
+			removed := s.cleanupPushHandle(h)
+			s.pushMu.Unlock()
+			if removed {
+				windows.CloseHandle(h)
+			}
+			return
+		}
+	}
+}
+
 // removePushHandleFromPIDIndex 在写失败清理时维护 pushClientsByPID 的一致性。
 // 当被移除的 handle 恰好是该 PID 的最新记录时，尝试从 pushHandleToPID 中为同 PID
 // 找另一个存活 handle 作替代；若无其他 handle 则删除该条目。
@@ -189,7 +225,8 @@ func (s *Server) removePushHandleFromPIDIndex(pid uint32, removedHandle windows.
 // （removePushHandleFromPIDIndex 需要先读 pushHandleToPID 找替代 handle，
 // 因此 pushHandleToPID 的实际删除放在最后。）
 func (s *Server) cleanupPushHandle(handle windows.Handle) bool {
-	if _, exists := s.pushClients[handle]; !exists {
+	w, exists := s.pushClients[handle]
+	if !exists {
 		return false
 	}
 	pid := s.pushHandleToPID[handle]
@@ -199,6 +236,11 @@ func (s *Server) cleanupPushHandle(handle windows.Handle) bool {
 	if token := s.pushHandleToToken[handle]; token != 0 {
 		delete(s.tokenToPushHandle, token)
 		delete(s.pushHandleToToken, handle)
+	}
+	// 关闭 outbound 让 writer goroutine 退出；CloseHandle 在调用方完成。
+	// shutdown() 多次调用安全（closeOnce）。
+	if w != nil {
+		w.shutdown()
 	}
 	return true
 }
@@ -240,22 +282,15 @@ func (s *Server) PushStateToAllClients(status *StatusUpdateData) {
 		"fullWidth", status.FullWidth,
 		"capsLock", status.CapsLock)
 
-	// 每个客户端独立 goroutine 写入，避免某个 client 的 pipe buffer 满/阻塞
-	// 导致后续 client（如 Notepad 第二个 CLangBar 实例）永远收不到推送。
-	// Go map 随机迭代顺序会使阻塞点前后的 client 每次不同，造成状态同步时好时坏。
+	// 把消息丢到每个 client 的 outbound 队列；per-client writer goroutine 串行消费。
+	// 队列满表示该 client 卡顿——状态推送语义幂等，丢弃即可（下次推就是最新值）。
+	// 旧设计每次广播都 go func()，slow client 让 goroutine 堆到数百个；新设计下
+	// 每个 client 仅一个 writer goroutine，不会无限增长。
 	for _, client := range clients {
-		c := client
-		go func() {
-			if err := s.codec.WriteMessage(c.writer, encoded); err != nil {
-				s.logger.Warn("Failed to push state to client", "processID", c.processID, "error", err)
-				s.pushMu.Lock()
-				removed := s.cleanupPushHandle(c.handle)
-				s.pushMu.Unlock()
-				if removed {
-					windows.CloseHandle(c.handle)
-				}
-			}
-		}()
+		if !client.writer.enqueueBroadcast(encoded) {
+			s.logger.Warn("Push state dropped: outbound queue full",
+				"processID", client.processID)
+		}
 	}
 }
 
@@ -495,19 +530,13 @@ func (s *Server) pushSyncConfigToAllClients(key string, value []byte, logName st
 		return
 	}
 
+	// 同 PushStateToAllClients：丢到 per-client outbound 队列，满则 drop。
+	// 配置同步幂等——下次 push 自带最新 value。
 	for _, client := range clients {
-		c := client
-		go func() {
-			if err := s.codec.WriteMessage(c.writer, encoded); err != nil {
-				s.logger.Debug("Failed to push config", "config", logName, "error", err)
-				s.pushMu.Lock()
-				removed := s.cleanupPushHandle(c.handle)
-				s.pushMu.Unlock()
-				if removed {
-					windows.CloseHandle(c.handle)
-				}
-			}
-		}()
+		if !client.writer.enqueueBroadcast(encoded) {
+			s.logger.Warn("Push config dropped: outbound queue full",
+				"config", logName)
+		}
 	}
 }
 
@@ -544,7 +573,10 @@ func (s *Server) RestartService() {
 	// Close all push pipe clients and clear all mappings
 	s.pushMu.Lock()
 	pushClientCount := len(s.pushClients)
-	for h := range s.pushClients {
+	for h, w := range s.pushClients {
+		if w != nil {
+			w.shutdown() // 关 outbound 让 writer goroutine 退出
+		}
 		windows.CloseHandle(h)
 	}
 	// 重置所有 map（比逐条 delete 更高效）
