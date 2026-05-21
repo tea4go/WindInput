@@ -187,11 +187,14 @@ func (c *CompositeDict) searchInternal(code string, limit int, isPrefix bool) []
 	// （例如 jidian 词库中 `swy` 段会被一律 cap 在 ~600 条以前）。
 	prefixSafeLimit := defaultPrefixSafeLimit(len(code))
 
-	// results 预分配：典型场景 1~3 layer，每 layer 上限 200~800，按 prefixSafeLimit 估容量。
+	// results 预分配：去重后的最终长度天然受 prefixSafeLimit 量级控制——
+	// 跨 layer 的同 Text 候选会被 seenIdx map 合并，所以单层上限即为去重后
+	// 的合理天花板。早期版本曾用 prefixSafeLimit*len(layers)，pprof 显示
+	// 80% 预分配空间未被使用（实际 len 通常是 cap 的 1/3~1/5）。
 	// 精确匹配 (非 prefix) 候选数天然小，给一个保守初值即可。
 	resultsCap := 64
 	if isPrefix {
-		resultsCap = prefixSafeLimit * len(c.layers)
+		resultsCap = prefixSafeLimit
 	}
 	results := make([]candidate.Candidate, 0, resultsCap)
 

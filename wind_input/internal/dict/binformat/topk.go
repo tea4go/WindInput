@@ -3,9 +3,39 @@ package binformat
 import (
 	"container/heap"
 	"sort"
+	"sync"
 
 	"github.com/huanfeng/wind_input/internal/candidate"
 )
+
+// topKPickerPool 复用 scanPrefix 的 picker 实例。pool 中的 picker 仍持有底层
+// candHeap 切片，下次取出时仅按 limit 重新切片，避免每次按键都 make 一次堆数组
+// （旧 pprof alloc_space 中 picker 构造单点 ~113 MB）。
+//
+// 安全性约束：
+//   - 调用方必须在 sorted() 拿到结果之后才能 release——sorted() 通过 copy
+//     生成独立切片，所以归还 picker 后 caller 持有的切片不会被污染。
+//   - 不可在 picker 仍被使用时（持有内部 h 引用）归还。
+var topKPickerPool = sync.Pool{
+	New: func() any { return &topKPicker{} },
+}
+
+// acquireTopKPicker 取出一个 picker 并按 limit 重置。
+func acquireTopKPicker(limit int) *topKPicker {
+	p := topKPickerPool.Get().(*topKPicker)
+	p.reset(limit)
+	return p
+}
+
+// releaseTopKPicker 归还 picker。归还前显式截空 h，避免长期持有候选词引用
+// 阻碍 GC 释放对应字符串（虽然内部字符串来自 mmap，不算重，但保持卫生）。
+func releaseTopKPicker(p *topKPicker) {
+	if p == nil {
+		return
+	}
+	p.h = p.h[:0]
+	topKPickerPool.Put(p)
+}
 
 // topKPicker 维护一个容量 K 的 min-heap，用于在流式扫描中保留 top-K 高权重候选。
 //
@@ -17,8 +47,15 @@ type topKPicker struct {
 	h     candHeap
 }
 
-func newTopKPicker(limit int) *topKPicker {
-	return &topKPicker{limit: limit, h: make(candHeap, 0, limit)}
+// reset 复用 picker：保留 h 的底层数组容量，仅按 limit 重新切片。
+// 若现有容量不够装 limit 元素，会重新分配；此时旧底层数组归还 GC。
+func (p *topKPicker) reset(limit int) {
+	p.limit = limit
+	if cap(p.h) < limit {
+		p.h = make(candHeap, 0, limit)
+	} else {
+		p.h = p.h[:0]
+	}
 }
 
 // offer 提交一个候选。若堆未满直接入堆；满后仅当新候选优于当前堆顶（min）时替换。

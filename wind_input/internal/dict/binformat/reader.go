@@ -229,7 +229,10 @@ func (r *DictReader) scanPrefix(prefix string, limit int, excludeExact bool) []c
 	})
 
 	if limit > 0 {
-		picker := newTopKPicker(limit)
+		picker := acquireTopKPicker(limit)
+		defer releaseTopKPicker(picker)
+		// scratch 在每个 key 之间复用，避免 readEntries 每 key 一次 make 底层数组。
+		var scratch []candidate.Candidate
 		for i := lo; i < keyCount; i++ {
 			code := r.readKeyCode(i)
 			if !strings.HasPrefix(code, prefix) {
@@ -238,7 +241,8 @@ func (r *DictReader) scanPrefix(prefix string, limit int, excludeExact bool) []c
 			if excludeExact && code == prefix {
 				continue
 			}
-			for _, e := range r.readEntries(i) {
+			scratch = r.appendEntries(scratch[:0], i)
+			for _, e := range scratch {
 				picker.offer(e)
 			}
 		}
@@ -254,7 +258,7 @@ func (r *DictReader) scanPrefix(prefix string, limit int, excludeExact bool) []c
 		if excludeExact && code == prefix {
 			continue
 		}
-		results = append(results, r.readEntries(i)...)
+		results = r.appendEntries(results, i)
 	}
 	sort.SliceStable(results, func(i, j int) bool {
 		return candidate.Better(results[i], results[j])
@@ -487,14 +491,23 @@ func (r *DictReader) readKeyIndex(i int) (entryOff uint32, entryLen uint16) {
 	return
 }
 
-// readEntries 读取第 i 个 key 的所有候选词
-func (r *DictReader) readEntries(i int) []candidate.Candidate {
+// appendEntries 将第 i 个 key 的所有候选词追加到 dst 后返回新切片。
+// 调用方传 dst 可避免每 key 都新建底层数组——前缀扫描/聚合场景显著受益。
+// 传 dst=nil 等价于 readEntries。
+func (r *DictReader) appendEntries(dst []candidate.Candidate, i int) []candidate.Candidate {
 	if r.isClosed() {
-		return nil
+		return dst
 	}
 	code := r.readKeyCode(i)
 	entryOff, entryLen := r.readKeyIndex(i)
-	results := make([]candidate.Candidate, 0, entryLen)
+	if entryLen == 0 {
+		return dst
+	}
+	if cap(dst)-len(dst) < int(entryLen) {
+		grown := make([]candidate.Candidate, len(dst), len(dst)+int(entryLen))
+		copy(grown, dst)
+		dst = grown
+	}
 	base := r.entryDataBase + entryOff
 	recSize := r.entryRecordSize
 	for j := uint16(0); j < entryLen; j++ {
@@ -513,14 +526,20 @@ func (r *DictReader) readEntries(i int) []candidate.Candidate {
 		}
 
 		text := r.readString(textOff, textLen)
-		results = append(results, candidate.Candidate{
+		dst = append(dst, candidate.Candidate{
 			Text:         text,
 			Code:         code,
 			Weight:       int(weight),
 			NaturalOrder: order,
 		})
 	}
-	return results
+	return dst
+}
+
+// readEntries 是 appendEntries 的便捷封装：分配新切片并返回。
+// 用于不需要累积、且结果会被进一步独立处理的调用点（如 LookupExact/BFS）。
+func (r *DictReader) readEntries(i int) []candidate.Candidate {
+	return r.appendEntries(nil, i)
 }
 
 // searchAbbrev 二分搜索简拼索引，返回 index 或 -1
