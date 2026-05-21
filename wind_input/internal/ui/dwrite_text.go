@@ -416,6 +416,33 @@ type dwBackend struct {
 	renderParams  unsafe.Pointer // IDWriteRenderingParams*
 	renderer      *goTextRenderer
 	width, height int
+	// pixBuf 复用于 copyFromImage / copyToImageRGB 的 BGRA 转换缓冲区，
+	// 按 stride*h 容量扩张但不收缩，避免每帧 make([]byte, ...) 产生 GC 压力。
+	// dwBackend 仅在 UI 单线程内被调用，无并发访问。
+	pixBuf []byte
+}
+
+// scratchPixels 返回容量至少为 size、长度恰为 size 的复用 buffer，内容已清零。
+// 用于像 copyFromImage 这种"按像素写入、可能漏写部分像素"的场景，需要确保未写入的位置是 0。
+func (b *dwBackend) scratchPixels(size int) []byte {
+	if cap(b.pixBuf) < size {
+		b.pixBuf = make([]byte, size)
+		return b.pixBuf
+	}
+	b.pixBuf = b.pixBuf[:size]
+	clear(b.pixBuf)
+	return b.pixBuf
+}
+
+// scratchPixelsNoClear 同 scratchPixels，但不清零；调用方需自行用 GetDIBits 等接口
+// 全量填充 buffer。省去 ~1MB+ 的 clear 开销。
+func (b *dwBackend) scratchPixelsNoClear(size int) []byte {
+	if cap(b.pixBuf) < size {
+		b.pixBuf = make([]byte, size)
+		return b.pixBuf
+	}
+	b.pixBuf = b.pixBuf[:size]
+	return b.pixBuf
 }
 
 func newDWBackend(factory unsafe.Pointer) (*dwBackend, error) {
@@ -503,11 +530,11 @@ func (b *dwBackend) copyFromImage(src *image.RGBA, srcX, srcY, w, h int) {
 
 	bounds := src.Bounds()
 	stride := w * 4
-	buf := make([]byte, stride*h)
+	buf := b.scratchPixels(stride * h)
 
-	for py := 0; py < h; py++ {
+	for py := range h {
 		imgY := srcY + py
-		for px := 0; px < w; px++ {
+		for px := range w {
 			imgX := srcX + px
 			di := py*stride + px*4
 			if imgX >= bounds.Min.X && imgX < bounds.Max.X &&
@@ -563,7 +590,7 @@ func (b *dwBackend) copyToImageRGB(dst *image.RGBA, dstX, dstY, w, h int) {
 		},
 	}
 	stride := w * 4
-	pixels := make([]byte, stride*h)
+	pixels := b.scratchPixelsNoClear(stride * h)
 	ret, _, _ := procDWGetDIBits.Call(
 		memDC, hBitmap,
 		0, uintptr(h),
@@ -576,12 +603,12 @@ func (b *dwBackend) copyToImageRGB(dst *image.RGBA, dstX, dstY, w, h int) {
 	}
 
 	bounds := dst.Bounds()
-	for py := 0; py < h; py++ {
+	for py := range h {
 		imgY := dstY + py
 		if imgY < bounds.Min.Y || imgY >= bounds.Max.Y {
 			continue
 		}
-		for px := 0; px < w; px++ {
+		for px := range w {
 			imgX := dstX + px
 			if imgX < bounds.Min.X || imgX >= bounds.Max.X {
 				continue
