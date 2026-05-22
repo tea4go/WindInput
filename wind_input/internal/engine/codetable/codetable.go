@@ -153,6 +153,9 @@ func (e *Engine) RestoreCodeTableHeader(header dict.CodeTableHeader) {
 	if header.CodeLength > 0 && header.CodeLength < e.config.MaxCodeLength {
 		e.config.MaxCodeLength = header.CodeLength
 	}
+	if e.config.MinAutoCommitLen == 0 {
+		e.config.MinAutoCommitLen = e.config.MaxCodeLength
+	}
 }
 
 // GetCodeTable 获取码表（供外部注册到 CompositeDict）
