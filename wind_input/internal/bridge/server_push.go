@@ -274,13 +274,26 @@ func (s *Server) pushToActiveClient(encoded []byte, kind string) {
 
 	s.pushMu.RLock()
 	var writer *pushClient
+	// Phase 1: token 精确匹配且 PID 一致 — 单进程多 DLL 实例场景下走这里。
+	// 注意要校验 PID, 否则 activeToken 可能是上一次 IMEActivated 残留的(FOCUS_GAINED
+	// 不更新 token 是为兼容 EverEdit 双进程, 见 server_handler.go), 导致 push 误投。
 	if activeToken != 0 {
 		if h, ok := s.tokenToPushHandle[activeToken]; ok {
+			if s.pushHandleToPID[h] == activeProcessID {
+				writer = s.pushClients[h]
+			}
+		}
+	}
+	// Phase 2: PID 查表 — 正常单进程场景, 覆盖 activeToken 卡死的情况。
+	if writer == nil && activeProcessID != 0 {
+		if h, ok := s.pushClientsByPID[activeProcessID]; ok {
 			writer = s.pushClients[h]
 		}
 	}
-	if writer == nil && activeProcessID != 0 {
-		if h, ok := s.pushClientsByPID[activeProcessID]; ok {
+	// Phase 3: token 兜底 — EverEdit 双进程场景, A 进程 (activeProcessID) 没 push pipe,
+	// B 进程持 push pipe, 通过 IMEActivated 注册了 token, 必须走 token 才能找到 B。
+	if writer == nil && activeToken != 0 {
+		if h, ok := s.tokenToPushHandle[activeToken]; ok {
 			writer = s.pushClients[h]
 		}
 	}
@@ -356,17 +369,29 @@ func (s *Server) PushCommitTextToActiveClient(text string) {
 	s.pushMu.RLock()
 	var handle windows.Handle
 	var writer *pushClient
-	// Primary: token-based exact targeting
+	// Phase 1: token 精确匹配且 PID 一致 (单进程多实例); activeToken 不更新于
+	// FOCUS_GAINED, 因此 PID 校验必须的 —— 否则 token 可能指向另一个进程的
+	// push handle (见 pushToActiveClient 注释)。
 	if activeToken != 0 {
 		if h, ok := s.tokenToPushHandle[activeToken]; ok {
+			if s.pushHandleToPID[h] == activeProcessID {
+				if w := s.pushClients[h]; w != nil {
+					handle, writer = h, w
+				}
+			}
+		}
+	}
+	// Phase 2: PID 查表 (正常单进程, 覆盖 activeToken 卡死)
+	if writer == nil && activeProcessID != 0 {
+		if h, ok := s.pushClientsByPID[activeProcessID]; ok {
 			if w := s.pushClients[h]; w != nil {
 				handle, writer = h, w
 			}
 		}
 	}
-	// Fallback: PID-based (token not yet registered or handle already cleaned)
-	if writer == nil && activeProcessID != 0 {
-		if h, ok := s.pushClientsByPID[activeProcessID]; ok {
+	// Phase 3: token 兜底 (EverEdit 双进程)
+	if writer == nil && activeToken != 0 {
+		if h, ok := s.tokenToPushHandle[activeToken]; ok {
 			if w := s.pushClients[h]; w != nil {
 				handle, writer = h, w
 			}
