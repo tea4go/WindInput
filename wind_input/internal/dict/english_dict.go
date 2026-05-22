@@ -339,15 +339,23 @@ func (d *EnglishDict) Lookup(word string) []candidate.Candidate {
 func (d *EnglishDict) LookupPrefix(prefix string, limit int) []candidate.Candidate {
 	prefixLower := strings.ToLower(prefix)
 
+	// 扫描必须带上限：limit<=0 时取默认值（HotPrefixIndexN），避免单字母前缀
+	// 全量扫描 + 全量排序拖垮调用方。limit>0 时按调用方意图（分级加载会逐步翻倍）：
+	//   - limit<=HotPrefixIndexN 且单字母前缀 → wdbReader 内部走 hotPrefixSlice 缓存
+	//   - limit 更大 → 走 scanPrefix 的 topK 裁剪，扫描有界
+	scanLimit := limit
+	if scanLimit <= 0 {
+		scanLimit = binformat.HotPrefixIndexN
+	}
+
 	var results []candidate.Candidate
 	if d.wdbReader != nil {
-		// limit=0 取全量后自行排序，保证英文排序语义（短词优先）
-		results = d.wdbReader.LookupPrefix(prefixLower, 0)
+		results = d.wdbReader.LookupPrefix(prefixLower, scanLimit)
 	} else {
 		if d.trie == nil {
 			return nil
 		}
-		results = d.trie.SearchPrefix(prefixLower, 0)
+		results = d.trie.SearchPrefix(prefixLower, scanLimit)
 	}
 
 	sort.SliceStable(results, func(i, j int) bool {

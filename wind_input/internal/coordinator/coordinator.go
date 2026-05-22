@@ -140,11 +140,15 @@ type tempModeState struct {
 	tempEnglishBuffer     string                // 临时英文缓冲区
 	tempEnglishCursorPos  int                   // 临时英文光标位置
 	tempEnglishCandidates []candidate.Candidate // 临时英文模式的英文候选列表
-	tempPinyinMode        bool                  // 是否处于临时拼音模式
-	tempPinyinBuffer      string                // 临时拼音输入缓冲区
-	tempPinyinCursorPos   int                   // 临时拼音光标位置
-	tempPinyinCommitted   string                // 临时拼音部分上屏累积文本
-	tempPinyinTriggerKey  string                // 临时拼音触发键类型（"backtick"/"semicolon"/"z"）
+	// 临时英文分级加载状态（对标正常模式的 candidateLimit/candidateInput/hasMoreCandidates）
+	tempEnglishCandLimit int    // 当前英文候选加载上限
+	tempEnglishCandInput string // 加载时的 tempEnglishBuffer 快照
+	tempEnglishHasMore   bool   // 词库里是否还有更多候选未取出
+	tempPinyinMode       bool   // 是否处于临时拼音模式
+	tempPinyinBuffer     string // 临时拼音输入缓冲区
+	tempPinyinCursorPos  int    // 临时拼音光标位置
+	tempPinyinCommitted  string // 临时拼音部分上屏累积文本
+	tempPinyinTriggerKey string // 临时拼音触发键类型（"backtick"/"semicolon"/"z"）
 
 	// z 键混合模式回退缓存: 仅在从 zHybridFallback 切入临时拼音时记录,
 	// 让用户的下一次 backspace 在"什么都还没敲"的状态下能回到正常输入流.

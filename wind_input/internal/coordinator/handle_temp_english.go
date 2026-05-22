@@ -13,6 +13,15 @@ import (
 	"github.com/huanfeng/wind_input/pkg/keys"
 )
 
+// 临时英文候选分级加载参数（对标正常模式 expandCandidates）。
+const (
+	// tempEnglishInitialCandLimit 初次构建的候选数：够首页 + 少量翻页，
+	// 单字母前缀走 hotPrefixSlice 缓存，成本极低。
+	tempEnglishInitialCandLimit = 60
+	// tempEnglishMaxCandLimit 分级加载上限，与正常模式 expandCandidates 的 5000 一致。
+	tempEnglishMaxCandLimit = 5000
+)
+
 // ─── 大小写模式 ───
 
 type englishCasePattern int
@@ -368,6 +377,10 @@ func (c *Coordinator) handleTempEnglishKey(key string, data *bridge.KeyEventData
 		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
 
 	case c.isPageDownKey(key, int(vk), uint32(data.Modifiers)):
+		// 分级加载：接近末页时翻倍扩展词库候选，避免"6+"翻不动后续页
+		if c.tempEnglishHasMore && c.currentPage >= c.totalPages-1 {
+			c.expandTempEnglishCandidates()
+		}
 		if c.currentPage < c.totalPages {
 			c.currentPage++
 			c.selectedIndex = 0
@@ -392,6 +405,10 @@ func (c *Coordinator) handleTempEnglishKey(key string, data *bridge.KeyEventData
 
 	case c.isHighlightDownKey(vk, uint32(data.Modifiers)):
 		if len(c.candidates) > 0 {
+			// 分级加载：高亮即将跨出末页时翻倍扩展词库候选
+			if c.tempEnglishHasMore && c.currentPage >= c.totalPages-1 {
+				c.expandTempEnglishCandidates()
+			}
 			startIdx := (c.currentPage - 1) * c.candidatesPerPage
 			endIdx := min(startIdx+c.candidatesPerPage, len(c.candidates))
 			pageCount := endIdx - startIdx
@@ -599,21 +616,13 @@ func (c *Coordinator) handleTempEnglishKey(key string, data *bridge.KeyEventData
 func (c *Coordinator) updateTempEnglishCandidates() {
 	buf := c.tempEnglishBuffer
 	if buf == "" {
-		c.tempEnglishCandidates = nil
-		c.candidates = nil
-		c.currentPage = 1
-		c.totalPages = 1
-		c.selectedIndex = 0
+		c.clearTempEnglishCandidates()
 		return
 	}
 
 	// allow_symbols 开启且 buffer 含非字母字符 → 无候选状态：仅显示 preedit，候选列表清空
 	if c.tempEnglishAllowSymbols() && !c.tempEnglishBufferAllAlpha() {
-		c.tempEnglishCandidates = nil
-		c.candidates = nil
-		c.currentPage = 1
-		c.totalPages = 1
-		c.selectedIndex = 0
+		c.clearTempEnglishCandidates()
 		return
 	}
 
@@ -622,14 +631,32 @@ func (c *Coordinator) updateTempEnglishCandidates() {
 	// 关闭"显示英文候选"时：候选列表为空，仅显示 preedit。
 	// 空格/回车上屏 fallback 到 buffer，数字键不再被首候选占用（可正常输入数字）。
 	if !showCandidates {
-		c.tempEnglishCandidates = nil
-		c.candidates = nil
-		c.currentPage = 1
-		c.totalPages = 1
-		c.selectedIndex = 0
+		c.clearTempEnglishCandidates()
 		return
 	}
 
+	// 初次构建用较小的初始 limit；翻页到边界时由 expandTempEnglishCandidates 翻倍扩展。
+	c.buildTempEnglishCandidates(tempEnglishInitialCandLimit)
+	c.currentPage = 1
+	c.selectedIndex = 0
+}
+
+// clearTempEnglishCandidates 清空临时英文候选列表与分级加载状态
+func (c *Coordinator) clearTempEnglishCandidates() {
+	c.tempEnglishCandidates = nil
+	c.candidates = nil
+	c.currentPage = 1
+	c.totalPages = 1
+	c.selectedIndex = 0
+	c.tempEnglishCandLimit = 0
+	c.tempEnglishCandInput = ""
+	c.tempEnglishHasMore = false
+}
+
+// buildTempEnglishCandidates 按指定 limit 查询英文词库并重建候选列表。
+// 不改动 currentPage/selectedIndex —— 由调用方决定（初次构建归零，翻页扩展时保持）。
+func (c *Coordinator) buildTempEnglishCandidates(limit int) {
+	buf := c.tempEnglishBuffer
 	casePattern := detectCasePattern(buf)
 	bufLower := strings.ToLower(buf)
 
@@ -643,8 +670,11 @@ func (c *Coordinator) updateTempEnglishCandidates() {
 
 	// 2. 词库候选
 	seen := map[string]bool{bufLower: true} // 首候选已占用
-	if showCandidates && c.engineMgr != nil {
-		results := c.engineMgr.SearchEnglish(bufLower, c.candidatesPerPage*5)
+	dictMatched := 0
+	if c.engineMgr != nil {
+		results := c.engineMgr.SearchEnglish(bufLower, limit)
+		// 返回数量达到 limit → 词库里可能还有更多未取出的候选（供分级加载判定）
+		c.tempEnglishHasMore = limit > 0 && len(results) >= limit
 		for _, cand := range results {
 			lower := strings.ToLower(cand.Text)
 			if seen[lower] {
@@ -662,13 +692,14 @@ func (c *Coordinator) updateTempEnglishCandidates() {
 				Code:   lower,
 				Weight: cand.Weight,
 			})
+			dictMatched++
 		}
+	} else {
+		c.tempEnglishHasMore = false
 	}
 
-	// 3. 大小写变体（当词库候选较少时补充）
-	// 注意：变体与用户输入的小写形式相同，不能用 seen（按小写去重）过滤
-	// 改用 seenText（按原始文本去重）
-	if len(allCandidates) <= 1 {
+	// 3. 大小写变体（当词库无匹配时补充）
+	if dictMatched == 0 {
 		variants := generateCaseVariants(buf)
 		for _, v := range variants {
 			allCandidates = append(allCandidates, candidate.Candidate{
@@ -680,13 +711,39 @@ func (c *Coordinator) updateTempEnglishCandidates() {
 
 	c.tempEnglishCandidates = allCandidates
 	c.candidates = allCandidates
-	c.currentPage = 1
-	c.selectedIndex = 0
+	c.tempEnglishCandLimit = limit
+	c.tempEnglishCandInput = buf
 	if len(allCandidates) > 0 {
 		c.totalPages = (len(allCandidates) + c.candidatesPerPage - 1) / c.candidatesPerPage
 	} else {
 		c.totalPages = 1
 	}
+}
+
+// expandTempEnglishCandidates 翻页到边界时扩展候选（limit 翻倍，上限 tempEnglishMaxCandLimit）。
+// 复用正常模式 expandCandidates 的分级加载模式：避免一次性物化全集，按需逐步加载。
+func (c *Coordinator) expandTempEnglishCandidates() {
+	if !c.tempEnglishHasMore || c.tempEnglishCandInput != c.tempEnglishBuffer {
+		return
+	}
+
+	newLimit := c.tempEnglishCandLimit * 2
+	if newLimit > tempEnglishMaxCandLimit {
+		newLimit = tempEnglishMaxCandLimit
+	}
+	if newLimit <= c.tempEnglishCandLimit {
+		c.tempEnglishHasMore = false
+		return
+	}
+
+	prevCount := len(c.candidates)
+	c.buildTempEnglishCandidates(newLimit)
+	// 扩展后数量没增加 → 词库已取尽，避免后续无意义的重复扩展
+	if len(c.candidates) <= prevCount {
+		c.tempEnglishHasMore = false
+	}
+	c.logger.Debug("Expanded temp English candidates",
+		"count", len(c.candidates), "limit", newLimit, "hasMore", c.tempEnglishHasMore)
 }
 
 // ─── UI 显示 ───
@@ -740,6 +797,12 @@ func (c *Coordinator) showTempEnglishUI() {
 	preedit := prefix + c.tempEnglishBuffer
 	caretPosUI := len(prefix) + c.tempEnglishCursorPos
 
+	// 分级加载：负值 totalPages 表示还有更多候选未加载，渲染层据此显示 "N / M+"
+	displayTotalPages := c.totalPages
+	if c.tempEnglishHasMore {
+		displayTotalPages = -c.totalPages
+	}
+
 	c.uiManager.SetModeLabel("临时英文")
 	c.uiManager.ShowCandidates(
 		displayCandidates,
@@ -749,7 +812,7 @@ func (c *Coordinator) showTempEnglishUI() {
 		caretY,
 		caretHeight,
 		c.currentPage,
-		c.totalPages,
+		displayTotalPages,
 		len(c.candidates),
 		c.candidatesPerPage,
 		c.selectedIndex,
