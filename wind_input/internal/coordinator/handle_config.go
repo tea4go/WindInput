@@ -143,7 +143,7 @@ func (c *Coordinator) UpdateToolbarConfig(toolbarConfig *config.ToolbarConfig) {
 					ui.ScaleIntForDPI(toolbarHeight),
 				)
 			}
-			c.uiManager.ShowToolbarWithState(posX, posY, c.buildToolbarState())
+			c.showToolbarRespectingFullscreen(posX, posY)
 		} else {
 			c.uiManager.SetToolbarVisible(false)
 		}

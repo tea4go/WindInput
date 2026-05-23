@@ -43,6 +43,12 @@ func (c *Coordinator) setupToolbarCallbacks() {
 		OnShowMenu: func(screenX, screenY, flipRefY int) {
 			go c.handleShowUnifiedMenu(screenX, screenY, flipRefY)
 		},
+		OnForegroundFullscreenChange: func(enter bool) {
+			// Run in goroutine: callback is invoked from UI thread (toolbar
+			// WndProc); OnShellFullscreenChange acquires c.mu and may issue
+			// UI commands, so keep the WndProc non-blocking.
+			go c.OnShellFullscreenChange(enter)
+		},
 	})
 }
 

@@ -220,6 +220,17 @@ type UIConfig struct {
 // ToolbarConfig contains toolbar settings
 type ToolbarConfig struct {
 	Visible bool `yaml:"visible" json:"visible"`
+	// HideInFullscreen 控制：当前台应用处于全屏状态时是否自动隐藏工具栏。
+	// 使用 *bool 区分"未设置"和"显式 false"，未设置时按默认 true 处理。
+	HideInFullscreen *bool `yaml:"hide_in_fullscreen,omitempty" json:"hide_in_fullscreen,omitempty"`
+}
+
+// IsHideInFullscreen 返回是否启用「全屏时隐藏工具栏」。未设置时默认 true。
+func (c *ToolbarConfig) IsHideInFullscreen() bool {
+	if c.HideInFullscreen == nil {
+		return true
+	}
+	return *c.HideInFullscreen
 }
 
 // InputConfig contains input behavior settings

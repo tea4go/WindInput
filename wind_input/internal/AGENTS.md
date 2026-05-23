@@ -15,6 +15,7 @@
 | `coordinator/` | 核心协调器，处理按键事件、模式切换、生命周期（18 个处理器文件，支持加词和候选词操作） (see `coordinator/AGENTS.md`) |
 | `dict/` | 词库系统（Trie、CompositeDict、短语、Shadow pin+delete、用户词典、词频） (see `dict/AGENTS.md`) |
 | `engine/` | Schema 驱动的引擎管理器及拼音/五笔/混输引擎实现 |
+| `foreground/` | 前台窗口信息查询：`App()` 进程 basename、`Title()` 窗口标题、`IsForegroundFullscreen()` 全屏判定（rect 全覆盖 + `SHQueryUserNotificationState`） |
 | `hotkey/` | 热键配置编译器（支持候选词操作热键和通用按键绑定） |
 | `ipc/` | 底层 IPC 协议和 Named Pipe 服务端基础设施 |
 | `rpc/` | JSON-RPC IPC 服务端（词库、Shadow、短语、系统管理）(see `rpc/AGENTS.md`) |

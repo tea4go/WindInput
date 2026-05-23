@@ -52,7 +52,22 @@ var (
 	procSetTimer          = user32.NewProc("SetTimer")
 	procKillTimer         = user32.NewProc("KillTimer")
 	procTrackMouseEvent   = user32.NewProc("TrackMouseEvent")
+
+	procRegisterShellHookWindow   = user32.NewProc("RegisterShellHookWindow")
+	procDeregisterShellHookWindow = user32.NewProc("DeregisterShellHookWindow")
+	procRegisterWindowMessageW    = user32.NewProc("RegisterWindowMessageW")
 )
+
+// Shell hook notification codes (undocumented but stable — Windows taskbar
+// relies on these to auto-hide when an app goes fullscreen).
+const (
+	hshellWindowEnterFullscreen = 53
+	hshellWindowExitFullscreen  = 54
+)
+
+// shellHookMsg is the dynamically-registered "SHELLHOOK" message id. Set once
+// in (*ToolbarWindow).Create via RegisterWindowMessageW. Zero means unavailable.
+var shellHookMsg uint32
 
 // ToolbarHitResult represents which part of the toolbar was hit
 type ToolbarHitResult int
@@ -85,6 +100,10 @@ type ToolbarCallback struct {
 	OnPositionChanged func(x, y int)
 	OnContextMenu     func(action ToolbarContextMenuAction)
 	OnShowMenu        func(screenX, screenY, flipRefY int) // 请求显示统一菜单 (flipRefY: 下方放不下时翻转到此Y上方, 0=禁用)
+	// OnForegroundFullscreenChange 在系统 Shell 通知前台窗口进入/退出全屏时触发
+	// (HSHELL_WINDOWENTERFULLSCREEN=53 / HSHELL_WINDOWEXITFULLSCREEN=54)。
+	// enter=true 表示有窗口进入全屏；enter=false 表示退出。
+	OnForegroundFullscreenChange func(enter bool)
 }
 
 // ToolbarContextMenuAction represents actions from toolbar context menu
@@ -194,6 +213,12 @@ func toolbarWndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		return 0
 	}
 
+	// Dynamic shell hook message dispatch. Cannot put in switch case because the
+	// message id is registered at runtime via RegisterWindowMessageW.
+	if shellHookMsg != 0 && msg == shellHookMsg {
+		return globalToolbar.handleShellHook(wParam, lParam)
+	}
+
 	ret, _, _ := procDefWindowProcW.Call(hwnd, uintptr(msg), wParam, lParam)
 	return ret
 }
@@ -242,6 +267,11 @@ func (w *ToolbarWindow) Create() error {
 	globalToolbar = w
 
 	w.logger.Info("Toolbar window created", "hwnd", hwnd)
+
+	// Register the shell hook so we receive HSHELL_WINDOWENTERFULLSCREEN /
+	// HSHELL_WINDOWEXITFULLSCREEN notifications. This is the same channel the
+	// Windows taskbar uses to auto-hide when an app goes fullscreen.
+	w.registerShellHook()
 
 	// Create tooltip window
 	w.createTooltipWindow()
@@ -514,6 +544,8 @@ func (w *ToolbarWindow) Destroy() {
 		w.tooltipHwnd = 0
 	}
 	if w.hwnd != 0 {
+		// Deregister shell hook before destroying the window.
+		procDeregisterShellHookWindow.Call(uintptr(w.hwnd))
 		procDestroyWindow.Call(uintptr(w.hwnd))
 		w.hwnd = 0
 	}

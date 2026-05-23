@@ -74,8 +74,8 @@ func (c *Coordinator) SetIMEActivated(activated bool) {
 			c.logger.Debug("Toolbar position resolved", "x", posX, "y", posY,
 				"caretX", c.caretX, "caretY", c.caretY, "monitorKey", key)
 
-			// Show toolbar with position and state in one atomic operation
-			c.uiManager.ShowToolbarWithState(posX, posY, c.buildToolbarState())
+			// Show toolbar (auto-hidden if foreground app is fullscreen)
+			c.showToolbarRespectingFullscreen(posX, posY)
 		}
 	} else {
 		// IME deactivated - re-register only global_hotkeys list items (if any),
@@ -163,7 +163,7 @@ func (c *Coordinator) HandleMenuCommand(command string) *bridge.StatusUpdateData
 						ui.ScaleIntForDPI(toolbarHeight),
 					)
 				}
-				c.uiManager.ShowToolbarWithState(posX, posY, c.buildToolbarState())
+				c.showToolbarRespectingFullscreen(posX, posY)
 			} else {
 				c.uiManager.SetToolbarVisible(false)
 			}
@@ -309,7 +309,7 @@ func (c *Coordinator) handleToggleToolbarKey() *bridge.KeyEventResult {
 					ui.ScaleIntForDPI(toolbarHeight),
 				)
 			}
-			c.uiManager.ShowToolbarWithState(posX, posY, c.buildToolbarState())
+			c.showToolbarRespectingFullscreen(posX, posY)
 		} else {
 			c.uiManager.SetToolbarVisible(false)
 		}

@@ -26,6 +26,7 @@ Windows 原生 UI 渲染层。使用 Win32 API 实现输入法的所有可见界
 | `toolbar_window.go` | 工具栏 Win32 窗口创建和消息循环 |
 | `toolbar_window_event.go` | 工具栏鼠标事件（拖拽、按钮点击） |
 | `toolbar_renderer.go` | 工具栏 GDI 渲染（模式按钮、全角按钮、标点按钮、设置按钮） |
+| `toolbar_shellhook.go` | 工具栏 Shell Hook 集成：`RegisterShellHookWindow` + 动态注册 `SHELLHOOK` 消息；拦截 `HSHELL_WINDOWENTERFULLSCREEN=53`/`HSHELL_WINDOWEXITFULLSCREEN=54` 通过 `ToolbarCallback.OnForegroundFullscreenChange` 派发 |
 | `popup_menu.go` | `PopupMenu`：自定义弹出菜单窗口，支持子菜单、勾选状态、主题；`Show`/`Hide`/`Destroy`；键盘导航通过全局低级键盘钩子（`WH_KEYBOARD_LL`）实现；子菜单共享父菜单渲染资源（`newPopupMenuShared`） |
 | `popup_menu_event.go` | 弹出菜单事件处理：鼠标移动/点击/离开事件、键盘导航（`handleKeyDown`：↑↓/←→/Enter/Esc/字母快捷键）、`checkMouseState` 跨进程点击检测；`menuKbNavActive` 抑制键盘导航时的幻象鼠标事件 |
 | `popup_menu_render.go` | 弹出菜单 GDI 渲染 |

@@ -130,6 +130,7 @@ export interface UIConfig {
 // 工具栏配置
 export interface ToolbarConfig {
   visible: boolean;
+  hide_in_fullscreen?: boolean;
 }
 
 // 临时英文模式配置
@@ -409,6 +410,7 @@ export function getDefaultConfig(): Config {
     },
     toolbar: {
       visible: true,
+      hide_in_fullscreen: true,
     },
     input: {
       full_width: false,

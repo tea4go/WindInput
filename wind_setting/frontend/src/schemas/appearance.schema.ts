@@ -264,4 +264,10 @@ export const toolbarSchema: PageSchema = [
     label: "显示工具栏",
     hint: "在屏幕上显示可拖动的输入法状态栏",
   },
+  {
+    type: "toggle",
+    key: "toolbar.hide_in_fullscreen",
+    label: "全屏应用时隐藏工具栏",
+    hint: "当前台应用进入全屏（游戏、视频、演示等）时自动隐藏工具栏",
+  },
 ];

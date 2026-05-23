@@ -200,6 +200,9 @@ type Coordinator struct {
 	punctFollowMode    bool // true = punctuation follows Chinese/English mode
 	toolbarVisible     bool // true = toolbar visible
 	imeActivated       bool // true = IME is activated (has focus)
+	// toolbarSuppressedByFullscreen 记录上一次决策时是否因「前台全屏」抑制了工具栏，
+	// 供 ShellHook 通知路径比较状态翻转 —— 仅当此标志值变化时才向 UI 发命令。
+	toolbarSuppressedByFullscreen bool
 
 	// Input state
 	inputBuffer        string
