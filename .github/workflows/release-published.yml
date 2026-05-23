@@ -63,7 +63,7 @@ jobs:
 
       - name: Install wrangler
         if: steps.gate.outputs.skip != 'true'
-        run: npm install -g wrangler@3
+        run: npm install -g wrangler@4
 
       - name: Download installer + release notes from GitHub Release
         if: steps.gate.outputs.skip != 'true'
