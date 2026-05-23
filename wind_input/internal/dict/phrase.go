@@ -307,7 +307,7 @@ func (pl *PhraseLayer) Search(code string, limit int) []candidate.Candidate {
 	groupIdx := make(map[string]int, len(groupByRaw))
 	for _, e := range entries {
 		cand := candidate.Candidate{
-			Text:           e.Text,
+			Text:           decodePhraseEscapes(e.Text),
 			Code:           code,
 			Weight:         resolvePhraseWeight(e.Weight),
 			IsPhrase:       true, // 短语永远保留，但不计入 hasCommon 避免污染同编码码表字过滤
@@ -427,7 +427,7 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 						continue
 					}
 					results = append(results, candidate.Candidate{
-						Text:           e.Text,
+						Text:           decodePhraseEscapes(e.Text),
 						Code:           code,
 						Weight:         groupWeight,
 						NaturalOrder:   idx,
@@ -477,7 +477,7 @@ func (pl *PhraseLayer) SearchCommand(code string, limit int) []candidate.Candida
 			}
 			// nav id = phrase:<groupCode>:<group.RawText>, 详见 PhraseGroup.RawText 注释。
 			navResults = append(navResults, candidate.Candidate{
-				Text:           displayName,
+				Text:           decodePhraseEscapes(displayName),
 				Code:           groupCode,
 				Weight:         resolvePhraseWeight(group.Weight),
 				NaturalOrder:   group.LoadSeq, // 同 weight 下按 yaml 写入顺序而非 code 字母序
@@ -551,7 +551,7 @@ func (pl *PhraseLayer) SearchPrefix(prefix string, limit int) []candidate.Candid
 				displayName = code
 			}
 			results = append(results, candidate.Candidate{
-				Text:           displayName,
+				Text:           decodePhraseEscapes(displayName),
 				Code:           code,
 				Weight:         resolvePhraseWeight(group.Weight),
 				NaturalOrder:   group.LoadSeq,      // 同 weight 下按 yaml 写入顺序输出
@@ -578,7 +578,7 @@ func (pl *PhraseLayer) SearchPrefix(prefix string, limit int) []candidate.Candid
 			}
 			for _, e := range entries {
 				results = append(results, candidate.Candidate{
-					Text:           e.Text,
+					Text:           decodePhraseEscapes(e.Text),
 					Code:           code,
 					Weight:         resolvePhraseWeight(e.Weight),
 					NaturalOrder:   e.LoadSeq, // 同 weight 下按 yaml 写入顺序输出
@@ -892,8 +892,12 @@ func (pl *PhraseLayer) expandDynamicEntry(code string, e PhraseEntry) candidate.
 			"code", code, "valueLen", len(value))
 	}
 
+	text := res.Text
+	if !res.IsCommand {
+		text = decodePhraseEscapes(text)
+	}
 	out := candidate.Candidate{
-		Text:           res.Text,
+		Text:           text,
 		Code:           code,
 		Weight:         resolvePhraseWeight(e.Weight),
 		NaturalOrder:   e.LoadSeq, // 同 weight 下按 yaml 写入顺序输出 (SearchPrefix 路径 3 走 candidate.Better 时生效)
