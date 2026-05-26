@@ -41,7 +41,10 @@ func ViterbiDecode(lattice *Lattice, bigram *BigramModel) *ViterbiResult {
 	dp[0].logProb = 0 // 起点概率为 0（log(1)=0）
 
 	logger := slog.Default()
-	traceEnabled := n >= 8 // 仅对较长输入启用详细追踪
+	// 改为 env-var 显式开启 (默认关闭, 见 trace.go::pinyinTraceEnabled)。
+	// 原 `n >= 8` 自动开启会让长 buffer 的 DP 热循环每个节点跑一次 logger.Debug,
+	// 实测把 ConvertEx 慢一个量级。算法回归 / 数据 debug 时设 WIND_INPUT_PINYIN_TRACE=1。
+	traceEnabled := pinyinTraceEnabled
 
 	// 前向传播
 	for endPos := 1; endPos <= n; endPos++ {

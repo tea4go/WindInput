@@ -98,7 +98,8 @@ func BuildLattice(input string, st *SyllableTrie, d *dict.CompositeDict, unigram
 	}
 
 	logger := slog.Default()
-	traceEnabled := n >= 8
+	// 见 trace.go::pinyinTraceEnabled。环境变量 WIND_INPUT_PINYIN_TRACE=1 显式打开。
+	traceEnabled := pinyinTraceEnabled
 
 	// 单字惩罚参数：
 	// - 普通单字施加完整惩罚，确保多字词路径优于单字拼凑
