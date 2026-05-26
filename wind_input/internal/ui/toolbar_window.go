@@ -1,3 +1,5 @@
+//go:build windows
+
 // Package ui provides native Windows UI for input method
 package ui
 
@@ -81,39 +83,7 @@ const (
 	HitSettingsButton                  // Settings button
 )
 
-// ToolbarState represents the current state of the toolbar
-type ToolbarState struct {
-	ChineseMode   bool
-	CapsLock      bool
-	FullWidth     bool
-	ChinesePunct  bool
-	EffectiveMode int    // 0=Chinese, 1=EnglishLower, 2=EnglishUpper
-	ModeLabel     string // Schema icon_label for Chinese mode (e.g., "拼", "五", "双", "混")
-}
-
-// ToolbarCallback represents callbacks for toolbar actions
-type ToolbarCallback struct {
-	OnToggleMode      func()
-	OnToggleWidth     func()
-	OnTogglePunct     func()
-	OnOpenSettings    func()
-	OnPositionChanged func(x, y int)
-	OnContextMenu     func(action ToolbarContextMenuAction)
-	OnShowMenu        func(screenX, screenY, flipRefY int) // 请求显示统一菜单 (flipRefY: 下方放不下时翻转到此Y上方, 0=禁用)
-	// OnForegroundFullscreenChange 在系统 Shell 通知前台窗口进入/退出全屏时触发
-	// (HSHELL_WINDOWENTERFULLSCREEN=53 / HSHELL_WINDOWEXITFULLSCREEN=54)。
-	// enter=true 表示有窗口进入全屏；enter=false 表示退出。
-	OnForegroundFullscreenChange func(enter bool)
-}
-
-// ToolbarContextMenuAction represents actions from toolbar context menu
-type ToolbarContextMenuAction int
-
-const (
-	ToolbarMenuSettings ToolbarContextMenuAction = iota
-	ToolbarMenuRestartService
-	ToolbarMenuAbout
-)
+// ToolbarState / ToolbarCallback / ToolbarContextMenuAction 已迁至 types_neutral.go (平台无关)。
 
 // TRACKMOUSEEVENT for TrackMouseEvent API
 type TRACKMOUSEEVENT struct {

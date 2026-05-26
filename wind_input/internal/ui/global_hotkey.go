@@ -1,3 +1,5 @@
+//go:build windows
+
 package ui
 
 import (
@@ -22,13 +24,7 @@ const (
 	wmHotkey = 0x0312
 )
 
-// GlobalHotkeyEntry defines a global hotkey to register
-type GlobalHotkeyEntry struct {
-	ID        int    // Unique ID (1-based)
-	Modifiers uint32 // hotkeyModControl, hotkeyModShift, etc.
-	VK        uint32 // Virtual key code
-	Command   string // Command name for callback dispatch
-}
+// GlobalHotkeyEntry 已迁至 types_neutral.go (平台无关), 让 darwin stub 共享同一定义。
 
 // ParseHotkeyString parses a hotkey config string (e.g., "ctrl+`") into a GlobalHotkeyEntry.
 // Returns ok=false if the string is empty, "none", or unrecognized.

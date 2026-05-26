@@ -1,3 +1,5 @@
+//go:build windows
+
 package ui
 
 // TextBackendManager manages the lifecycle of GDI / FreeType(gg/text) / DirectWrite

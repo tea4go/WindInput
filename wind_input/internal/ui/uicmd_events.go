@@ -1,3 +1,5 @@
+//go:build windows
+
 package ui
 
 import "github.com/huanfeng/wind_input/internal/uicmd"

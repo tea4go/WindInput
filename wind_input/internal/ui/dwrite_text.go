@@ -1,3 +1,5 @@
+//go:build windows
+
 package ui
 
 // Pure Go DirectWrite renderer — calls system dwrite.dll via COM vtable,

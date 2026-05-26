@@ -1,3 +1,5 @@
+//go:build windows
+
 package ui
 
 import (
@@ -128,22 +130,7 @@ func GetCapsLockState() bool {
 	return (state & 0x0001) != 0
 }
 
-// CandidateLayout represents the layout direction of the candidate window
-type CandidateLayout int
-
-const (
-	LayoutVertical   CandidateLayout = iota // Candidates displayed vertically (current default)
-	LayoutHorizontal                        // Candidates displayed horizontally (future)
-)
-
-// PositionPreference indicates where the candidate window should be displayed
-type PositionPreference int
-
-const (
-	PositionAuto  PositionPreference = iota // Auto-detect based on screen bounds
-	PositionAbove                           // Force display above caret
-	PositionBelow                           // Force display below caret
-)
+// CandidateLayout / PositionPreference 已迁至 types_neutral.go (平台无关)。
 
 // AdjustCandidatePosition adjusts the candidate window position to ensure it stays within screen bounds.
 // Parameters:

@@ -1,3 +1,5 @@
+//go:build windows
+
 package ui
 
 import (
@@ -18,65 +20,10 @@ var (
 	procGetWindowRect       = user32.NewProc("GetWindowRect")
 )
 
-// StatusDisplayMode 状态指示器显示模式
-type StatusDisplayMode string
+// StatusDisplayMode / StatusPositionMode / StatusState / StatusWindowConfig /
+// StatusMenuAction 等纯数据类型已迁至 types_neutral.go (平台无关), 供 darwin stub 复用。
 
-const (
-	// StatusDisplayModeTemp 临时显示模式（切换时短暂显示后自动隐藏）
-	StatusDisplayModeTemp StatusDisplayMode = "temp"
-	// StatusDisplayModeAlways 常驻显示模式（始终跟随光标显示）
-	StatusDisplayModeAlways StatusDisplayMode = "always"
-)
-
-// StatusPositionMode 状态指示器位置模式
-type StatusPositionMode string
-
-const (
-	// StatusPositionFollowCaret 跟随光标位置
-	StatusPositionFollowCaret StatusPositionMode = "follow_caret"
-	// StatusPositionCustom 固定自定义位置
-	StatusPositionCustom StatusPositionMode = "custom"
-)
-
-// StatusState 状态指示器当前状态
-type StatusState struct {
-	ModeLabel  string // 输入模式标签（如 "中", "英", "拼", "五"）
-	PunctLabel string // 标点状态标签（如 "，", ","）
-	WidthLabel string // 全半角标签（如 "全", "半"）
-}
-
-// StatusWindowConfig 状态指示器窗口运行时配置
-type StatusWindowConfig struct {
-	Enabled         bool               // 是否启用
-	DisplayMode     StatusDisplayMode  // 显示模式
-	Duration        int                // 临时显示持续时间（毫秒）
-	SchemaNameStyle string             // 方案名称风格
-	ShowMode        bool               // 显示输入模式
-	ShowPunct       bool               // 显示标点状态
-	ShowFullWidth   bool               // 显示全半角状态
-	PositionMode    StatusPositionMode // 位置模式
-	OffsetX         int                // 跟随光标时的 X 偏移
-	OffsetY         int                // 跟随光标时的 Y 偏移
-	CustomX         int                // 自定义位置 X
-	CustomY         int                // 自定义位置 Y
-	FontSize        float64            // 字体大小
-	Opacity         float64            // 背景透明度 (0.0-1.0)
-	BackgroundColor string             // 自定义背景色 (#RRGGBB)
-	TextColor       string             // 自定义文本色 (#RRGGBB)
-	BorderRadius    float64            // 圆角半径
-}
-
-// StatusMenuAction 状态指示器右键菜单动作
-type StatusMenuAction int
-
-const (
-	StatusMenuSwitchToAlways StatusMenuAction = iota // 切换到常驻模式
-	StatusMenuSwitchToTemp                           // 切换到临时模式
-	StatusMenuSettings                               // 打开设置
-	StatusMenuHide                                   // 隐藏
-)
-
-// 菜单项 ID 常量
+// 菜单项 ID 常量 (Win 原生菜单的 idm)
 const (
 	idmStatusSwitchMode = 2001
 	idmStatusSettings   = 2002

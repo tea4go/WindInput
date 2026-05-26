@@ -1,3 +1,5 @@
+//go:build windows
+
 // Package ui provides native Windows UI for candidate window
 package ui
 

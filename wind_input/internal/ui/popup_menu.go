@@ -1,3 +1,5 @@
+//go:build windows
+
 // Package ui provides native Windows UI for candidate window
 package ui
 
@@ -12,18 +14,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// MenuItem represents a menu item
-type MenuItem struct {
-	ID        int
-	Text      string
-	Disabled  bool
-	Separator bool
-	Checked   bool       // 勾选状态（显示 ✓）
-	Children  []MenuItem // 子菜单项（非空时显示 ▸，hover展开）
-}
-
-// PopupMenuCallback is called when a menu item is selected
-type PopupMenuCallback func(id int)
+// MenuItem / PopupMenuCallback 已迁至 types_neutral.go (平台无关)。
 
 // PopupMenu is a custom-drawn popup menu that doesn't steal focus
 type PopupMenu struct {

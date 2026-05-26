@@ -1,3 +1,5 @@
+//go:build windows
+
 package ui
 
 import (
@@ -14,66 +16,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Unified menu ID constants
-const (
-	UnifiedMenuToggleWidth          = 101
-	UnifiedMenuTogglePunct          = 102
-	UnifiedMenuToggleToolbar        = 103
-	UnifiedMenuToggleS2T            = 104 // 简入繁出 总开关
-	UnifiedMenuSchemaEnglish        = 140 // 英文模式
-	UnifiedMenuSchemaBase           = 150 // 方案ID: 150+i
-	UnifiedMenuThemeBase            = 200 // 主题ID: 200+i
-	UnifiedMenuThemeStyleBase       = 250 // 主题风格ID: 250+i (0=system, 1=light, 2=dark)
-	UnifiedMenuFilterModeBase       = 260 // 检索范围ID: 260+i (0=smart, 1=general, 2=gb18030)
-	UnifiedMenuS2TVariantBase       = 270 // 简入繁出 变体ID: 270+i (0=s2t, 1=s2tw, 2=s2twp, 3=s2hk)
-	UnifiedMenuTestBase             = 280 // 三级菜单测试ID: 280+i
-	UnifiedMenuTestToastInfo        = 290 // Debug: 弹 Info Toast（右下）
-	UnifiedMenuTestToastSuccess     = 291 // Debug: 弹 Success Toast（右下）
-	UnifiedMenuTestToastWarn        = 292 // Debug: 弹 Warn Toast（居中）
-	UnifiedMenuTestToastError       = 293 // Debug: 弹 Error Toast（居中）
-	UnifiedMenuTestToastLongMessage = 294 // Debug: 弹长文本 Toast 测试换行
-	UnifiedMenuReloadConfig         = 299
-	UnifiedMenuRestartService       = 303
-	UnifiedMenuDictionary           = 300
-	UnifiedMenuSettings             = 301
-	UnifiedMenuAbout                = 302
-	UnifiedMenuSkipCaretPending     = 304 // 为当前应用启用即时候选
-	UnifiedMenuPinCandidatePosition = 305 // 为当前应用启用固定候选位置
-)
-
-// ThemeMenuItem holds theme ID and display name for menu rendering
-type ThemeMenuItem struct {
-	ID          string // Theme ID for loading (e.g., "default")
-	DisplayName string // Display name (e.g., "默认主题 1.0")
-}
-
-// SchemaMenuItem holds schema ID and display name for menu rendering
-type SchemaMenuItem struct {
-	ID   string // Schema ID (e.g., "wubi86")
-	Name string // Display name (e.g., "五笔86")
-}
-
-// UnifiedMenuState holds the current state for building the unified menu
-type UnifiedMenuState struct {
-	ChineseMode          bool
-	FullWidth            bool
-	ChinesePunct         bool
-	ToolbarVisible       bool
-	Schemas              []SchemaMenuItem  // Available schemas in order
-	CurrentSchemaID      string            // Current active schema ID
-	CurrentFilterMode    config.FilterMode // Current filter mode
-	Themes               []ThemeMenuItem
-	CurrentThemeID       string            // Current theme ID for checked state
-	CurrentThemeStyle    config.ThemeStyle // Current theme style
-	Version              string            // App version for display in "About" menu item
-	ActiveProcessName    string            // 当前焦点应用进程名（用于"即时候选"/"固定候选位置"等菜单项标签）
-	SkipCaretPending     bool              // 当前应用是否已启用即时候选
-	PinCandidatePosition bool              // 当前应用是否已启用固定候选位置
-
-	// 简入繁出（S2T）状态
-	S2TEnabled bool              // 总开关
-	S2TVariant config.S2TVariant // 当前变体
-}
+// UnifiedMenu* 常量 / ThemeMenuItem / SchemaMenuItem / UnifiedMenuState 已迁至
+// types_neutral.go (平台无关), darwin stub 复用同一定义。
 
 func aboutText(version string) string {
 	if version != "" && version != "dev" {

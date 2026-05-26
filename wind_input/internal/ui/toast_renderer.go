@@ -1,3 +1,5 @@
+//go:build windows
+
 package ui
 
 import (
@@ -11,35 +13,7 @@ import (
 )
 
 // ToastLevel 决定 toast 配色，呼应消息严重程度。
-// Info/Success/Warn/Error 仅改变边框 + accent，背景统一沿用 tooltip 主题色，避免割裂。
-type ToastLevel int
-
-const (
-	ToastInfo    ToastLevel = iota // 蓝色 accent: 普通提示
-	ToastSuccess                   // 绿色 accent: 操作成功 / 资源就绪
-	ToastWarn                      // 橙色 accent: 需要注意
-	ToastError                     // 红色 accent: 操作失败
-)
-
-// ToastPosition 决定 toast 在屏幕上的落位策略。
-type ToastPosition int
-
-const (
-	ToastCenter      ToastPosition = iota // 屏幕（工作区）正中
-	ToastBottomRight                      // 工作区右下角
-	ToastTopRight                         // 预留：工作区右上角
-	ToastTop                              // 预留：工作区顶部居中
-)
-
-// ToastOptions 描述一次 toast 展示请求。空字段使用 toastWindow 内部默认值。
-type ToastOptions struct {
-	Title    string        // 可选：第一行加粗大字
-	Message  string        // 主体文本，支持 "\n" 换行
-	Level    ToastLevel    // 默认 ToastInfo
-	Position ToastPosition // 默认 ToastBottomRight
-	Duration int           // 自动隐藏毫秒数；0=用默认 5000；<0=不自动隐藏
-	MaxWidth int           // 内容最大像素宽（DIP）；0=使用工作区一半作为上限
-}
+// ToastLevel / ToastPosition / ToastOptions 已迁至 types_neutral.go (平台无关)。
 
 // ToastRenderer 负责把 ToastOptions 渲染成 RGBA 图像。复用 TextBackendManager 的 DirectWrite 后端，
 // 与 tooltip / status 渲染保持一致的反锯齿表现。
