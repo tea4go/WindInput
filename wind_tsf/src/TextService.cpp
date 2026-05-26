@@ -145,22 +145,47 @@ public:
     // ITfEditSession
     STDMETHODIMP DoEditSession(TfEditCookie ec)
     {
-        // Step 1: End composition if active
+        // 标准 IME 提交语义: 把最终上屏文字 SetText 到 composition range 后再
+        // EndComposition, 让宿主应用通过 OnEndComposition 看到的 range 内容就是
+        // 上屏文字, 与微软拼音/搜狗/Rime 一致。
+        //
+        // 历史实现 (SetText("") + EndComposition + InsertTextAtSelection) 等价于
+        // "IME 取消了 composition + 旁路插入了一段普通文本", 跟打/统计类应用会
+        // 把这次上屏误判为"非 IME 输入", 影响正确率统计。原子性由单一 EditSession
+        // 保证 (历史 02a753f 修的浏览器异步竞态), 与此次模式调整正交。
         if (_pComposition != nullptr)
         {
+            BOOL committedViaComposition = FALSE;
             ITfRange* pRange = nullptr;
             if (SUCCEEDED(_pComposition->GetRange(&pRange)))
             {
-                pRange->SetText(ec, 0, L"", 0);
+                // 把 composition range 内容替换为最终文字; _text 为空则等价于清空。
+                pRange->SetText(ec, TF_ST_CORRECTION, _text.c_str(), (LONG)_text.length());
+                // 光标定位到插入文本之后, 作为后续输入起点。
+                pRange->Collapse(ec, TF_ANCHOR_END);
+                TF_SELECTION sel = {};
+                sel.range = pRange;
+                sel.style.ase = TF_AE_NONE;
+                sel.style.fInterimChar = FALSE;
+                _pContext->SetSelection(ec, 1, &sel);
                 pRange->Release();
+                committedViaComposition = TRUE;
             }
             _pComposition->EndComposition(ec);
             _pComposition->Release();
             _pComposition = nullptr;
-            WIND_LOG_DEBUG(L"CCommitTextEditSession: Composition ended\n");
+            if (committedViaComposition)
+            {
+                _success = TRUE;
+                WIND_LOG_DEBUG(L"CCommitTextEditSession: SetText + EndComposition committed\n");
+                return S_OK;
+            }
+            // GetRange 失败 (极少): composition 已结束但文字未写入, fallthrough
+            // 到 InsertTextAtSelection 兜底, 避免静默丢字。
+            WIND_LOG_DEBUG(L"CCommitTextEditSession: GetRange failed, falling back to InsertTextAtSelection\n");
         }
 
-        // Step 2: Insert text at current selection
+        // 无 active composition 的回退路径 (鼠标上屏 / 上述 GetRange 失败兜底): 走 InsertTextAtSelection。
         if (!_text.empty())
         {
             ITfInsertAtSelection* pInsertAtSel = nullptr;
@@ -194,7 +219,7 @@ public:
         }
 
         _success = TRUE;
-        WIND_LOG_DEBUG(L"CCommitTextEditSession: Text committed successfully\n");
+        WIND_LOG_DEBUG(L"CCommitTextEditSession: Text committed via InsertTextAtSelection fallback\n");
         return S_OK;
     }
 
@@ -539,22 +564,35 @@ public:
         WIND_LOG_DEBUG_FMT(L"InsertAndCompose: insert='%s', newComp='%s'\n",
                      _insertText.c_str(), _newComposition.c_str());
 
-        // 0. End old composition if present (atomically in same EditSession)
+        // 0. End old composition (if present) — 与 CCommitTextEditSession 一致采用
+        // "SetText(最终文字) + EndComposition" 模式, 让宿主感知到一次完整 IME 上屏
+        // 而非"取消 composition + 旁路 Insert"。光标自动落在插入文字之后, 作为新
+        // composition 的起点。原子性由单一 EditSession 保证, 浏览器异步竞态修复不
+        // 受影响 (历史 02a753f)。
+        bool insertedViaOldComposition = false;
         if (_pOldComposition != nullptr)
         {
             ITfRange* pRange = nullptr;
             if (SUCCEEDED(_pOldComposition->GetRange(&pRange)))
             {
-                pRange->SetText(ec, 0, L"", 0);
+                // _insertText 为空也允许 (语义=清空旧 composition 后另起新 composition)。
+                pRange->SetText(ec, TF_ST_CORRECTION, _insertText.c_str(), (LONG)_insertText.length());
+                pRange->Collapse(ec, TF_ANCHOR_END);
+                TF_SELECTION sel = {};
+                sel.range = pRange;
+                sel.style.ase = TF_AE_NONE;
+                sel.style.fInterimChar = FALSE;
+                _pContext->SetSelection(ec, 1, &sel);
                 pRange->Release();
+                insertedViaOldComposition = true;
             }
             _pOldComposition->EndComposition(ec);
             _pOldComposition->Release();
             _pOldComposition = nullptr;
-            WIND_LOG_DEBUG(L"InsertAndCompose: Old composition ended\n");
+            WIND_LOG_DEBUG(L"InsertAndCompose: Old composition ended via SetText + EndComposition\n");
         }
 
-        // 1. Get current selection to insert text there
+        // 1. Get current selection to anchor new composition
         TF_SELECTION tfSelection;
         ULONG cFetched;
         if (FAILED(_pContext->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &tfSelection, &cFetched)) || cFetched != 1)
@@ -563,8 +601,9 @@ public:
             return E_FAIL;
         }
 
-        // 2. Insert the final text at current position
-        if (!_insertText.empty())
+        // 2. 仅在无旧 composition 的回退路径下才需要在 selection 处插入文字
+        // (旧 composition 路径已经在第 0 步通过 SetText 写入并把光标移到了文本末)。
+        if (!insertedViaOldComposition && !_insertText.empty())
         {
             hr = tfSelection.range->SetText(ec, 0, _insertText.c_str(), (LONG)_insertText.length());
             if (FAILED(hr))
@@ -573,7 +612,7 @@ public:
                 tfSelection.range->Release();
                 return hr;
             }
-            WIND_LOG_DEBUG(L"InsertAndCompose: Text inserted successfully\n");
+            WIND_LOG_DEBUG(L"InsertAndCompose: Text inserted at selection (fallback path)\n");
 
             // Collapse range to end (after inserted text)
             tfSelection.range->Collapse(ec, TF_ANCHOR_END);
