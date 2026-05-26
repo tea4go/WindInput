@@ -584,6 +584,70 @@ func (c *BinaryCodec) EncodeStatePush(chineseMode, fullWidth, chinesePunct, tool
 	return result
 }
 
+// EncodeActivationStatusPush encodes an activation status push (CMD_ACTIVATION_STATUS_PUSH).
+//
+// 这是 IMEActivated / FocusGained 异步化后的「状态回包」。bridge handler 对原同步命令立即
+// 回 Ack，HandleIMEActivated/HandleFocusGained 在 goroutine 完成后通过 push pipe 推送本命令。
+//
+// 与 EncodeStatePush 的关键区别：StatePush 是 hotkey 不变时的轻量广播（hotkey 字段全 0），
+// ActivationStatusPush 是握手回包，**必须**携带完整状态：hotkeys + hostRenderAvail，
+// 让 C++ 端能据此完成 _SyncStateFromResponse + _EnsureHostRenderSetup 全套同步动作。
+//
+// 载荷格式与 EncodeStatusUpdateEx 完全一致，只是 command 字段为 CmdActivationStatusPush。
+func (c *BinaryCodec) EncodeActivationStatusPush(chineseMode, fullWidth, chinesePunct, toolbarVisible, capsLock, hostRenderAvail bool,
+	keyDownHotkeys, keyUpHotkeys []uint32, iconLabel string) []byte {
+
+	var flags uint32
+	if chineseMode {
+		flags |= StatusChineseMode
+	}
+	if fullWidth {
+		flags |= StatusFullWidth
+	}
+	if chinesePunct {
+		flags |= StatusChinesePunct
+	}
+	if toolbarVisible {
+		flags |= StatusToolbarVisible
+	}
+	if capsLock {
+		flags |= StatusCapsLock
+	}
+	if hostRenderAvail {
+		flags |= StatusHostRenderAvail
+	}
+
+	keyDownCount := uint32(len(keyDownHotkeys))
+	keyUpCount := uint32(len(keyUpHotkeys))
+	labelBytes := []byte(iconLabel)
+
+	payloadLen := uint32(12 + (keyDownCount+keyUpCount)*4 + uint32(len(labelBytes)))
+	header := c.EncodeHeader(CmdActivationStatusPush, payloadLen)
+
+	statusHeader := make([]byte, 12)
+	binary.LittleEndian.PutUint32(statusHeader[0:4], flags)
+	binary.LittleEndian.PutUint32(statusHeader[4:8], keyDownCount)
+	binary.LittleEndian.PutUint32(statusHeader[8:12], keyUpCount)
+
+	hotkeys := make([]byte, (keyDownCount+keyUpCount)*4)
+	offset := 0
+	for _, h := range keyDownHotkeys {
+		binary.LittleEndian.PutUint32(hotkeys[offset:offset+4], h)
+		offset += 4
+	}
+	for _, h := range keyUpHotkeys {
+		binary.LittleEndian.PutUint32(hotkeys[offset:offset+4], h)
+		offset += 4
+	}
+
+	result := make([]byte, 0, HeaderSize+payloadLen)
+	result = append(result, header...)
+	result = append(result, statusHeader...)
+	result = append(result, hotkeys...)
+	result = append(result, labelBytes...)
+	return result
+}
+
 // EncodeHostRenderSetup encodes a host render setup response (CMD_HOST_RENDER_SETUP)
 // Contains shared memory name, event name, and max buffer size
 func (c *BinaryCodec) EncodeHostRenderSetup(setup *HostRenderSetupPayload) []byte {

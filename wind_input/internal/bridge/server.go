@@ -334,23 +334,49 @@ func (s *Server) handleClient(conn net.Conn, clientID int) uint32 {
 			continue
 		}
 
+		// Activation commands (IMEActivated / FocusGained) 走两段式异步化：
+		//
+		// 1. processRequest 立即返回（仅做 active 状态字段更新，无任何 handler 调用、
+		//    无任何跨进程 shell 调用）。若 C++ 端走 sync 形态，这一步会把 Ack 写回去；
+		//    若走 async 形态（当前 wind_tsf 已切换到此），跳过写回。
+		//    无论哪种形态，C++ 端的同步 ReceiveResponse 都不会再阻塞「等 Go 完成 handler」，
+		//    explorer.exe 等宿主 UI 线程的环形等待被切断。
+		//
+		// 2. 第二段：在本 goroutine 内同步调用 HandleIMEActivated / HandleFocusGained，
+		//    完成后通过 push pipe 推送 CmdActivationStatusPush（C++ 端 AsyncReader 收到
+		//    后 Post 到 TSF 线程做 _SyncStateFromResponse + _EnsureHostRenderSetup）。
+		//
+		// 为什么 isActivation 不再根据 isAsync 过滤：activation 命令的 handler 调用是
+		// 协议契约的一部分（工具栏显示、LangBar 状态同步都在 handler 内完成）。无论 C++
+		// 端选 sync 还是 async 发送，handler 必须执行；只有「是否回 Ack」会随 isAsync 变化。
+		//
+		// 为什么保持在同一 handleClient goroutine 而不是 spawn 新 goroutine：
+		//   - 单 client 的命令在 bridge pipe 上天然串行；同 goroutine 内联执行可天然
+		//     保证 IMEActivated → IMEDeactivated 顺序正确，无需额外锁。
+		//   - 本 goroutine 此时已经把 Ack 写出（或直接放行），C++ 端可继续派发新命令；
+		//     这些新命令会在 handleClient 下一轮 ReadHeader 时排队读取。
+		isActivation := header.Command == ipc.CmdIMEActivated || header.Command == ipc.CmdFocusGained
+
 		// Process request with timeout
 		response := s.processRequestWithTimeout(header, payload, clientID, processID)
 
-		// Skip response for async requests
-		if isAsync {
+		// Write response unless this is an async request.
+		if !isAsync {
+			if err := s.codec.WriteMessage(conn, response); err != nil {
+				if isPipeClosed(err) {
+					s.logger.Debug("Bridge pipe closed by peer during response write", "clientID", clientID, "error", err)
+				} else {
+					s.logger.Error("Failed to write response to Bridge", "clientID", clientID, "error", err)
+				}
+				break
+			}
+		} else {
 			s.logger.Debug("Async request processed, no response sent", "clientID", clientID, "command", fmt.Sprintf("0x%04X", header.Command))
-			continue
 		}
 
-		// Write response
-		if err := s.codec.WriteMessage(conn, response); err != nil {
-			if isPipeClosed(err) {
-				s.logger.Debug("Bridge pipe closed by peer during response write", "clientID", clientID, "error", err)
-			} else {
-				s.logger.Error("Failed to write response to Bridge", "clientID", clientID, "error", err)
-			}
-			break
+		// Activation 两段式第二段：handler 调用 + push, 不受 isAsync 影响。
+		if isActivation {
+			s.runActivationHandlerAndPush(header, clientID, processID)
 		}
 	}
 

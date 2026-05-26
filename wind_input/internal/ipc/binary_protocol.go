@@ -37,15 +37,22 @@ const (
 
 // Downstream commands (Go -> C++)
 const (
-	CmdAck                  uint16 = 0x0001 // Simple acknowledgment
-	CmdPassThrough          uint16 = 0x0002 // Key not handled, pass to system
-	CmdCommitText           uint16 = 0x0101 // Commit text to application
-	CmdUpdateComposition    uint16 = 0x0102 // Update composition (preedit)
-	CmdClearComposition     uint16 = 0x0103 // Clear composition
-	CmdCommitResult         uint16 = 0x0105 // Commit result (response to COMMIT_REQUEST)
-	CmdStatusUpdate         uint16 = 0x0202 // Full status update
-	CmdStatePush            uint16 = 0x0206 // State push (broadcast to all clients)
-	CmdServiceReady         uint16 = 0x0207 // Go service connected push pipe, TSF should sync state
+	CmdAck               uint16 = 0x0001 // Simple acknowledgment
+	CmdPassThrough       uint16 = 0x0002 // Key not handled, pass to system
+	CmdCommitText        uint16 = 0x0101 // Commit text to application
+	CmdUpdateComposition uint16 = 0x0102 // Update composition (preedit)
+	CmdClearComposition  uint16 = 0x0103 // Clear composition
+	CmdCommitResult      uint16 = 0x0105 // Commit result (response to COMMIT_REQUEST)
+	CmdStatusUpdate      uint16 = 0x0202 // Full status update
+	CmdStatePush         uint16 = 0x0206 // State push (broadcast to all clients, hotkeys-less)
+	CmdServiceReady      uint16 = 0x0207 // Go service connected push pipe, TSF should sync state
+	// CmdActivationStatusPush 是 CmdIMEActivated / CmdFocusGained 异步化后的「状态回包」：
+	// bridge handler 立即对原同步命令回 Ack，HandleIMEActivated/HandleFocusGained 在 goroutine
+	// 中执行；完成后通过 push pipe 推送本命令，载荷格式与 CmdStatusUpdate 一致（含 hotkeys
+	// + hostRenderAvail + iconLabel），C++ 端在 AsyncReader 收到后 Post 到 TSF 线程做
+	// _SyncStateFromResponse + _EnsureHostRenderSetup。区别于 CmdStatePush：本命令是
+	// activation 握手的回包，必须携带完整状态；CmdStatePush 是状态变更广播，hotkeys 不变所以不带。
+	CmdActivationStatusPush uint16 = 0x020C
 	CmdSyncHotkeys          uint16 = 0x0301 // Sync hotkey whitelist
 	CmdSyncConfig           uint16 = 0x0303 // Sync config key/value (generic)
 	CmdCommitTextWithCursor uint16 = 0x0106 // Commit text with cursor offset

@@ -348,6 +348,40 @@ func (s *Server) encodeStatePush(status *StatusUpdateData) []byte {
 	)
 }
 
+// PushActivationStatusToActiveClient pushes a full activation status to the active TSF client.
+//
+// IMEActivated / FocusGained 异步化后的状态回包通道。bridge handler 在收到原同步命令时
+// 立即 EncodeAck() 返回，HandleIMEActivated / HandleFocusGained 在 goroutine 中执行，
+// 完成后调用本方法把完整状态（含 hotkeys 与 hostRenderAvail）推到 active client；
+// C++ 端 AsyncReader 看到 CmdActivationStatusPush 后 Post 到 TSF 线程完成 mirror 同步。
+//
+// 与 PushStateToActiveClient 的区别：本函数走 CmdActivationStatusPush 命令、载荷
+// 含 hotkeys + hostRenderAvail，是 activation 握手的等价物；后者走 CmdStatePush，
+// 用于"焦点不变、仅状态变化"场景（hotkeys 不变所以不带）。
+//
+// processID 必须传入：用于查 hostRender 白名单决定 hostRenderAvail flag。
+func (s *Server) PushActivationStatusToActiveClient(status *StatusUpdateData, processID uint32) {
+	if status == nil {
+		return
+	}
+	hostRenderAvail := false
+	if s.hostRender != nil && processID != 0 {
+		hostRenderAvail = s.hostRender.IsProcessWhitelisted(processID)
+	}
+	encoded := s.codec.EncodeActivationStatusPush(
+		status.ChineseMode,
+		status.FullWidth,
+		status.ChinesePunctuation,
+		status.ToolbarVisible,
+		status.CapsLock,
+		hostRenderAvail,
+		status.KeyDownHotkeys,
+		status.KeyUpHotkeys,
+		status.IconLabel,
+	)
+	s.pushToActiveClient(encoded, "activation")
+}
+
 // PushCommitTextToActiveClient sends a commit text command to the active TSF client only
 // This is used for proactive text insertion (e.g., when user clicks a candidate with mouse)
 // For security, we only send to the client that currently has focus, not to all clients

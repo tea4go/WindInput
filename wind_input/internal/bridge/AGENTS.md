@@ -15,9 +15,9 @@ Named Pipe IPC 服务端，负责与 C++ TSF（文本服务框架）桥接层进
 | File | Description |
 |------|-------------|
 | `protocol.go` | 协议类型定义（ResponseType、KeyEventData、StatusUpdateData 等） |
-| `server.go` | Named Pipe 服务端主体（基于 go-winio overlapped I/O；bridge pipe 走请求-响应 RPC，push pipe 走单向广播；net.Conn 接口统一读写） |
-| `server_handler.go` | 消息分发：解码二进制消息并路由到 MessageHandler 各方法 |
-| `server_push.go` | 推送管道管理（per-client outbound channel + 单 writer goroutine + phase-2 死链监听；所有 push 仅触达 active client，`pushToActiveClient` 是统一入口） |
+| `server.go` | Named Pipe 服务端主体（基于 go-winio overlapped I/O；bridge pipe 走请求-响应 RPC，push pipe 走单向广播；net.Conn 接口统一读写）；handleClient 对 `CmdIMEActivated` / `CmdFocusGained` 走「先 Ack 后处理」两段式：第一段 processRequest 立即返回 Ack 释放 C++ 端同步等待，第二段在同 goroutine 内调用 `runActivationHandlerAndPush` 执行 handler 并通过 push pipe 推送状态 |
+| `server_handler.go` | 消息分发：解码二进制消息并路由到 MessageHandler 各方法；`runActivationHandlerAndPush`、`applyFocusGainedCaret` 实现 activation 异步化的第二段；`PushActivationStatusToActiveClient` 把完整状态以 `CmdActivationStatusPush` 推回 C++ |
+| `server_push.go` | 推送管道管理（per-client outbound channel + 单 writer goroutine + phase-2 死链监听；所有 push 仅触达 active client，`pushToActiveClient` 是统一入口）；`PushActivationStatusToActiveClient` 用于 IMEActivated/FocusGained 异步化的状态回包（含 hotkeys + hostRenderAvail） |
 | `host_render.go` | `HostRenderManager`：管理白名单进程的宿主渲染状态；`HostRenderState` 持有每个进程的共享内存引用；通过 `OpenProcess`/`QueryFullProcessImageNameW` 识别进程名称 |
 | `shared_memory.go` | `SharedMemory`：命名共享内存 + 命名事件对；`WriteFrame` 将 RGBA→BGRA 转换后写入位图并信令通知；`WriteHide` 发送隐藏命令；安全描述符包含 AppContainer 低完整性标记（`S:(ML;;NW;;;LW)`）以支持 UWP 进程访问 |
 
@@ -39,7 +39,9 @@ Named Pipe IPC 服务端，负责与 C++ TSF（文本服务框架）桥接层进
 
 ### 红线：bridge handler 同步路径禁止「跨进程 Win32 / Shell 调用」
 
-bridge handler goroutine 处理 `CmdIMEActivated` / `CmdFocusGained` / `CmdCaretUpdate` / `CmdHostRenderRequest` 等同步命令时，**调用方（C++ TSF DLL）正阻塞在宿主进程的 UI 线程上等响应**（`READ_TIMEOUT_MS = 1500ms`，见 `wind_tsf/include/IPCClient.h`）。在这条路径上 Go 端**严禁**做以下调用：
+bridge handler goroutine 处理仍走同步响应的命令（`CmdHostRenderRequest`、`CmdToggleMode`、`CmdSystemModeSwitch`、`CmdMenuCommand`、`CmdKeyEvent`、`CmdCommitRequest` 等）时，**调用方（C++ TSF DLL）正阻塞在宿主进程的 UI 线程上等响应**（`READ_TIMEOUT_MS = 1500ms`，见 `wind_tsf/include/IPCClient.h`）。在这条路径上 Go 端**严禁**做以下调用：
+
+注：`CmdIMEActivated` / `CmdFocusGained` 已异步化（先 Ack 后处理，见 `server.go` 中的 `isActivation` 分支与 `runActivationHandlerAndPush`），handler 内部允许跨进程调用——但 **handler 仍在 handleClient goroutine 内执行**，会延迟本 client 的后续命令读取。重 IO/慢调用仍应单独 spawn goroutine 处理。
 
 - `SHQueryUserNotificationState`、`SHGetKnownFolderPath` 等 shell32 跨进程 API
 - 对 `GetForegroundWindow()` 返回的 hwnd 再做 `SendMessage` / `SendMessageTimeout`
@@ -53,6 +55,7 @@ bridge handler goroutine 处理 `CmdIMEActivated` / `CmdFocusGained` / `CmdCaret
 - 事件驱动缓存：用 ShellHook (`HSHELL_WINDOWENTERFULLSCREEN/EXIT`) 或 WinEventHook 在 UI 线程被动收事件，同步路径只读 cache。
 - 把工作丢到独立 goroutine：`go func() { ... }()` 异步执行，立即返回 ACK。
 - 已有正例：`HandleIMEActivated` 中 push pipe 写入用 `go bridgeServer.PushEnglishPairConfigToActiveClient(...)`，注释见 `coordinator/handle_lifecycle.go:786-792`。
+- 已有正例：activation 命令的两段式异步化（`server.go::handleClient` 的 `isActivation` 分支 + `runActivationHandlerAndPush` + `CmdActivationStatusPush`），handler 在 Ack 之后才执行，且状态通过 push pipe 回送。
 
 **自动检测**：`processRequestWithTimeout` 内置 `slowRequestThreshold = 50ms` 慢请求 WARN。新增同步路径调用后看到 `Slow bridge request` 日志 = 命中此红线，立刻回查。
 

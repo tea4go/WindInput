@@ -109,7 +109,10 @@ func (s *Server) processRequest(header *ipc.IpcHeader, payload []byte, clientID 
 		// DLL 在 OnSetFocus 里已经过 _hasTextInputContext / XamlIsland gate
 		// 过滤掉无文本输入上下文的 DocMgr，所以这里到达即可信。
 		s.markFocused(clientID, processID)
-		return s.handleFocusGained(payload, clientID, processID)
+		// 异步化第一段：只做 caret 字段同步（纯字段写入，第一次按键前必须就绪）+ 立即回 Ack。
+		// 真正的 HandleFocusGained 由 handleClient 在 Ack 已写出后内联触发，状态走 push pipe。
+		s.applyFocusGainedCaret(payload, clientID)
+		return s.codec.EncodeAck()
 
 	case ipc.CmdFocusLost:
 		s.markUnfocused(clientID)
@@ -124,10 +127,11 @@ func (s *Server) processRequest(header *ipc.IpcHeader, payload []byte, clientID 
 	case ipc.CmdIMEActivated:
 		s.logger.Info("IME activated (user switched back to this IME)", "clientID", clientID, "processID", processID)
 		s.markFocused(clientID, processID)
-		statusUpdate := s.handler.HandleIMEActivated(processID)
-		if statusUpdate != nil {
-			return s.encodeStatusUpdateWithHostRender(statusUpdate, processID)
-		}
+		// 异步化（见 bridge/AGENTS.md 红线条款）：本 case 仅做 active 状态字段更新；
+		// 真正的 HandleIMEActivated 调用由 handleClient 在 Ack 已写出后内联触发
+		// （见 handleClient 中 isActivationCommand 分支），通过 PushActivationStatusToActiveClient
+		// 把状态以 CmdActivationStatusPush 回送 C++ 端。
+		// 进入此 case 时 activeProcessID / activeToken 已在 processRequest 顶部完成更新。
 		return s.codec.EncodeAck()
 
 	case ipc.CmdIMEDeactivated:
@@ -261,29 +265,63 @@ func (s *Server) handleKeyEvent(payload []byte, clientID int) []byte {
 	}
 }
 
-func (s *Server) handleFocusGained(payload []byte, clientID int, processID uint32) []byte {
-	// Note: activeProcessID is already updated in processRequest() for all relevant commands
+// applyFocusGainedCaret 在 CmdFocusGained 同步路径上仅做 caret 字段写入（无 shell 调用）。
+// 与 HandleFocusGained 不同：HandleCaretUpdate 是纯字段同步，第一次按键的工具栏定位依赖它，
+// 因此保留在 Ack 之前；HandleFocusGained 可能触发工具栏显示/状态聚合，搬到 Ack 之后。
+func (s *Server) applyFocusGainedCaret(payload []byte, clientID int) {
+	if len(payload) < 12 {
+		return
+	}
+	caretPayload, err := s.codec.DecodeCaretPayload(payload)
+	if err != nil {
+		return
+	}
+	s.logger.Debug("Focus gained with caret", "clientID", clientID,
+		"x", caretPayload.X, "y", caretPayload.Y)
+	s.handler.HandleCaretUpdate(CaretData{
+		X:                 int(caretPayload.X),
+		Y:                 int(caretPayload.Y),
+		Height:            int(caretPayload.Height),
+		CompositionStartX: int(caretPayload.CompositionStartX),
+		CompositionStartY: int(caretPayload.CompositionStartY),
+	})
+}
 
-	// Parse optional caret data
-	if len(payload) >= 12 {
-		caretPayload, err := s.codec.DecodeCaretPayload(payload)
-		if err == nil {
-			s.logger.Debug("Focus gained with caret", "x", caretPayload.X, "y", caretPayload.Y)
-			s.handler.HandleCaretUpdate(CaretData{
-				X:                 int(caretPayload.X),
-				Y:                 int(caretPayload.Y),
-				Height:            int(caretPayload.Height),
-				CompositionStartX: int(caretPayload.CompositionStartX),
-				CompositionStartY: int(caretPayload.CompositionStartY),
-			})
+// runActivationHandlerAndPush 是 IMEActivated / FocusGained 异步化的第二段（见 server.go::handleClient）：
+// Ack 已写出后，在 handleClient 同 goroutine 内做真正的 handler 调用，结果通过 push pipe
+// 以 CmdActivationStatusPush 回送 C++ 端。
+//
+// 留在 handleClient 同 goroutine（而非 spawn 新 goroutine）有两个理由：
+//  1. 同 client 上后续的 IMEDeactivated / FocusLost 必须排在本次 activation 之后处理，
+//     单 goroutine 串行天然保证顺序，免去额外锁。
+//  2. C++ 端已经收到 Ack 后可继续派发新命令；它们会在 handleClient 下一轮 ReadHeader
+//     时排队读取，对 C++ 端体感无影响。
+func (s *Server) runActivationHandlerAndPush(header *ipc.IpcHeader, clientID int, processID uint32) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("PANIC in runActivationHandlerAndPush",
+				"clientID", clientID, "command", fmt.Sprintf("0x%04X", header.Command),
+				"panic", fmt.Sprintf("%v", r), "stack", string(debug.Stack()))
 		}
+	}()
+
+	var status *StatusUpdateData
+	switch header.Command {
+	case ipc.CmdIMEActivated:
+		status = s.handler.HandleIMEActivated(processID)
+	case ipc.CmdFocusGained:
+		status = s.handler.HandleFocusGained(processID)
+	default:
+		s.logger.Error("runActivationHandlerAndPush: unexpected command", "command", fmt.Sprintf("0x%04X", header.Command))
+		return
 	}
 
-	statusUpdate := s.handler.HandleFocusGained(processID)
-	if statusUpdate != nil {
-		return s.encodeStatusUpdateWithHostRender(statusUpdate, processID)
+	if status == nil {
+		s.logger.Debug("Activation handler returned nil status, skipping push", "clientID", clientID, "command", fmt.Sprintf("0x%04X", header.Command))
+		return
 	}
-	return s.codec.EncodeAck()
+
+	s.PushActivationStatusToActiveClient(status, processID)
 }
 
 func (s *Server) handleCaretUpdate(payload []byte, clientID int) []byte {
@@ -510,25 +548,9 @@ func (s *Server) encodeStatusUpdate(status *StatusUpdateData) []byte {
 	)
 }
 
-// encodeStatusUpdateWithHostRender encodes a status update, adding the HOST_RENDER_AVAIL flag
-// if the process is whitelisted for host rendering.
-func (s *Server) encodeStatusUpdateWithHostRender(status *StatusUpdateData, processID uint32) []byte {
-	hostRenderAvail := false
-	if s.hostRender != nil && processID != 0 {
-		hostRenderAvail = s.hostRender.IsProcessWhitelisted(processID)
-	}
-	return s.codec.EncodeStatusUpdateEx(
-		status.ChineseMode,
-		status.FullWidth,
-		status.ChinesePunctuation,
-		status.ToolbarVisible,
-		status.CapsLock,
-		hostRenderAvail,
-		status.KeyDownHotkeys,
-		status.KeyUpHotkeys,
-		status.IconLabel,
-	)
-}
+// 注：原 encodeStatusUpdateWithHostRender 已移除。仅由 IMEActivated / FocusGained 的同步
+// 响应路径使用过，异步化后状态走 PushActivationStatusToActiveClient → EncodeActivationStatusPush。
+// EncodeStatusUpdateEx 仍由 PushActivationStatusToActiveClient 间接使用（在 server_push.go 中）。
 
 // handleHostRenderRequest handles CmdHostRenderRequest from DLL
 func (s *Server) handleHostRenderRequest(clientID int, processID uint32) []byte {
