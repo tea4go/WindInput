@@ -338,7 +338,11 @@ func main() {
 
 	// Initialize common chars table for filtering
 	commonCharsPath := filepath.Join(dataRoot, "schemas", "common_chars.txt")
-	dict.InitCommonCharsWithPath(commonCharsPath)
+	if err := dict.InitCommonCharsWithPath(commonCharsPath); err != nil {
+		// 文件缺失不致命：内置约 189 字 fallback 已足以维持基础过滤；但必须告警，
+		// 否则下次再被 INFO "count=189" 误导很难定位（首次安装/杀软隔离都会触发）
+		logger.Warn("Common chars file unreadable, falling back to builtin minimal set", "path", commonCharsPath, "error", err)
+	}
 	logger.Info("Common chars table initialized", "path", commonCharsPath, "count", dict.GetCommonCharCount())
 
 	// Early bridge server startup: create named pipe BEFORE heavy initialization.

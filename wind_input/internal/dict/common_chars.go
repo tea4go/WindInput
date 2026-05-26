@@ -3,6 +3,7 @@ package dict
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -24,65 +25,61 @@ var (
 const coreCommonChars = `的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情最何发成第见已于而被做或将之使等与由于可以我们他们这个那个什么怎么没有可能因为所以如果虽然但是而且或者不是就是只是不过还是因此然后这样那样这些那些自己什么为什么怎么样`
 
 // InitCommonChars 初始化通用汉字表
-// 优先从文件加载，失败则使用内置字表
+// 优先从默认路径加载，失败则使用内置字表（不返回错误，默认路径缺失视为预期场景）
 func InitCommonChars() {
 	commonCharOnce.Do(func() {
-		for _, char := range coreCommonChars {
-			if isCJKChar(char) {
-				commonCharMap[char] = true
-			}
-		}
-
-		// 尝试从文件加载完整字表
-		loadCommonCharsFromFile()
+		seedCoreCommonChars()
+		_ = loadCommonCharsFromFilePath(commonCharFile)
 	})
 }
 
 // InitCommonCharsWithPath 使用指定路径初始化
-func InitCommonCharsWithPath(path string) {
+// 当 path 非空且加载失败时返回错误，调用方可决定如何告警（仍会保留内置字表）
+func InitCommonCharsWithPath(path string) error {
+	var loadErr error
 	commonCharOnce.Do(func() {
-		for _, char := range coreCommonChars {
-			if isCJKChar(char) {
-				commonCharMap[char] = true
-			}
+		seedCoreCommonChars()
+		if path == "" {
+			loadErr = loadCommonCharsFromFilePath(commonCharFile)
+			return
 		}
-
-		// 从指定文件加载
-		if path != "" {
-			loadCommonCharsFromFilePath(path)
-		} else {
-			loadCommonCharsFromFile()
-		}
+		loadErr = loadCommonCharsFromFilePath(path)
 	})
+	return loadErr
 }
 
-// loadCommonCharsFromFile 从默认路径加载通用汉字表
-func loadCommonCharsFromFile() {
-	loadCommonCharsFromFilePath(commonCharFile)
+func seedCoreCommonChars() {
+	for _, char := range coreCommonChars {
+		if isCJKChar(char) {
+			commonCharMap[char] = true
+		}
+	}
 }
 
-// loadCommonCharsFromFilePath 从指定路径加载通用汉字表
-func loadCommonCharsFromFilePath(path string) {
+// loadCommonCharsFromFilePath 从指定路径加载通用汉字表，文件不可读时返回错误
+func loadCommonCharsFromFilePath(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
-		return // 文件不存在则使用内置字表
+		return fmt.Errorf("打开通用汉字表失败 %s: %w", path, err)
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		// 跳过注释和空行
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		// 每个字符都是一个通用字（含 CJK Extension-A U+3400–U+4DBF）
 		for _, char := range line {
 			if isCJKChar(char) {
 				commonCharMap[char] = true
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("读取通用汉字表失败 %s: %w", path, err)
+	}
+	return nil
 }
 
 // IsCommonChar 判断单个字符是否为通用规范汉字

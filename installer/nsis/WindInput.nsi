@@ -46,6 +46,7 @@ Var SavedStandardDir
 Var OldUninstallString
 Var DoUninstallOld
 Var QuietMode
+Var UpgradeMode   ; uninstaller 收到 /UPGRADE 时为 "1"：同步删除 data，不允许 REBOOTOK
 
 !if /FileExists "${BUILD_DIR}\wind_tsf.dll"
 !else
@@ -459,12 +460,21 @@ Function un.onInit
   StrCpy $CleanLocal ${BST_CHECKED}
   StrCpy $BackupToDesktop ${BST_CHECKED}
   StrCpy $KeepUserData "0"
+  StrCpy $UpgradeMode "0"
 
   ; 解析 /KEEP_USER_DATA 参数
   ${GetParameters} $0
   ${GetOptions} $0 "/KEEP_USER_DATA" $1
   IfErrors +2 0
     StrCpy $KeepUserData "1"
+
+  ; 解析 /UPGRADE 参数（由新版安装器在覆盖安装前传入）
+  ; 升级模式下必须同步删除 $INSTDIR\data 且不允许 REBOOTOK，
+  ; 避免新安装的 data 被旧 PendingFileRenameOperations 误删
+  ClearErrors
+  ${GetOptions} $0 "/UPGRADE" $1
+  IfErrors +2 0
+    StrCpy $UpgradeMode "1"
 
   ; 读取 datadir.conf 确定实际用户数据目录
   SetShellVarContext current
@@ -492,6 +502,40 @@ Function GenRandomSuffix
   System::Call "kernel32::GetTickCount()i .r5"
   IntFmt $RANDOM_SUFFIX "%u" $5
 FunctionEnd
+
+; WaitForProcessExit: 轮询等待指定进程退出
+;   Push <process_name>     ; 如 "wind_input.exe"
+;   Push <max_attempts>     ; 每次 Sleep 200ms；20 ≈ 4s，25 ≈ 5s
+;   Call WaitForProcessExit
+; 为什么需要：taskkill /F 返回时进程内核对象可能尚未释放（mmap、pipe handle 异步回收）。
+; 固定 Sleep 1000ms 在 EDR 干预或 mmap 较大时仍可能不够，新启动的同名进程会撞上文件占用。
+!macro _DefineWaitForProcessExit _prefix
+Function ${_prefix}WaitForProcessExit
+  Exch $1   ; max_attempts
+  Exch
+  Exch $0   ; process name
+  Push $2
+  Push $3
+
+  StrCpy $2 0
+${_prefix}wfpe_loop:
+  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq $0" /NH | findstr /I "$0" >nul'
+  Pop $3
+  StrCmp $3 "0" 0 ${_prefix}wfpe_done     ; findstr 退出 1 = 未找到 = 进程已退出
+  IntOp $2 $2 + 1
+  IntCmp $2 $1 ${_prefix}wfpe_timeout 0 ${_prefix}wfpe_timeout
+  Sleep 200
+  Goto ${_prefix}wfpe_loop
+${_prefix}wfpe_timeout:
+  DetailPrint "  警告：等待 $0 退出超时，继续后续步骤"
+${_prefix}wfpe_done:
+  Pop $3
+  Pop $2
+  Pop $0
+  Pop $1
+FunctionEnd
+!macroend
+!insertmacro _DefineWaitForProcessExit ""
 
 ; RenameViaCmdRen: rename using "cmd /c ren" (identical to install.bat).
 ;   $0 = full source path, $2 = new filename only (no path, ren syntax)
@@ -560,6 +604,8 @@ Function un.GenRandomSuffix
   System::Call "kernel32::GetTickCount()i .r5"
   IntFmt $RANDOM_SUFFIX "%u" $5
 FunctionEnd
+
+!insertmacro _DefineWaitForProcessExit "un."
 
 Function un.BackupIfLocked
   ClearErrors
@@ -684,7 +730,9 @@ Section "Install"
   StrCmp $DoUninstallOld "1" 0 install_skip_old_uninstall
 
 install_silent_uninstall_retry:
-  ExecWait '"$OldUninstallString" /S /KEEP_USER_DATA' $1
+  ; /UPGRADE：要求旧 uninstaller 同步删除 $INSTDIR\data（不允许 REBOOTOK），
+  ; 避免旧 data 残留与新版本不匹配；删除失败则旧 uninstaller 会返回非零，由下方循环处理
+  ExecWait '"$OldUninstallString" /S /KEEP_USER_DATA /UPGRADE' $1
   ${If} $1 != 0
     MessageBox MB_ABORTRETRYIGNORE|MB_ICONEXCLAMATION \
       "旧版本卸载失败（错误码：$1）。$\r$\n$\r$\n中止 = 取消安装$\r$\n重试 = 重新卸载$\r$\n忽略 = 跳过继续安装" \
@@ -707,7 +755,16 @@ install_skip_old_uninstall:
   Pop $0
   nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
   Pop $0
-  Sleep 1000
+  ; 轮询等待 wind_input 真正退出（mmap/pipe handle 异步回收）
+  Push "wind_input.exe"
+  Push 25
+  Call WaitForProcessExit
+  Push "wind_setting.exe"
+  Push 15
+  Call WaitForProcessExit
+  Push "wind_portable.exe"
+  Push 15
+  Call WaitForProcessExit
   Goto install_stop_procs_done
 
 install_stop_portable_only:
@@ -715,7 +772,9 @@ install_stop_portable_only:
   DetailPrint "正在停止旧便携进程..."
   nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_portable.exe >nul 2>&1'
   Pop $0
-  Sleep 500
+  Push "wind_portable.exe"
+  Push 15
+  Call WaitForProcessExit
 
 install_stop_procs_done:
 
@@ -937,8 +996,27 @@ install_standard_mode:
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "WindInput" '"$INSTDIR\wind_input.exe"'
 
   ; --- Step 9: Pre-start service (background, so dictionary can be pre-loaded) ---
+  ; 预启动前等待 data\schemas 目录可枚举：覆盖安装时 Defender 实时扫描 + 旧进程 mmap 回收
+  ; 可能让新写入的 schemas 短时间内被其他进程看到 PATH_NOT_FOUND，造成服务卡在 initializing。
+  ; 这里以 *.schema.yaml 是否能 FindFirst 到为就绪判据（与 Go 端 os.ReadDir 行为一致）。
+  DetailPrint "等待 schemas 目录就绪..."
+  StrCpy $0 0
+install_prestart_wait_loop:
+  ClearErrors
+  FindFirst $1 $2 "$INSTDIR\data\schemas\*.schema.yaml"
+  FindClose $1
+  StrCmp $2 "" 0 install_prestart_ready
+  IntOp $0 $0 + 1
+  IntCmp $0 30 install_prestart_timeout 0 install_prestart_timeout   ; 30 * 200ms = 6s
+  Sleep 200
+  Goto install_prestart_wait_loop
+install_prestart_timeout:
+  DetailPrint "  警告：schemas 目录未在预期时间内就绪，跳过预启动；下次开机由 Run 键启动"
+  Goto install_prestart_skip
+install_prestart_ready:
   DetailPrint "正在预启动输入法服务..."
   Exec '"$INSTDIR\wind_input.exe"'
+install_prestart_skip:
 
   DetailPrint "正在创建快捷方式..."
   CreateDirectory "$SMPROGRAMS\清风输入法"
@@ -987,10 +1065,19 @@ Section "Uninstall"
   nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_setting.exe >nul 2>&1'
   Pop $0 ; discard nsExec exit code
   nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_portable.exe >nul 2>&1'
-  Pop $0 ; discard nsExec exit code
+  Pop $0
   nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
-  Pop $0 ; discard nsExec exit code
-  Sleep 1000
+  Pop $0
+  ; 轮询等待真正退出（升级模式下后续要立刻删除 $INSTDIR\data，必须确保 mmap 已释放）
+  Push "wind_input.exe"
+  Push 25
+  Call un.WaitForProcessExit
+  Push "wind_setting.exe"
+  Push 15
+  Call un.WaitForProcessExit
+  Push "wind_portable.exe"
+  Push 15
+  Call un.WaitForProcessExit
 
   ; --- Step 2: Unregister input method and DLL ---
   DetailPrint "正在从系统输入法列表移除..."
@@ -1061,7 +1148,23 @@ uninst_portable_done:
 
   ; --- Step 4: Remove remaining files and directories ---
   Delete /REBOOTOK "$INSTDIR\uninstall.exe"
+
+  ; --- data 目录删除 ---
+  ; 升级模式（/UPGRADE）：必须同步删除，禁用 REBOOTOK；删除失败立刻 SetErrorLevel 并 Abort，
+  ; 由安装器的 MB_ABORTRETRYIGNORE 决定重试/取消，避免新装的 data 被 PendingFileRenameOperations 误删。
+  ; 完整卸载：保留原 REBOOTOK 语义。
+  StrCmp $UpgradeMode "1" uninst_data_upgrade uninst_data_normal
+uninst_data_upgrade:
+  DetailPrint "升级模式：同步删除 data 目录..."
+  RMDir /r "$INSTDIR\data"
+  IfFileExists "$INSTDIR\data\*.*" 0 uninst_data_done
+    DetailPrint "  错误：data 目录无法同步删除（可能有文件被占用）"
+    SetErrorLevel 4
+    Abort
+uninst_data_normal:
   RMDir /r /REBOOTOK "$INSTDIR\data"
+uninst_data_done:
+
   ; Cleanup .old_* and .bak files
   FindFirst $0 $1 "$INSTDIR\*.old_*"
 uninst_cleanup_old_loop:
@@ -1079,7 +1182,11 @@ uninst_cleanup_bak_loop:
   Goto uninst_cleanup_bak_loop
 uninst_cleanup_bak_end:
   FindClose $0
-  RMDir /r /REBOOTOK "$INSTDIR"
+
+  ; 升级模式跳过 RMDir $INSTDIR：新安装器接下来会复用同一目录写入新文件，
+  ; 若此处加上 /REBOOTOK 会让新装的二进制在下次重启被 PendingFileRenameOperations 静默删除
+  StrCmp $UpgradeMode "1" +2 0
+    RMDir /r /REBOOTOK "$INSTDIR"
 
   ; --- Step 5: Shortcuts and cache ---
   DetailPrint "正在删除快捷方式..."

@@ -30,7 +30,7 @@
 | `shadow.go` | `ShadowLayer`：pin(position)+delete 架构——`pinned` 列表按位置固定词条，`deleted` 列表隐藏词条；YAML 序列化 |
 | `user_dict.go` | `UserDict`：用户词频学习，按权重排序，持久化为 JSON |
 | `adapter.go` | 引擎词库适配器（将 binformat Reader 适配为词库层） |
-| `common_chars.go` | 通用规范汉字表加载：`InitCommonChars`（从默认路径加载）、`InitCommonCharsWithPath`（指定路径）；内置约 2500 个核心常用字作为 fallback；`IsCommonChar`/`IsStringCommon` 判断字符/字符串是否全部为通用规范汉字；`AddCommonChars` 运行时扩展；`ResetCommonCharsForTesting` 测试专用重置 |
+| `common_chars.go` | 通用规范汉字表加载：`InitCommonChars`（从默认路径加载，错误吞掉）、`InitCommonCharsWithPath(path) error`（指定路径，加载失败返回 error 但仍保留内置 fallback）；内置约 189 个核心常用字作为 fallback；`IsCommonChar`/`IsStringCommon` 判断字符/字符串是否全部为通用规范汉字；`AddCommonChars` 运行时扩展；`ResetCommonCharsForTesting` 测试专用重置 |
 | `loader.go` | 词库加载工具函数 |
 | `dict.go` | 保留文件（原 Dict 接口定义，部分接口已迁移，修改前先确认引用） |
 | `english_dict.go` | 英文词库：`LoadRimeDir` 自动构建/加载 `en.wdb`（mmap，不占堆），wdb 过期时从 Rime 源文件重建；`Lookup`/`LookupPrefix` 优先走 wdbReader，失败时回退 Trie |

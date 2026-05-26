@@ -47,7 +47,7 @@ func initCommonCharsForTest(dictPath string) {
 
 	// 重置并重新初始化
 	dict.ResetCommonCharsForTesting()
-	dict.InitCommonCharsWithPath(commonPath)
+	_ = dict.InitCommonCharsWithPath(commonPath)
 }
 
 // TestCodetableBasicLookup 测试基本的码表编码查询
