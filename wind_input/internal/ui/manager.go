@@ -269,6 +269,11 @@ type Manager struct {
 	// Command channel for async UI updates
 	cmdCh chan uicmdItem
 
+	// Event channel for async UI events (UI → coordinator/forwarder).
+	// 由 SetXxxCallback 内部包装时同时推一份 uicmd.Event, 供 macOS forwarder 订阅。
+	// Win 端的 callback 触发链路不变 (双流并行)。
+	eventCh chan uicmd.Event
+
 	// Event to wake up the message loop when commands are available
 	cmdEvent windows.Handle
 
@@ -355,6 +360,7 @@ func NewManager(logger *slog.Logger) *Manager {
 		logger:        logger,
 		readyCh:       make(chan struct{}),
 		cmdCh:         make(chan uicmdItem, 100), // Buffered channel to avoid blocking IPC
+		eventCh:       make(chan uicmd.Event, 100),
 		cmdEvent:      event,
 		globalHotkeys: &globalHotkeyState{logger: logger},
 		// 注意：statusIndicator* 和 tooltipDelay 的默认值统一由 config.DefaultConfig() 提供，
@@ -656,9 +662,10 @@ func (m *Manager) Destroy() {
 	}
 }
 
-// SetGlobalHotkeyCallback sets the callback for global hotkey events
+// SetGlobalHotkeyCallback sets the callback for global hotkey events.
+// PR-4: 内部包装 callback, 触发时同时推一份 EvtHotkeyTriggered 到 Manager.Events()。
 func (m *Manager) SetGlobalHotkeyCallback(cb func(command string)) {
-	m.globalHotkeys.callback = cb
+	m.globalHotkeys.callback = m.wrapHotkeyCallback(cb)
 }
 
 // RegisterGlobalHotkeys registers combination hotkeys via Windows RegisterHotKey API.
@@ -715,12 +722,14 @@ func (m *Manager) IsHostRendering() bool {
 	return m.hostRenderFunc != nil
 }
 
-// SetToolbarCallbacks sets the callbacks for toolbar actions
+// SetToolbarCallbacks sets the callbacks for toolbar actions.
+// PR-4: 用 wrapToolbarCallbacks 包装传入 callbacks, 每次触发同时推一份 EvtToolbarClick。
 func (m *Manager) SetToolbarCallbacks(callbacks *ToolbarCallback) {
+	wrapped := m.wrapToolbarCallbacks(callbacks)
 	m.mu.Lock()
-	m.toolbarCallbacks = callbacks
+	m.toolbarCallbacks = wrapped
 	if m.toolbar != nil {
-		m.toolbar.SetCallback(callbacks)
+		m.toolbar.SetCallback(wrapped)
 	}
 	m.mu.Unlock()
 }
@@ -730,12 +739,14 @@ func (m *Manager) GetStatusWindow() *StatusWindow {
 	return m.status
 }
 
-// SetCandidateCallbacks sets the callbacks for candidate window mouse interactions
+// SetCandidateCallbacks sets the callbacks for candidate window mouse interactions.
+// PR-4: 用 wrapCandidateCallbacks 包装, 每次触发同时推 EvtCandidateXxx 到 Events()。
 func (m *Manager) SetCandidateCallbacks(callbacks *CandidateCallback) {
+	wrapped := m.wrapCandidateCallbacks(callbacks)
 	m.mu.Lock()
-	m.candidateCallbacks = callbacks
+	m.candidateCallbacks = wrapped
 	if m.window != nil {
-		m.window.SetCallbacks(callbacks)
+		m.window.SetCallbacks(wrapped)
 	}
 	m.mu.Unlock()
 }

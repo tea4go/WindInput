@@ -25,12 +25,16 @@ func (CandidateHoverPayload) EventType() EventType { return EvtCandidateHover }
 type CandidateContextMenuAction string
 
 const (
-	CandidateActionMoveUp       CandidateContextMenuAction = "move_up"
-	CandidateActionMoveDown     CandidateContextMenuAction = "move_down"
-	CandidateActionMoveTop      CandidateContextMenuAction = "move_top"
-	CandidateActionDelete       CandidateContextMenuAction = "delete"
-	CandidateActionResetDefault CandidateContextMenuAction = "reset_default"
-	CandidateActionCopy         CandidateContextMenuAction = "copy"
+	CandidateActionMoveUp         CandidateContextMenuAction = "move_up"
+	CandidateActionMoveDown       CandidateContextMenuAction = "move_down"
+	CandidateActionMoveTop        CandidateContextMenuAction = "move_top"
+	CandidateActionDelete         CandidateContextMenuAction = "delete"
+	CandidateActionResetDefault   CandidateContextMenuAction = "reset_default"
+	CandidateActionCopy           CandidateContextMenuAction = "copy"
+	CandidateActionCopyDebugBatch CandidateContextMenuAction = "copy_debug_batch" // Debug: 复制候选 batch; Index 字段复用为 maxPages
+	CandidateActionOpenSettings   CandidateContextMenuAction = "open_settings"
+	CandidateActionAbout          CandidateContextMenuAction = "about"
+	CandidateActionShowMenu       CandidateContextMenuAction = "show_unified_menu" // 空白处右键请求统一菜单; Index 字段无意义, 取屏幕坐标见上行 CmdMenuShow
 )
 
 // CandidateContextMenuPayload 用户在候选词右键菜单选了某项。
@@ -77,11 +81,15 @@ func (MenuItemSelectedPayload) EventType() EventType { return EvtMenuItemSelecte
 type ToolbarClickAction string
 
 const (
-	ToolbarActionToggleMode  ToolbarClickAction = "toggle_mode"
-	ToolbarActionToggleWidth ToolbarClickAction = "toggle_width"
-	ToolbarActionTogglePunct ToolbarClickAction = "toggle_punct"
-	ToolbarActionOpenMenu    ToolbarClickAction = "open_menu" // 右键请求菜单
-	ToolbarActionDragEnd     ToolbarClickAction = "drag_end"
+	ToolbarActionToggleMode      ToolbarClickAction = "toggle_mode"
+	ToolbarActionToggleWidth     ToolbarClickAction = "toggle_width"
+	ToolbarActionTogglePunct     ToolbarClickAction = "toggle_punct"
+	ToolbarActionOpenMenu        ToolbarClickAction = "open_menu" // 右键请求统一菜单 (X/Y 为屏幕坐标; flipRefY 等额外信息用 ShowUnifiedMenu 命令请求)
+	ToolbarActionDragEnd         ToolbarClickAction = "drag_end"
+	ToolbarActionOpenSettings    ToolbarClickAction = "open_settings"    // 双击打开设置
+	ToolbarActionContextSettings ToolbarClickAction = "context_settings" // 右键菜单"设置"
+	ToolbarActionContextRestart  ToolbarClickAction = "context_restart"  // 右键菜单"重启服务"
+	ToolbarActionContextAbout    ToolbarClickAction = "context_about"    // 右键菜单"关于"
 )
 
 // ToolbarClickPayload 工具栏点击事件。
