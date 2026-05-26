@@ -51,7 +51,9 @@ type ToastRenderer struct {
 	logger        *slog.Logger
 }
 
-// NewToastRenderer 创建 toast 渲染器。
+// NewToastRenderer 创建 toast 渲染器。默认 DirectWrite, 与项目主配置默认 FontEngine 一致;
+// 后续 Manager.SetTextRenderMode 会按用户实际配置统一切换, 避免 toast 与其它组件持有
+// 不同后端导致字体在内存中重复加载。
 func NewToastRenderer(logger *slog.Logger) *ToastRenderer {
 	r := &ToastRenderer{
 		TextBackendManager: NewTextBackendManager("toast"),
@@ -128,7 +130,12 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 	lineSpacing := 4.0 * scale
 	titleGap := 6.0 * scale // 标题与正文之间额外间距
 	borderRadius := 6.0 * scale
-	borderWidth := 2.0 * scale
+	// 左侧 accent 条参数：完全位于不透明背景内部, 不与圆角外缘相切, 避免反锯齿像素溢出到
+	// layered 窗口的透明区域产生"边缘透色"问题。
+	accentBarWidth := 4.0 * scale
+	accentBarInset := 5.0 * scale // accent 条距 bg 左侧 / 上下圆角的安全距离
+	// 文本左侧留白需绕开 accent 条 + 一小段呼吸空间。
+	textLeft := accentBarInset + accentBarWidth + 8.0*scale
 
 	r.mu.Lock()
 	td := r.TextDrawer()
@@ -137,10 +144,10 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 	bg, textColor := r.getColors()
 	accent := levelAccent(opts.Level)
 
-	// 计算可用内容宽度（不含 padding）。
+	// 计算可用内容宽度（左 textLeft + 右 padding 之间的可绘区域）。
 	var innerMax float64
 	if maxContentPx > 0 {
-		innerMax = float64(maxContentPx) - padding*2
+		innerMax = float64(maxContentPx) - textLeft - padding
 		if innerMax < 80*scale {
 			innerMax = 80 * scale
 		}
@@ -178,7 +185,7 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 		return nil
 	}
 
-	width := contentWidth + padding*2
+	width := contentWidth + textLeft + padding
 	if width < 160*scale {
 		width = 160 * scale // 太窄不好看
 	}
@@ -197,16 +204,21 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 
 	dc := gg.NewContext(int(width), int(height))
 
-	// 1. 圆角背景
+	// 1. 圆角背景（唯一与外侧透明区相邻的图层；它的反锯齿是 bg 色，融入桌面观感干净）
 	dc.SetColor(bg)
 	dc.DrawRoundedRectangle(0, 0, width, height, borderRadius)
 	dc.Fill()
 
-	// 2. accent 边框（绘制在背景之上，沿圆角矩形勾线）
-	dc.SetColor(accent)
-	dc.SetLineWidth(borderWidth)
-	dc.DrawRoundedRectangle(borderWidth/2, borderWidth/2, width-borderWidth, height-borderWidth, borderRadius)
-	dc.Stroke()
+	// 2. 左侧 accent 条：用 Fill 而非 Stroke, 全部位于 bg 内部, 不接触圆角外缘 → 反锯齿
+	// 像素只与不透明 bg 叠加, 不会有"边缘透出底色"的观感。
+	barX := accentBarInset
+	barY := accentBarInset
+	barH := height - accentBarInset*2
+	if barH > 0 {
+		dc.SetColor(accent)
+		dc.DrawRoundedRectangle(barX, barY, accentBarWidth, barH, accentBarWidth/2)
+		dc.Fill()
+	}
 
 	img := dc.Image().(*image.RGBA)
 	td.BeginDraw(img)
@@ -214,12 +226,12 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 	y := padding
 	if title != "" {
 		// 标题用 accent 颜色，醒目；基线偏移 ≈ size * 0.8
-		td.DrawString(title, padding, y+titleSize*0.8, titleSize, accent)
+		td.DrawString(title, textLeft, y+titleSize*0.8, titleSize, accent)
 		y += titleSize + titleGap
 	}
 	for i, line := range bodyLines {
 		baseline := y + bodySize*0.8 + float64(i)*(bodySize+lineSpacing)
-		td.DrawString(line, padding, baseline, bodySize, textColor)
+		td.DrawString(line, textLeft, baseline, bodySize, textColor)
 	}
 	td.EndDraw()
 

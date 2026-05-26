@@ -51,6 +51,14 @@ func NewToastWindow(logger *slog.Logger) *ToastWindow {
 	}
 }
 
+// SetTextRenderMode 切换文字渲染后端, 跟随主配置的 FontEngine。Manager.SetTextRenderMode
+// 会在配置变更和初始化时统一推送, 避免 toast 单独维持一份字体缓存。
+func (w *ToastWindow) SetTextRenderMode(mode TextRenderMode) {
+	if w.renderer != nil {
+		w.renderer.SetTextRenderMode(mode)
+	}
+}
+
 // SetTheme 同步主题。
 func (w *ToastWindow) SetTheme(resolved *theme.ResolvedTheme) {
 	w.mu.Lock()

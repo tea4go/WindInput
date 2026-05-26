@@ -39,7 +39,7 @@ func NewTooltipWindow(logger *slog.Logger) *TooltipWindow {
 		logger:             logger,
 		TextBackendManager: NewTextBackendManager("tooltip"),
 	}
-	w.SetTextRenderMode(TextRenderModeGDI)
+	w.SetTextRenderMode(TextRenderModeDirectWrite)
 	return w
 }
 

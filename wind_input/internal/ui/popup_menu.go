@@ -292,7 +292,7 @@ func NewPopupMenu() *PopupMenu {
 	return &PopupMenu{
 		hoverIndex:   -1,
 		submenuIndex: -1,
-		renderMode:   TextRenderModeGDI,
+		renderMode:   TextRenderModeDirectWrite,
 		fontConfig:   fontCfg,
 	}
 }

@@ -29,7 +29,7 @@ func NewToolbarRenderer() *ToolbarRenderer {
 	r := &ToolbarRenderer{
 		TextBackendManager: NewTextBackendManager("toolbar"),
 	}
-	r.SetTextRenderMode(TextRenderModeGDI)
+	r.SetTextRenderMode(TextRenderModeDirectWrite)
 	return r
 }
 
