@@ -114,3 +114,4 @@ node_modules
 wind_macos/.build/
 wind_macos/.swiftpm/
 wind_macos/Package.resolved
+wind_macos/build/
