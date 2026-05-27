@@ -424,3 +424,68 @@ log stream --predicate 'process == "WindInput"' --info
 - **PR-A.4**: M5 系统集成 (剪贴板/暗色模式/全屏)
 - **PR-B**: Go 端 stub 替换 (跟随 PR-A 各阶段所需)
 - **PR-C**: 安装包 + 签名 + Notarization (M6)
+
+## 12. 踩坑记录 (M2.1 期间)
+
+PR-A M2.1 阶段试图让 `.app` 出现在 系统设置 → 键盘 → 输入法 列表, 走了一系列盘旋的弯路, 记录如下以免后续踩同样坑.
+
+### 12.1 Info.plist 必须项 (踩过对应坑)
+
+- **`LSBackgroundOnly=true` 单独配会让系统拒绝 IMK 注册**. 必须同时设 `LSUIElement=true` (允许后台 .app 创建 NSPanel). Squirrel 与多数主流 IME 都同时有这两项.
+- **`InputMethodConnectionName` 必须等于 `$(CFBundleIdentifier)_Connection`**. 任意字符串会被 Big Sur+ 的 XPC handshake 拒. main.swift 应运行时从 bundleID 派生.
+- **`tsInputModeCharacterRepertoireKey` 必须用 ISO 15924 四字母脚本码 (`Hans`/`Hant`/`Latn`/...)**, 不是 BCP-47 `zh-Hans`/`en`. 用错值系统视为本输入法没声明任何 repertoire, 直接不显示.
+- **ComponentInputModeDict 缺这些字段会出现"装上了系统不认"**: `tsInputModeScriptKey=smUnicodeScript`, `tsInputModeDefaultStateKey=true`, `tsInputModePrimaryInScriptKey=true`, `TISIconLabels`, 顶层 `tsVisibleInputModeOrderedArrayKey`.
+- **本地化菜单名走 `Contents/Resources/<lang>.lproj/InfoPlist.strings`** (键 `"<mode-id>" = "清风输入法";`), 不是 `CFBundleDisplayName`.
+
+### 12.2 签名 / hardened runtime
+
+- **install 阶段不能 `sudo codesign --force --sign -`** 把 build 阶段的 hardened runtime + entitlements + 真证书全摘掉. install 应该只 cp + 不重签 (sudo 不需要 codesign, 也找不到 user keychain 里的证书).
+- **codesign 报 `errSecInternalComponent`** 通常是: (a) login keychain 没解锁 — `security unlock-keychain` 先; (b) 私钥 partition list 没让 codesign 用 — `security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Keychains/login.keychain-db`.
+- **`sudo -u user env VAR=X cmd`** 才能正确把环境变量传给 drop-sudo 后的子进程. `sudo -E + 内联 VAR=X` 组合 sudoers 会过滤掉, 表现为 SIGN_IDENTITY 没生效, .app flags 退回 `0x20002(adhoc,linker-signed)`.
+- **本机自签 Code Signing 证书** 在 macOS 26 上不够: 必须 `add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain cert.crt` 把它加为 Trust Root, codesign Authority 才不被判 `CSSMERR_TP_NOT_TRUSTED`.
+
+### 12.3 LaunchServices DB 陷阱
+
+- **LS DB 用 bundleID 索引, 早期 build/ 路径的 .app 会"抢占"** /Library/Input Methods/ 路径的同 bundleID — dump 看 `path:` 字段, 如果指向旧位置就必须 `lsregister -u` 两条路径都 unreg, 删 build/ 那个 .app, 再 `lsregister -f -R /Library/Input Methods/WindInput.app` 重读.
+- **`lsregister -kill` 在 macOS 26 被移除** ("the option has been removed because it was dangerous"). 替代: 重启 `launchservicesd` 或 `lsregister -f` 强刷单 bundle.
+- **LS DB 的 `bundle flags: launch-disabled`** 不是真的禁止启动 — 它只是 LS 对 `LSBackgroundOnly=true` 的内部归类 (Qingg 同样有此 flag 但工作正常). 别花时间清这个 flag.
+
+### 12.4 Bundle ID 必须含 `.inputmethod.` (魔术字符串 filter)
+
+macOS 在第一步扫描 `/Library/Input Methods/` 时, 直接通过 bundleID 是否含 `inputmethod` 子串过滤掉非 IME 应用. **bundleID 不含 `inputmethod` 的 .app, 系统会当成普通应用 skip, 任何 TIS API 调用都返回 success 但 silent no-op**.
+
+证据 — 系统自带 + 主流第三方 IME 全部含 `inputmethod`:
+- Apple SCIM: `com.apple.inputmethod.SCIM`
+- Squirrel: `im.rime.inputmethod.Squirrel`
+- Qingg (能用): `com.aodaren.inputmethod.Qingg`
+
+我们最初用 `to.feng.WindInput` 撞墙, 改成 `to.feng.inputmethod.WindInput` 后, `TISRegisterInputSource` 终于真把我们写进 TIS DB.
+
+### 12.5 TIS 注册 — macOS 26 的最终天花板 (Notarization 强制)
+
+**修了 §12.4 之后 `TISRegisterInputSource` 真生效了, 但仍然不能用**:
+
+- `TISRegisterInputSource(bundleURL)` 从 IME 自身进程调, 真把 mode 写进 TIS DB, `swift scripts/list_input_sources.swift` 能看到 mode `enabled=true selectable=true` ✓
+- 外部 swift 进程调 `TISEnableInputSource(src)` 返回 `OSStatus=0` 但**实际没写入 `AppleEnabledInputSources` user pref** ❌
+- `TISSelectInputSource(src)` 返回 `OSStatus=-50` (paramErr) ❌
+- **任何 `cfprefsd` / `SystemUIServer` 重启 (或 logout 或 reboot), TIS DB 里我们的 mode 条目被系统 watchdog 清掉** — 因为我们不是 Notarized, 系统把我们视为非法 IME 自动清理
+- 手动 `defaults write com.apple.HIToolbox AppleEnabledInputSources -array-add '{...}'` 把条目硬塞进 user pref, **defaults 接受了, 但 UI (系统设置 + 菜单栏 IME 切换菜单) 都不显示** — UI 跟 TIS DB 交叉验证, TIS DB 没有就不显示
+
+**结论**: macOS 26 (Tahoe) 对第三方 IME 的安全策略**全链路三层强制 Notarized**:
+1. **bundleID filter** (§12.4) — 不含 inputmethod 直接 skip
+2. **TIS register 写入 DB** — 非 Notarized 写不进 (signed Personal Team Apple Development 也不行)
+3. **systemd-style watchdog** — 即便短期入库, cfprefsd / 重启会清掉非 Notarized IME
+
+self-signed + 本机 trust + Personal Team Apple Development 全部不够, 必须:
+- **付费 \$99 Apple Developer Program** → Developer ID Application 证书 → `xcrun notarytool submit` 走 Apple 公证 → 用 notarized .app 重 deploy
+- 或者 **降级到 macOS 15 Sequoia** 测试 (那里 self-signed 据社区反馈仍然可用)
+
+### 12.6 当前结论 (PR-A.1 阶段)
+
+端到端 IMKit 流程的真实验证需要 PR-A.5 / PR-C 阶段拿到 Developer ID + Notarization 后再做. M2.1 已经把 `.app` 工程层做到完全合规 — Info.plist / bundleID / signing chain / hardened runtime / IMK CLI 子命令 / IME 自身 register API 调用全部正确. 缺的只是最后 \$99 + notarization 这一步, 任何时候补上就能 deploy.
+
+M2.2+ 的代码层 (composition / candidates / commit / push pipe 解码) 继续用 swift test 覆盖 ± 逻辑, 不被 IME 注册门槛阻塞.
+
+### 12.5 诊断脚本入口
+
+`scripts/list_input_sources.swift` 是 TIS 注册状态的金标准工具 (调 Apple `TISCreateInputSourceList` API), 任何时候都可以用它确认 IME 是否真被系统收录.

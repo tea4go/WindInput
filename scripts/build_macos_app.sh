@@ -22,6 +22,12 @@ APP_BUNDLE="$MACOS_DIR/build/$APP_NAME.app"
 
 SWIFT_CONFIG="release"
 DO_SIGN=1
+# 默认 ad-hoc (-). 真实证书:
+#   SIGN_IDENTITY="WindInput Dev" scripts/build_macos_app.sh
+# 自签证书的创建方法见 scripts/setup_signing.md.
+# macOS 26 (Tahoe) 对 IME 强制要求 codesign 有真实 Authority, adhoc 被 TIS
+# 静默拒绝注册 — 本地开发期请用自签证书签名.
+SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 for arg in "$@"; do
     case "$arg" in
         --debug)   SWIFT_CONFIG="debug" ;;
@@ -57,7 +63,17 @@ chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 # Info.plist
 cp "$MACOS_DIR/Sources/WindInputApp/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 
-# (可选) 资源, 当前无图标; 后续 M4 加 menu icon 时把 .icns 放 Resources/
+# 本地化字符串 (输入法菜单名 / 应用显示名).
+# Resources/{zh-Hans,en}.lproj/InfoPlist.strings → Contents/Resources/<lang>.lproj/InfoPlist.strings
+for lproj in "$MACOS_DIR/Sources/WindInputApp/Resources"/*.lproj; do
+    [[ -d "$lproj" ]] || continue
+    lang=$(basename "$lproj")
+    mkdir -p "$APP_BUNDLE/Contents/Resources/$lang"
+    cp -R "$lproj"/* "$APP_BUNDLE/Contents/Resources/$lang/"
+    info "lproj: $lang"
+done
+
+# (可选) 图标, 当前无 .icns; M4 加 menu icon 时把 AppIcon.icns / WindInputMode.tiff 放 Resources/
 # cp "$MACOS_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
 # 写一个空的 PkgInfo (传统 macOS 期望)
@@ -66,16 +82,26 @@ printf "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 # 校验 Info.plist
 plutil -lint "$APP_BUNDLE/Contents/Info.plist" >/dev/null
 
-# Ad-hoc 签名 (本机加载够用)
+# Ad-hoc 签名 + Hardened Runtime (本机加载够用).
+#
+# macOS Sequoia/Tahoe (26.x) 对未启用 hardened runtime 的第三方 IME 直接静默
+# 拒绝注册到 TIS, 即使 .app 已放进 /Library/Input Methods/. 对照 Qingg.app
+# (flags=0x10000 含 runtime) 与我们裸 ad-hoc (flags=0x2) 的 codesign 差异验证.
+# --options runtime 与 --sign - (ad-hoc) 可共存, 不需要 Developer ID 证书.
 if [[ $DO_SIGN -eq 1 ]]; then
-    bold "==> codesign ad-hoc"
     ENTS="$MACOS_DIR/Sources/WindInputApp/Resources/WindInput.entitlements"
-    if [[ -f "$ENTS" ]]; then
-        codesign --force --sign - --entitlements "$ENTS" --timestamp=none "$APP_BUNDLE"
+    if [[ -n "$SIGN_IDENTITY" ]]; then
+        bold "==> codesign with identity \"$SIGN_IDENTITY\" + hardened runtime"
+        SIGN_ARGS=(--force --sign "$SIGN_IDENTITY" --options runtime --timestamp=none)
     else
-        codesign --force --sign - --timestamp=none "$APP_BUNDLE"
+        bold "==> codesign ad-hoc + hardened runtime (macOS 26 上 TIS 会拒绝, 请用 SIGN_IDENTITY)"
+        SIGN_ARGS=(--force --sign - --options runtime --timestamp=none)
     fi
-    codesign -dv --verbose=2 "$APP_BUNDLE" 2>&1 | sed 's/^/    /' | head -10
+    if [[ -f "$ENTS" ]]; then
+        SIGN_ARGS+=(--entitlements "$ENTS")
+    fi
+    codesign "${SIGN_ARGS[@]}" "$APP_BUNDLE"
+    codesign -dv --verbose=2 "$APP_BUNDLE" 2>&1 | sed 's/^/    /' | head -12
 fi
 
 bold "==> Done"

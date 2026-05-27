@@ -38,6 +38,8 @@ let package = Package(
             exclude: [
                 "Resources/Info.plist",
                 "Resources/WindInput.entitlements",
+                "Resources/zh-Hans.lproj",
+                "Resources/en.lproj",
             ],
             linkerSettings: [
                 .linkedFramework("InputMethodKit"),
