@@ -109,3 +109,8 @@ node_modules
 
 # C# plugin
 *.csproj.lscache
+
+# SwiftPM (wind_macos)
+wind_macos/.build/
+wind_macos/.swiftpm/
+wind_macos/Package.resolved
