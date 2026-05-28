@@ -11,7 +11,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	wailsWindows "github.com/wailsapp/wails/v2/pkg/options/windows"
-	"golang.org/x/sys/windows"
 )
 
 //go:embed all:frontend/dist
@@ -97,11 +96,12 @@ func main() {
 	}
 
 	// 单例检查：如果已有实例在运行，发送页面参数、激活其窗口并退出
-	mutexHandle, ok := ensureSingleInstance(startPage, addWordParams)
+	// (darwin 上由 LaunchServices 保证单实例, ensureSingleInstance 恒成功)
+	releaseInstance, ok := ensureSingleInstance(startPage, addWordParams)
 	if !ok {
 		return
 	}
-	defer windows.CloseHandle(mutexHandle)
+	defer releaseInstance()
 
 	// Create an instance of the app structure
 	app := NewApp()

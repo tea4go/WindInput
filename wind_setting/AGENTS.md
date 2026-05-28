@@ -16,7 +16,9 @@
 | `app_schema.go` | 输入方案管理 API：`GetAvailableSchemas`、`GetSchemaConfig` 等方案相关操作 |
 | `app_service.go` | 服务控制 API：`CheckServiceRunning`、`NotifyReload`、主题管理、文件变化检测 |
 | `app_tsf_log.go` | TSF 日志配置 API：`GetTSFLogConfig`、`SaveTSFLogConfig` |
-| `wails.json` | Wails 项目配置，前端包管理器为 pnpm |
+| `singleton_windows.go` / `singleton_darwin.go` | 单实例 + 原生消息框 + 跨实例 IPC：Win 用互斥锁/窗口激活；darwin 靠 .app 天然单实例(no-op), 消息框走 osascript。`ensureSingleInstance` 返回 `(release func(), ok bool)` 跨平台契约 |
+| `open_windows.go` / `open_darwin.go` | `shellOpen`(打开文件/URL)：Win 用 ShellExecuteW, darwin 用 `open` 命令 |
+| `wails.json` | Wails 项目配置，前端包管理器为 pnpm; `frontend:build` 用 `pnpm exec vite build`(跳过 vue-tsc 严格门禁) |
 | `go.mod` | Go 模块：`wind_setting`，依赖 `wind_input`（本地 replace）和 `wailsapp/wails/v2 v2.11.0` |
 
 ## Subdirectories

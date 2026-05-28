@@ -54,7 +54,7 @@ public final class ModeStatusController {
         return mode + punct
     }
 
-    /// 下拉菜单: 当前状态只读展示 (带勾选)。
+    /// 下拉菜单: 当前状态只读展示 (带勾选) + 设置入口。
     private func buildMenu(_ p: ModeStatusPayload) -> NSMenu {
         let menu = NSMenu()
         let header = NSMenuItem(title: "清风输入法", action: nil, keyEquivalent: "")
@@ -69,6 +69,10 @@ public final class ModeStatusController {
         menu.addItem(.separator())
         addState(menu, "全角", on: p.fullWidth)
         addState(menu, "半角", on: !p.fullWidth)
+        menu.addItem(.separator())
+        let settings = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         return menu
     }
 
@@ -77,5 +81,21 @@ public final class ModeStatusController {
         item.state = on ? .on : .off
         item.isEnabled = false
         menu.addItem(item)
+    }
+
+    /// 打开设置应用 (wind_setting.app, Wails)。经 LaunchServices 按 bundleID 查找并启动,
+    /// 已在运行则激活已有窗口 (macOS .app 天然单实例)。
+    @objc private func openSettings() {
+        let bundleID = "com.wails.wind_setting"
+        let ws = NSWorkspace.shared
+        if let url = ws.urlForApplication(withBundleIdentifier: bundleID) {
+            ws.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        } else {
+            // LaunchServices 尚未登记时的兜底: open -b 触发一次注册+启动。
+            let p = Process()
+            p.launchPath = "/usr/bin/open"
+            p.arguments = ["-b", bundleID]
+            try? p.run()
+        }
     }
 }

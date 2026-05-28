@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -45,7 +47,9 @@ func navigateFilePath() string {
 // ensureSingleInstance checks if another instance is already running.
 // If another instance exists, sends the startPage via event+file, activates
 // the existing window, and returns false.
-func ensureSingleInstance(startPage string, addWordParams AddWordParams) (windows.Handle, bool) {
+// 返回 (release, ok)。ok=false 表示已有实例在运行 (本进程应退出); ok=true 时
+// release 用于退出前释放互斥锁 (跨平台统一契约, darwin 见 singleton_darwin.go)。
+func ensureSingleInstance(startPage string, addWordParams AddWordParams) (func(), bool) {
 	name, _ := windows.UTF16PtrFromString(mutexName)
 	handle, err := windows.CreateMutex(nil, false, name)
 	if err == windows.ERROR_ALREADY_EXISTS {
@@ -68,9 +72,10 @@ func ensureSingleInstance(startPage string, addWordParams AddWordParams) (window
 				"设置程序已在运行中，但窗口无法显示。\n\n请在任务管理器中找到 wind_setting.exe 进程并手动关闭后重试。",
 			)
 		}
-		return 0, false
+		return nil, false
 	}
-	return handle, true
+	h := handle
+	return func() { windows.CloseHandle(h) }, true
 }
 
 // showNativeMessageBox 使用 Win32 MessageBoxW 显示原生对话框，不依赖 WebView2。
