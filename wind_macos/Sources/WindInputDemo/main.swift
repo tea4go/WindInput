@@ -1,134 +1,268 @@
 import Cocoa
 import WindInputKit
 
-// WindInputDemo — M3 候选框开发用 AppKit demo, 绕开 IMKit 注册墙。
+// WindInputDemo — 自包含 IME 测试台 (绕开 IMKit/TIS 环境墙)。
 //
-// 工作流:
-//   1. swift run wind-input-demo   启动 demo, 弹一个无边框浮窗
-//   2. 另起 Go shmwriter (或 wind_input 服务) 往 /WindInput_SHM 写帧
-//   3. demo 每 50ms poll SHM, seq 变化时把 BGRA 解成 CGImage 贴到浮窗
-//   4. 关掉 demo 窗或 Cmd+Q 退出
+// 完整链路 (与真 IMKit `.app` 等价, 只是 host 是本 demo 自己的 NSTextView):
+//   键盘输入 → IMETextView.keyDown → bridge.sock 发 KeyEvent → 同步响应
+//     (UPDATE_COMP→setMarkedText / COMMIT→insertText) 应用到 NSTextView
+//   候选框 → push 通道 CmdHostRenderFrame (SHM blit) + CmdCandidateRects → NSPanel
+//   鼠标点候选 → 发 CmdCandidateSelect → push commit → 路由回 NSTextView 上屏
 //
-// 不依赖 IMKit, 不需要 sudo / signing / TIS 注册, 真正快速迭代候选框 UI 用。
+// 用法: 先起 wind_input 服务 (pinyin schema), 再 swift run wind-input-demo,
+//   在窗口文本框里打拼音 → 看候选框 → 数字/空格 或 鼠标点击 选词上屏。
 
-final class CandidatePanel: NSPanel {
+// MARK: - TextInputClient → NSTextView 适配
+
+final class TextViewClient: TextInputClient {
+    weak var tv: NSTextView?
+    init(_ tv: NSTextView) { self.tv = tv }
+
+    func insertText(_ text: String, replacementRange: NSRange) {
+        tv?.insertText(text, replacementRange: replacementRange)
+    }
+    func setMarkedText(_ text: String, selectionRange: NSRange, replacementRange: NSRange) {
+        guard let tv = tv else { return }
+        if text.isEmpty {
+            tv.unmarkText()
+        } else {
+            tv.setMarkedText(text, selectedRange: selectionRange, replacementRange: replacementRange)
+        }
+    }
+}
+
+// MARK: - 拦截 keyDown 的 NSTextView
+
+final class IMETextView: NSTextView {
+    var onKey: ((NSEvent) -> Bool)?
+    override func keyDown(with event: NSEvent) {
+        if onKey?(event) == true { return }   // IME 消费, 不走默认插入
+        super.keyDown(with: event)
+    }
+}
+
+// MARK: - 候选框 (rects + 鼠标点选)
+
+final class DemoPanelView: NSView {
+    private var image: NSImage?
+    private var rects: [CandidateHitRect] = []
+    var onSelect: ((Int) -> Void)?
+    override var isFlipped: Bool { true }
+    func update(_ img: NSImage, _ r: [CandidateHitRect]) { image = img; rects = r; needsDisplay = true }
+    func setRects(_ r: [CandidateHitRect]) { rects = r }
+    override func draw(_ dirtyRect: NSRect) { image?.draw(in: bounds) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        for r in rects where r.contains(px: p.x, py: p.y) { onSelect?(Int(r.index)); return }
+    }
+}
+
+final class DemoCandidatePanel: NSPanel {
+    private let view = DemoPanelView()
+    var onSelect: ((Int) -> Void)? {
+        get { view.onSelect } set { view.onSelect = newValue }
+    }
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 200, height: 60),
-                   styleMask: [.borderless, .nonactivatingPanel],
-                   backing: .buffered,
-                   defer: false)
-        self.isOpaque = false
-        self.backgroundColor = .clear
-        self.hasShadow = true
-        self.level = .popUpMenu
-        self.isFloatingPanel = true
-        self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        self.hidesOnDeactivate = false
-        self.becomesKeyOnlyIfNeeded = true
+                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        isOpaque = false; backgroundColor = .clear; hasShadow = true
+        level = .popUpMenu; isFloatingPanel = true
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        hidesOnDeactivate = false; becomesKeyOnlyIfNeeded = true
+        contentView = view
     }
-
-    func show(image: NSImage, atScreenPoint p: NSPoint) {
-        let iv = (self.contentView as? NSImageView) ?? NSImageView()
-        iv.image = image
-        iv.imageScaling = .scaleNone
-        iv.frame = NSRect(origin: .zero, size: image.size)
-        if iv.superview == nil {
-            let host = NSView(frame: iv.frame)
-            host.addSubview(iv)
-            self.contentView = host
-        }
-        self.setContentSize(image.size)
-        // 屏幕坐标系: AppKit 是 bottom-left, wire/SHM 是 top-left。转换。
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-        let cocoaY = screen.frame.height - p.y - image.size.height
-        self.setFrameOrigin(NSPoint(x: p.x, y: cocoaY))
-        self.orderFrontRegardless()
+    func show(_ img: NSImage, at p: NSPoint, rects: [CandidateHitRect]) {
+        view.frame = NSRect(origin: .zero, size: img.size)
+        view.update(img, rects)
+        setContentSize(img.size)
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { orderFrontRegardless(); return }
+        setFrameOrigin(NSPoint(x: p.x, y: screen.frame.height - p.y - img.size.height))
+        orderFrontRegardless()
     }
-
-    func hidePanel() {
-        self.orderOut(nil)
-    }
+    func updateRects(_ r: [CandidateHitRect]) { view.setRects(r) }
+    func hidePanel() { orderOut(nil) }
 }
 
-final class DemoController: NSObject {
-    let panel = CandidatePanel()
-    var reader: SharedMemoryReader?
-    var timer: Timer?
-    var lastSeq: UInt32 = 0
+// MARK: - IME 测试台
+
+final class IMEHarness: NSObject {
+    let textView: IMETextView
+    private let client: TextViewClient
+    private let router = BridgeResponseRouter()
+    private let panel = DemoCandidatePanel()
+    private var bridge: BridgeClient?
+    private var push: PushClient?
+    private var reader: SharedMemoryReader?
+    private var latestRects: [CandidateHitRect] = []
+    private var currentScale: CGFloat = 1
+    private var keySeq: UInt16 = 0
+    private let lock = NSLock()
+
+    init(textView: IMETextView) {
+        self.textView = textView
+        self.client = TextViewClient(textView)
+        super.init()
+        textView.onKey = { [weak self] ev in self?.handleKey(ev) ?? false }
+        panel.onSelect = { [weak self] idx in self?.sendCandidateSelect(idx) }
+    }
 
     func start() {
-        connectSHM()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            self?.tick()
-        }
-        // 也立刻 tick 一次, 避免等 50ms
-        tick()
-    }
-
-    func connectSHM() {
         do {
-            reader = try SharedMemoryReader(name: "/WindInput_SHM",
-                                            size: 4 * 1024 * 1024)
-            NSLog("WindInputDemo: SHM connected /WindInput_SHM")
+            bridge = try BridgeClient(socketPath: BridgeEndpoints.requestSocket)
+            // 激活 IME: FocusGained + IMEActivated (payload = pid u32, 取 0)
+            var pid = Data(count: 4)
+            _ = try? bridge?.send(makeFrame(UpstreamCmd.focusGained, pid)); _ = try? bridge?.readFrame()
+            _ = try? bridge?.send(makeFrame(UpstreamCmd.imeActivated, pid)); _ = try? bridge?.readFrame()
+            _ = pid
+            NSLog("Demo: bridge connected + IME activated")
         } catch {
-            NSLog("WindInputDemo: SHM open failed: \(error) (运行一下 go run ./cmd/shmwriter 写一帧)")
-            // 5s 后重试
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-                self?.connectSHM()
+            NSLog("Demo: bridge connect failed: \(error) (先起 wind_input 服务)")
+        }
+        let pc = PushClient(socketPath: BridgeEndpoints.pushSocket)
+        pc.onFrame = { [weak self] f in self?.handlePush(f) }
+        try? pc.start()
+        push = pc
+    }
+
+    private func makeFrame(_ cmd: UInt16, _ payload: Data) -> Data {
+        var out = BinaryCodec.encodeHeader(cmd: cmd, payloadLen: UInt32(payload.count))
+        out.append(payload); return out
+    }
+
+    // MARK: 键盘 → bridge 同步
+
+    private func handleKey(_ event: NSEvent) -> Bool {
+        guard let bridge = bridge, bridge.isConnected else { return false }
+        keySeq &+= 1
+        guard let frame = KeyHandler.encodeKeyEvent(event, seq: keySeq) else { return false }
+        do {
+            try bridge.send(frame)
+            let resp = try bridge.readFrame()
+            let consumed = router.apply(resp, to: client)
+            sendCaretUpdate()
+            return consumed
+        } catch {
+            NSLog("Demo: key io error \(error)"); return false
+        }
+    }
+
+    /// 把 NSTextView 光标屏幕坐标上报 Go, 让候选框贴在光标下。
+    private func sendCaretUpdate() {
+        guard let bridge = bridge, bridge.isConnected else { return }
+        let sel = textView.selectedRange()
+        var rect = textView.firstRect(forCharacterRange: sel, actualRange: nil)
+        if rect.size.height <= 0 { rect.size.height = 18 }
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let (x, y, h) = CaretCoords.caretRectToWire(rect, screenHeight: screen.frame.height)
+        _ = try? bridge.send(BinaryCodec.encodeCaretUpdateFrame(x: x, y: y, height: h))
+        _ = try? bridge.readFrame()
+    }
+
+    // MARK: 鼠标点选 → CmdCandidateSelect
+
+    private func sendCandidateSelect(_ index: Int) {
+        guard let bridge = bridge, bridge.isConnected else { return }
+        _ = try? bridge.send(BinaryCodec.encodeCandidateSelectFrame(index: index))
+        _ = try? bridge.readFrame()    // Ack; commit 走 push
+        NSLog("Demo: clicked candidate index=\(index)")
+    }
+
+    // MARK: push 通道
+
+    private func handlePush(_ frame: Frame) {
+        switch frame.cmd {
+        case DownstreamCmd.hostRenderFrame:
+            guard let p = try? BinaryCodec.decodeHostRenderFramePayload(frame.payload) else { return }
+            showFrame(p)
+        case DownstreamCmd.candidateRects:
+            if let r = try? BinaryCodec.decodeCandidateRectsPayload(frame.payload) {
+                lock.lock(); latestRects = r; let s = currentScale; lock.unlock()
+                let logical = Self.scaleRects(r, by: s)
+                DispatchQueue.main.async { [weak self] in self?.panel.updateRects(logical) }
             }
+        case DownstreamCmd.commitText, DownstreamCmd.updateComposition, DownstreamCmd.clearComposition:
+            // 鼠标选词 commit 走 push, 路由回 NSTextView
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                _ = self.router.apply(frame, to: self.client)
+            }
+        default: break
         }
     }
 
-    func tick() {
-        guard let r = reader else { return }
-        guard let f = r.snapshotIfNew() else { return }
-        if !f.hasContent || !f.isVisible || f.width == 0 || f.height == 0 {
-            panel.hidePanel()
-            return
+    private func showFrame(_ p: HostRenderFramePayload) {
+        if (p.flags & 0x1) == 0 || p.width == 0 {
+            DispatchQueue.main.async { [weak self] in self?.panel.hidePanel() }; return
         }
-        guard let img = makeImage(from: f) else { return }
-        panel.show(image: img,
-                   atScreenPoint: NSPoint(x: CGFloat(f.screenX), y: CGFloat(f.screenY)))
-        NSLog("WindInputDemo: frame seq=\(f.sequence) \(f.width)x\(f.height) at (\(f.screenX),\(f.screenY))")
+        let scale = max(1, CGFloat(p.scale))
+        if reader == nil { reader = try? SharedMemoryReader(name: "/WindInput_SHM", size: 4 * 1024 * 1024) }
+        guard let f = reader?.snapshot(), let img = Self.makeImage(f, scale: scale) else { return }
+        lock.lock(); currentScale = scale; let rects = Self.scaleRects(latestRects, by: scale); lock.unlock()
+        DispatchQueue.main.async { [weak self] in
+            self?.panel.show(img, at: NSPoint(x: CGFloat(p.x), y: CGFloat(p.y)), rects: rects)
+        }
     }
 
-    /// BGRA bytes → NSImage. CoreGraphics 直接吃 BGRA + premultiplied first 通道顺序。
-    func makeImage(from f: SharedFrame) -> NSImage? {
-        let bytesPerPixel = 4
-        let bytesPerRow = f.stride
+    static func scaleRects(_ rects: [CandidateHitRect], by scale: CGFloat) -> [CandidateHitRect] {
+        if scale == 1 { return rects }
+        let s = Int32(scale)
+        return rects.map { CandidateHitRect(index: $0.index, x: $0.x / s, y: $0.y / s, w: $0.w / s, h: $0.h / s) }
+    }
+
+    static func makeImage(_ f: SharedFrame, scale: CGFloat) -> NSImage? {
         guard let provider = CGDataProvider(data: f.bgra as CFData) else { return nil }
-        let bitmapInfo: CGBitmapInfo = [
-            CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue),
-            CGBitmapInfo.byteOrder32Little,
-        ]
-        let cs = CGColorSpaceCreateDeviceRGB()
-        guard let cg = CGImage(width: f.width,
-                               height: f.height,
-                               bitsPerComponent: 8,
-                               bitsPerPixel: bytesPerPixel * 8,
-                               bytesPerRow: bytesPerRow,
-                               space: cs,
-                               bitmapInfo: bitmapInfo,
-                               provider: provider,
-                               decode: nil,
-                               shouldInterpolate: false,
-                               intent: .defaultIntent) else { return nil }
-        return NSImage(cgImage: cg, size: NSSize(width: f.width, height: f.height))
+        let info: CGBitmapInfo = [CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue), .byteOrder32Little]
+        guard let cg = CGImage(width: f.width, height: f.height, bitsPerComponent: 8, bitsPerPixel: 32,
+                               bytesPerRow: f.stride, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: info,
+                               provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+        else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: CGFloat(f.width) / scale, height: CGFloat(f.height) / scale))
     }
 }
 
-// Top-level (main 主线程)
+// MARK: - 窗口 + 启动
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    var window: NSWindow!
+    var harness: IMEHarness!
+
+    func applicationDidFinishLaunching(_ note: Notification) {
+        let frame = NSRect(x: 0, y: 0, width: 560, height: 320)
+        window = NSWindow(contentRect: frame,
+                          styleMask: [.titled, .closable, .resizable],
+                          backing: .buffered, defer: false)
+        window.title = "WindInput Demo — 打拼音 → 选词 (键盘/鼠标)"
+        window.center()
+
+        let scroll = NSScrollView(frame: frame)
+        scroll.hasVerticalScroller = true
+        let tv = IMETextView(frame: frame)
+        tv.font = NSFont.systemFont(ofSize: 24)
+        tv.isRichText = false
+        tv.isAutomaticQuoteSubstitutionEnabled = false
+        scroll.documentView = tv
+        window.contentView = scroll
+
+        harness = IMEHarness(textView: tv)
+        harness.start()
+
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(tv)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory)   // 不出现在 Dock, 像 menu bar app 一样
+app.setActivationPolicy(.regular)
+let delegate = AppDelegate()
+app.delegate = delegate
 
-let ctl = DemoController()
-ctl.start()
-
-// 一个简单的 status bar item 提示 demo 在跑 + Quit
-let bar = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-bar.button?.title = "WindDemo"
-let menu = NSMenu()
-menu.addItem(withTitle: "Quit", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
-bar.menu = menu
+let menubar = NSMenu()
+let appItem = NSMenuItem(); menubar.addItem(appItem)
+let appMenu = NSMenu()
+appMenu.addItem(withTitle: "Quit", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q")
+appItem.submenu = appMenu
+app.mainMenu = menubar
 
 app.run()
