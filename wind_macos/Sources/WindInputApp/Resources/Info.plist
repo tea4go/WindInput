@@ -49,11 +49,10 @@
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
 
-    <!-- IMKit 后台 IME, 不显示 Dock 图标, 但能开 NSPanel (候选框). -->
+    <!-- IMKit 后台 IME, 不显示 Dock 图标, 但能开 NSPanel (候选框).
+         不能设 LSBackgroundOnly: 它会切断窗口服务器连接, 导致候选框 NSPanel
+         无法显示 (参考 Squirrel 只设 LSUIElement). -->
     <key>LSUIElement</key>
-    <true/>
-
-    <key>LSBackgroundOnly</key>
     <true/>
 
     <key>NSPrincipalClass</key>

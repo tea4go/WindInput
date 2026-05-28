@@ -36,8 +36,9 @@
 |------|-------------|
 | `renderer.go` | `Renderer`: gg 渲染候选词列表 (文字/颜色/高亮/序号圈), 出 `*image.RGBA`; 嵌入 `TextBackendManager` |
 | `renderer_layout.go` | 候选窗布局计算 (水平/垂直, DPI 感知), 纯函数易测 |
-| `text_drawer.go` | `TextDrawer` 接口 + `freeTypeDrawer` (gg/text 实现, 含 glyph 级字体 fallback) + `fontCache` |
-| `font_config.go` | `FontConfig`: 字体路径/大小/样式; 调 `systemfont.ResolveFile/HasFamily/ResolveDWFamily` 解析系统字体 |
+| `text_drawer.go` | `TextDrawer` 接口 + `freeTypeDrawer` (gg/text 实现, 含 glyph 级字体 fallback) + `fontCache`; 彩色 emoji 段经平台 hook `drawColorEmoji` 画到独立 `emojiOverlay` (gg.Context.Image() 返回拷贝, 不能直接画), EndDraw 叠回; emoji 段宽用 `colorEmojiAdvance` 取整 em |
+| `font_config.go` | `FontConfig`: 字体路径/大小/样式; 调 `systemfont.ResolveFile/HasFamily/ResolveDWFamily` 解析系统字体; `textFallbackFonts()` 调平台 hook `platformTextFallbackFonts()` 注入原生回退链 |
+| `font_fallback_other.go` / `emoji_sbix_other.go` | `//go:build !darwin` 平台 hook 空实现 (`platformTextFallbackFonts`/`drawColorEmoji`/`colorEmojiAdvance` 返回空; Win 走 DirectWrite 彩色路径) |
 | `fontspec.go` | `FontSpecToName` + `knownFontNames`: 字体规格字符串归一化 (纯字符串处理, 原在 gdi_text.go) |
 | `dpi_neutral.go` | `GetDPIScale`/`ScaleForDPI`/`ScaleIntForDPI` + `SetDPIScaleProvider`; Win 在 dpi.go init 注入真实 DPI, darwin 默认 1.0 |
 
@@ -95,7 +96,9 @@
 | `manager_darwin.go` | `Manager` darwin stub: 保留 cmdCh/eventCh; 60+ method 投递 uicmd.Command (供 macOS forwarder 订阅); Win 渲染/窗口/钩子全部 no-op; 含 `StatusWindow` / `GetCapsLockState` / `ParseHotkeyString` 等独立函数 stub |
 | `manager_darwin.go` | `Manager` darwin stub: 保留 cmdCh/eventCh; 60+ method 投递 uicmd.Command; `SubscribeCommands(func(cmd, candidates []Candidate))` 启 goroutine 把 cmdCh + 旁路候选推给 macOS forwarder (候选含完整字段供 ui.Renderer); Win 渲染/窗口/钩子 no-op; 含 `StatusWindow`/`GetCapsLockState`/`ParseHotkeyString` 等 stub |
 | `text_backend_darwin.go` | `TextBackendManager` darwin 版: 仅 freetype (gg/text) 后端; 用 `ResolvePrimaryFont` (allow TTC, 因 PingFang 是 .ttc 且当前 gg/text 支持集合) 而非 `ResolveTextPrimaryFont` (TTF-only); `SetTextRenderMode` 忽略 mode 恒走 freetype; `SetGDIFontParams`/`SetDWriteFontFallbackForPUA` no-op 占位 |
-| `manager_darwin_test.go` | 18 个 darwin Manager 命令投递测试 (ShowCandidates/SetXxx/Hide/Toast/Toolbar/Hotkeys/Menu 等) |
+| `font_fallback_darwin.go` | `platformTextFallbackFonts()` darwin 字形级回退链 (Apple Symbols → Helvetica → PingFang/Hiragino/STHeiti/Songti → Apple Color Emoji), 经 `systemfont.ResolveFile` 解析家族名; 被 `font_config.go` 的 `textFallbackFonts()` 调用 |
+| `emoji_sbix_darwin.go` | 彩色 emoji 渲染: gg/text v0.48.x 的 ColorFont 接口无解析器实现 (DrawWithEmoji 永远回退单色), 故用 `emoji.SBIXParser` 直接从 Apple Color Emoji 提取 sbix 位图自合成; `drawColorEmoji()`(返回 advance+handled, 仅处理全 emoji 段)/`colorEmojiAdvance()`(取 emoji 字体 hmtx advance 供测量) |
+| `*_darwin_test.go` | `manager_darwin_test.go` (18 命令投递测试) + `emoji_sbix_darwin_test.go` / `emoji_integration_darwin_test.go` (sbix emoji 直接渲染 + 完整管线彩色渲染验证) |
 
 ## For AI Agents
 

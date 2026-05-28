@@ -231,6 +231,11 @@ func (fc *FontConfig) textFallbackFonts() []string {
 			fonts = appendUnique(fonts, seen, path)
 		}
 	}
+	// 平台原生回退字体优先 (darwin: 符号/CJK/emoji; 其他平台为空)。
+	// 放在 Windows 默认链前面, 避免在 darwin 上先排一串不存在的 Win 路径。
+	for _, path := range platformTextFallbackFonts() {
+		fonts = appendUnique(fonts, seen, path)
+	}
 	for _, path := range buildDefaultTextFallbackFonts() {
 		fonts = appendUnique(fonts, seen, path)
 	}

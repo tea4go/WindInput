@@ -51,9 +51,11 @@ type TextDrawer interface {
 // Fallback still happens at glyph granularity so symbols like ✓ and ▸ can be
 // resolved independently of the primary font.
 type freeTypeDrawer struct {
-	cache          *fontCache
-	dc             *gg.Context
-	target         *image.RGBA
+	cache        *fontCache
+	dc           *gg.Context
+	target       *image.RGBA
+	emojiOverlay *image.RGBA // 彩色 emoji 专用图层: gg.Context.Image() 返回的是拷贝,
+	// 在它上面合成会丢失, 故 emoji 单独画到这里, EndDraw 一并叠回。
 	fontConfig     *FontConfig
 	fallbackCaches []*fontCache        // Font face caches (one per fallback font path)
 	fallbackFonts  []fallbackFontEntry // References to fallback font entries
@@ -188,6 +190,11 @@ func (d *freeTypeDrawer) MeasureString(text string, fontSize float64) float64 {
 	// to be measured run by run and summed manually.
 	var totalW float64
 	for _, seg := range segments {
+		// emoji 段用专属 advance (整 em), 与 DrawString 步进一致, 避免布局拥挤。
+		if adv, ok := colorEmojiAdvance(seg.text, fontSize); ok {
+			totalW += adv
+			continue
+		}
 		dc.SetFont(seg.face)
 		w, _ := dc.MeasureString(seg.text)
 		totalW += w
@@ -202,6 +209,7 @@ func (d *freeTypeDrawer) BeginDraw(img *image.RGBA) {
 	bounds := img.Bounds()
 	d.target = img
 	d.dc = gg.NewContext(bounds.Dx(), bounds.Dy())
+	d.emojiOverlay = nil // 懒分配: 仅在真有 emoji 段时创建 (见 DrawString)
 }
 
 func (d *freeTypeDrawer) DrawString(text string, x, y float64, fontSize float64, clr color.Color) {
@@ -218,12 +226,46 @@ func (d *freeTypeDrawer) DrawString(text string, x, y float64, fontSize float64,
 	drawX := x
 	for _, seg := range segments {
 		d.dc.SetFont(seg.face)
-		d.dc.DrawString(seg.text, drawX, y)
-		// Advance by the measured width of the segment so mixed-font runs keep the
-		// same baseline flow as the old implementation.
-		w, _ := d.dc.MeasureString(seg.text)
-		drawX += w
+		// 彩色字体 (Apple Color Emoji 等): gg.Context.DrawString 只走单色轮廓,
+		// 对纯位图 emoji 渲不出; 且 gg.Context.Image() 返回的是拷贝, 直接往上画会
+		// 丢失。故把彩色 emoji 画到独立 overlay (与 target 同尺寸), EndDraw 再叠回。
+		drawn := false
+		var segAdvance float64
+		hasAdvance := false
+		if d.target != nil {
+			if d.emojiOverlay == nil {
+				d.emojiOverlay = image.NewRGBA(d.target.Bounds())
+			}
+			if adv, ok := drawColorEmoji(d.emojiOverlay, seg.face, seg.text, drawX, y, clr); ok {
+				drawn, segAdvance, hasAdvance = true, adv, true
+			} else if faceHasColorGlyphs(seg.face) {
+				ggtext.DrawWithEmoji(d.emojiOverlay, seg.text, seg.face, drawX, y, clr)
+				drawn = true
+			}
+		}
+		if !drawn {
+			d.dc.DrawString(seg.text, drawX, y)
+		}
+		// 步进: emoji 段用其专属 advance (整 em, 与 MeasureString 一致); 其余用 gg 测量。
+		if !hasAdvance {
+			segAdvance, _ = d.dc.MeasureString(seg.text)
+		}
+		drawX += segAdvance
 	}
+}
+
+// faceHasColorGlyphs 报告该 face 是否带彩色字形表 (sbix/CBDT/COLR)。
+// 与 ggtext.DrawWithEmoji 内部的检测一致, 提前判断以决定走彩色还是单色路径。
+func faceHasColorGlyphs(face ggtext.Face) bool {
+	if face == nil {
+		return false
+	}
+	src := face.Source()
+	if src == nil {
+		return false
+	}
+	cf, ok := src.Parsed().(ggtext.ColorFont)
+	return ok && cf.HasColorTables()
 }
 
 func (d *freeTypeDrawer) DrawStringWithWeight(text string, x, y float64, fontSize float64, clr color.Color, weight int) {
@@ -236,15 +278,21 @@ func (d *freeTypeDrawer) EndDraw() {
 		if overlay, ok := d.dc.Image().(*image.RGBA); ok {
 			draw.Draw(d.target, d.target.Bounds(), overlay, overlay.Bounds().Min, draw.Over)
 		}
+		// 彩色 emoji 图层叠在文字之上 (二者 x 不重叠, 顺序不影响, 但保证 emoji 可见)。
+		if d.emojiOverlay != nil {
+			draw.Draw(d.target, d.target.Bounds(), d.emojiOverlay, d.emojiOverlay.Bounds().Min, draw.Over)
+		}
 	}
 	d.dc = nil
 	d.target = nil
+	d.emojiOverlay = nil
 }
 
 func (d *freeTypeDrawer) Close() {
 	// d.cache 由外层 renderer 持有和复用，这里只释放当前 drawer 私有状态。
 	d.dc = nil
 	d.target = nil
+	d.emojiOverlay = nil
 	d.fallbackCaches = nil
 	d.fallbackFonts = nil
 }

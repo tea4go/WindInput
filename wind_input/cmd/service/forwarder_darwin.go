@@ -58,10 +58,20 @@ func startCandidateForwarder(srv *bridge.Server, mgr *ui.Manager,
 	// darwin 仅 freetype 后端 (text_backend_darwin.go 忽略 mode 恒走 freetype)
 	renderer.SetTextRenderMode(ui.TextRenderModeFreetype)
 
-	// 主力中文字体: PingFang SC (systemfont darwin → AssetsV2 PingFang.ttc)
-	fontFamily := "PingFang SC"
-	if systemfont.ResolveFile(fontFamily, false) == "" {
-		fontFamily = "Helvetica"
+	// 主力中文字体候选链: 取第一个本机能解析到的含 CJK 字形的字体。
+	// 绝不退到纯拉丁字体 (Helvetica), 否则汉字会渲染成方框 □。
+	//   - PingFang SC: 全功能 macOS 默认 (Tahoe 在 AssetsV2, Sequoia 在 /System/Library/Fonts)
+	//   - Hiragino Sans GB / STHeiti / Songti: 精简 VM 镜像 (tart 等) 常缺 PingFang 时的备选
+	fontFamily := ""
+	for _, cand := range []string{"PingFang SC", "Hiragino Sans GB", "STHeiti", "Songti SC", "Songti"} {
+		if systemfont.ResolveFile(cand, false) != "" {
+			fontFamily = cand
+			break
+		}
+	}
+	if fontFamily == "" {
+		fontFamily = "Helvetica" // 实在没有 CJK 字体的兜底 (汉字仍会方框, 但 ASCII 可见)
+		logger.Warn("darwin forwarder 未找到任何 CJK 字体, 汉字将渲染为方框", "fallback", fontFamily)
 	}
 	renderer.UpdateFont(18, fontFamily)
 	logger.Info("darwin forwarder renderer ready", "font", fontFamily)
