@@ -29,6 +29,7 @@ const (
 	CmdCompositionTerminated uint16 = 0x0209 // Composition unexpectedly terminated (e.g., user clicked in input field)
 	CmdShowContextMenu       uint16 = 0x020A // 请求显示右键菜单（TSF发送屏幕坐标）
 	CmdCandidateSelect       uint16 = 0x020D // darwin: IMKit .app NSPanel 鼠标点击命中候选 (payload: pageLocalIndex u32)
+	CmdCandidateHover        uint16 = 0x020E // darwin: NSPanel 鼠标悬停候选 (payload: pageLocalIndex i32, -1=无悬停)
 	CmdCaretUpdate           uint16 = 0x0301 // Caret position update
 	CmdSelectionChanged      uint16 = 0x0302 // Selection/caret changed without composition (from ITfTextEditSink)
 	CmdCaretPending          uint16 = 0x0303 // First-show handshake: composition just started, real caret coming after reflow

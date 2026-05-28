@@ -34,6 +34,12 @@ type darwinForwarder struct {
 	hrm      *bridge.HostRenderManager
 	codec    *ipc.BinaryCodec
 	renderer *ui.Renderer
+
+	// 缓存当前候选, 供悬停重渲染 (hover 仅改高亮, 候选数据不变)。
+	lastPayload    uicmd.CandidatesShowPayload
+	lastCandidates []ui.Candidate
+	hoverIndex     int
+	visible        bool
 }
 
 // startCandidateForwarder 启动 darwin 渲染转发 goroutine。
@@ -66,16 +72,18 @@ func startCandidateForwarder(srv *bridge.Server, mgr *ui.Manager,
 	}
 
 	f := &darwinForwarder{
-		logger:   logger,
-		srv:      srv,
-		hrm:      hrm,
-		codec:    codec,
-		renderer: renderer,
+		logger:     logger,
+		srv:        srv,
+		hrm:        hrm,
+		codec:      codec,
+		renderer:   renderer,
+		hoverIndex: -1,
 	}
 
 	mgr.SubscribeCommands(func(cmd uicmd.Command, candidates []ui.Candidate) {
 		f.handle(cmd, candidates)
 	})
+	srv.SetCandidateHoverHandler(func(idx int) { f.onHover(idx) })
 	logger.Info("darwin candidate forwarder started")
 }
 
@@ -99,23 +107,52 @@ func (f *darwinForwarder) showCandidates(p uicmd.CandidatesShowPayload, candidat
 		f.hideCandidates()
 		return
 	}
+	f.mu.Lock()
+	f.lastPayload = p
+	f.lastCandidates = candidates
+	f.hoverIndex = -1 // 新一轮候选, 清除上次悬停
+	f.visible = true
+	f.mu.Unlock()
+	f.renderAndPush()
+}
+
+// onHover 鼠标悬停某候选, 仅改高亮重渲染 (候选数据不变)。idx<0 = 无悬停。
+func (f *darwinForwarder) onHover(idx int) {
+	f.mu.Lock()
+	if !f.visible || idx == f.hoverIndex {
+		f.mu.Unlock()
+		return
+	}
+	f.hoverIndex = idx
+	f.mu.Unlock()
+	f.renderAndPush()
+}
+
+// renderAndPush 用当前缓存的候选 + hoverIndex 渲染并推帧 (含命中矩形)。
+func (f *darwinForwarder) renderAndPush() {
+	f.mu.Lock()
+	p := f.lastPayload
+	candidates := f.lastCandidates
+	hover := f.hoverIndex
+	f.mu.Unlock()
+	if len(candidates) == 0 {
+		return
+	}
 	state := f.hrm.GetActiveState(0)
 	if state == nil || state.SHM == nil {
 		f.logger.Debug("darwin forwarder SHM not ready, skip")
 		return
 	}
 
-	// 用真 ui.Renderer 渲染 (与 Win 端同一逻辑)。hoverIndex=-1 (hover 后续 PR),
-	// selectedIndex 高亮键盘选中项。renderResult.Rects 为每个候选的 panel-local 命中矩形。
+	hoverBtn := "" // 翻页按钮悬停后续可加
 	img, renderResult := f.renderer.RenderCandidates(
 		candidates, p.Input, p.CursorPos,
 		p.Page, p.TotalPages,
-		-1, "", p.SelectedIndex)
+		hover, hoverBtn, p.SelectedIndex)
 	if img == nil {
 		return
 	}
 
-	// 候选框贴在 caret 下方 (top-left wire 坐标)
 	x := p.CaretX
 	y := p.CaretY + p.CaretHeight + 4
 	seq, err := state.SHM.WriteFrame(img, x, y)
@@ -124,37 +161,43 @@ func (f *darwinForwarder) showCandidates(p uicmd.CandidatesShowPayload, candidat
 		return
 	}
 
-	payload := ipc.HostRenderFramePayload{
-		Seq:    seq,
-		X:      int32(x),
-		Y:      int32(y),
-		Width:  uint32(img.Bounds().Dx()),
-		Height: uint32(img.Bounds().Dy()),
-		Flags:  0x3, // Visible | ContentReady
-		Scale:  darwinRenderScale,
-	}
-	f.srv.BroadcastFrame(f.codec.EncodeHostRenderFrame(payload))
+	f.srv.BroadcastFrame(f.codec.EncodeHostRenderFrame(ipc.HostRenderFramePayload{
+		Seq: seq, X: int32(x), Y: int32(y),
+		Width: uint32(img.Bounds().Dx()), Height: uint32(img.Bounds().Dy()),
+		Flags: 0x3, Scale: darwinRenderScale,
+	}))
 
-	// 推候选命中矩形 (panel-local), 供 .app NSPanel 鼠标点选 hit-test。
-	if renderResult != nil && len(renderResult.Rects) > 0 {
-		rects := make([]ipc.CandidateHitRect, 0, len(renderResult.Rects))
+	// 候选命中矩形 + 翻页按钮矩形 (pageUp=index -1, pageDown=index -2), 供 .app hit-test。
+	if renderResult != nil {
+		rects := make([]ipc.CandidateHitRect, 0, len(renderResult.Rects)+2)
 		for _, rc := range renderResult.Rects {
 			rects = append(rects, ipc.CandidateHitRect{
-				Index: int32(rc.Index),
-				X:     int32(rc.X), Y: int32(rc.Y),
-				W: int32(rc.W), H: int32(rc.H),
+				Index: int32(rc.Index), X: int32(rc.X), Y: int32(rc.Y), W: int32(rc.W), H: int32(rc.H),
 			})
 		}
-		f.srv.BroadcastFrame(f.codec.EncodeCandidateRects(rects))
+		if r := renderResult.PageUpRect; r != nil {
+			rects = append(rects, ipc.CandidateHitRect{Index: -1, X: int32(r.X), Y: int32(r.Y), W: int32(r.W), H: int32(r.H)})
+		}
+		if r := renderResult.PageDownRect; r != nil {
+			rects = append(rects, ipc.CandidateHitRect{Index: -2, X: int32(r.X), Y: int32(r.Y), W: int32(r.W), H: int32(r.H)})
+		}
+		if len(rects) > 0 {
+			f.srv.BroadcastFrame(f.codec.EncodeCandidateRects(rects))
+		}
 	}
 
 	f.logger.Debug("darwin forwarder pushed frame",
-		"seq", seq, "n", len(candidates),
+		"seq", seq, "n", len(candidates), "hover", hover,
 		"size", fmt.Sprintf("%dx%d", img.Bounds().Dx(), img.Bounds().Dy()),
 		"at", fmt.Sprintf("(%d,%d)", x, y))
 }
 
 func (f *darwinForwarder) hideCandidates() {
+	f.mu.Lock()
+	f.visible = false
+	f.lastCandidates = nil
+	f.hoverIndex = -1
+	f.mu.Unlock()
 	state := f.hrm.GetActiveState(0)
 	if state == nil || state.SHM == nil {
 		return

@@ -34,6 +34,8 @@
 - `CmdHostRenderFrame`（下行 0x0502, push）darwin 专用：Win 用命名 Event 通知 host render 新帧, darwin 无等价 API 改走 push 通道发 `HostRenderFramePayload`(seq+几何), 客户端据 seq 从 SHM 取帧 blit
 - `CmdCandidateRects`（下行 0x0503, push）darwin 专用：候选命中矩形 `[]CandidateHitRect` (panel-local), `EncodeCandidateRects`; 供 IMKit `.app` NSPanel 鼠标 hit-test
 - `CmdCandidateSelect`（上行 0x020D）darwin 专用：NSPanel 鼠标点中候选, payload=pageLocalIndex u32; Go 选词结果走 push 通道 (`PushCommitTextToActiveClient`) 异步交付
+- `CmdCandidateHover`（上行 0x020E）darwin 专用：NSPanel 鼠标悬停候选, payload=pageLocalIndex i32 (-1=无); forwarder 缓存候选按 hoverIndex 重渲染高亮
+- `CmdCandidateRects` 中 index<0 为翻页按钮 (-1=上页 -2=下页), 客户端点中合成 PgUp/PgDn 键
 - `SharedRenderHeader` 固定 64 字节：前 40 字节有效字段，后 24 字节保留；后跟 BGRA 像素数据
 - `CmdBatchEvents` 是批量事件命令，`bridge` 对其有特殊处理路径
 - `IsAsyncRequest(header)` 判断是否为不需要响应的异步请求（版本字段高位为 `AsyncFlag=0x8000`）

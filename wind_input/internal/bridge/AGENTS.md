@@ -109,6 +109,7 @@ bridge handler goroutine 处理仍走同步响应的命令（`CmdHostRenderReque
 - KeyEvent 同步响应已完整: `writeKeyResult` 把 commit/composition 编回响应帧 (IMKit `InputController.handle` 同步读取后 insertText/setMarkedText); **不要回退到 default→Ack**, 否则选词文本被吞 → "输了字不上屏"
 - host render: forwarder (`cmd/service/forwarder_darwin.go`) 订阅 `ui.Manager` cmdCh, 收 CandidatesShow → gg 渲染 → `SharedMemory.WriteFrame` → `BroadcastFrame(EncodeHostRenderFrame)` + `BroadcastFrame(EncodeCandidateRects)`; SHM 在 `SetupHostRender(0)` 懒分配, `CleanupAll` 时 munmap+unlink
 - 鼠标选词: `.app` NSPanel 点中候选 → 发 `CmdCandidateSelect`(pageLocalIndex) → server_darwin dispatch 类型断言 `candidateSelector` → `Coordinator.HandleCandidateSelect` → doSelectCandidate → `PushCommitTextToActiveClient` (commit 走 push 通道, `.app` 路由到 active InputController)
+- 鼠标悬停: 发 `CmdCandidateHover` → server_darwin 调 `SetCandidateHoverHandler` 注入的 forwarder 回调 (按 hoverIndex 重渲染高亮, 纯渲染层状态不经 coordinator)
 - POSIX SHM 名 `/WindInput_SHM` ≤30 字符 (macOS PSHMNAMLEN=31); 进程异常退出残留段在 `NewSharedMemory` 起手 `shmUnlink` 清掉
 - 多客户端用 `connID` (accept 自增) 替代 Win 的 PID 索引; macOS 单 IMKit `.app` 进程多 IMKInputController 实例各自独立 socket 连接, 见 [`docs/design/macos-port.md`](../../../docs/design/macos-port.md)
 

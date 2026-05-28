@@ -41,7 +41,8 @@ public final class CandidatePanelHost {
             DispatchQueue.main.sync { p = CandidatePanel() }
             panel = p!
         }
-        panel.onSelect = { [weak self] index in self?.sendCandidateSelect(index) }
+        panel.onSelect = { [weak self] index in self?.handlePanelClick(index) }
+        panel.onHover = { [weak self] index in self?.sendFrame(BinaryCodec.encodeCandidateHoverFrame(index: index)) }
     }
 
     public func start() {
@@ -81,23 +82,37 @@ public final class CandidatePanelHost {
 
     // MARK: - 鼠标点选 → 发 CmdCandidateSelect
 
-    private func sendCandidateSelect(_ index: Int) {
+    /// 面板点击: index>=0 选词; index==-1 翻上页; index==-2 翻下页 (合成 pgup/pgdn 键)。
+    private func handlePanelClick(_ index: Int) {
+        if index >= 0 {
+            sendFrame(BinaryCodec.encodeCandidateSelectFrame(index: index))
+        } else if index == -1 {
+            sendFrame(pagerKeyFrame(vk: 0x21)) // VK_PRIOR (Page Up)
+        } else if index == -2 {
+            sendFrame(pagerKeyFrame(vk: 0x22)) // VK_NEXT (Page Down)
+        }
+    }
+
+    private func pagerKeyFrame(vk: UInt32) -> Data {
+        BinaryCodec.encodeKeyEventFrame(KeyEventPayload(
+            keyCode: vk, scanCode: 0, modifiers: 0, eventType: .down, eventSeq: 0, prevChar: 0))
+    }
+
+    /// 通过独立 request 连接发一帧 (CandidateSelect / Hover / 翻页键), 读掉 Ack。
+    /// 候选更新/commit 走 push 通道异步到达。
+    private func sendFrame(_ frame: Data) {
         lock.lock()
         if sendClient == nil {
             sendClient = try? BridgeClient(socketPath: BridgeEndpoints.requestSocket)
         }
         let c = sendClient
         lock.unlock()
-        guard let c = c else {
-            NSLog("CandidatePanelHost: no send client for candidate select")
-            return
-        }
+        guard let c = c else { return }
         do {
-            try c.send(BinaryCodec.encodeCandidateSelectFrame(index: index))
-            _ = try? c.readFrame() // Go 同步返 Ack, 读掉; commit 走 push 通道异步到达
-            NSLog("CandidatePanelHost: sent CmdCandidateSelect index=\(index)")
+            try c.send(frame)
+            _ = try? c.readFrame()
         } catch {
-            NSLog("CandidatePanelHost: send select failed: \(error)")
+            NSLog("CandidatePanelHost: sendFrame failed: \(error)")
             lock.lock(); sendClient?.close(); sendClient = nil; lock.unlock()
         }
     }

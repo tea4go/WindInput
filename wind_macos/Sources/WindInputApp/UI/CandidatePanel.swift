@@ -18,7 +18,9 @@ import WindInputKit
 final class CandidateContentView: NSView {
     private var image: NSImage?
     private var hitRects: [CandidateHitRect] = []
+    private var lastHover: Int = -1
     var onSelect: ((Int) -> Void)?
+    var onHover: ((Int) -> Void)?
 
     override var isFlipped: Bool { true } // top-left 原点, 与 wire/rects 坐标系一致
 
@@ -37,25 +39,51 @@ final class CandidateContentView: NSView {
         image?.draw(in: bounds)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach { removeTrackingArea($0) }
+        addTrackingArea(NSTrackingArea(rect: .zero,
+                                       options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    /// 命中候选 (index>=0) / 翻页按钮 (index<0) / 空白 (nil)。
+    private func hitIndex(_ event: NSEvent) -> Int? {
+        let p = convert(event.locationInWindow, from: nil) // isFlipped, top-left
+        for r in hitRects where r.contains(px: p.x, py: p.y) { return Int(r.index) }
+        return nil
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        // isFlipped=true, p 已是 top-left 坐标, 直接与 rects 比对
-        for r in hitRects where r.contains(px: p.x, py: p.y) {
-            onSelect?(Int(r.index))
-            return
-        }
+        if let idx = hitIndex(event) { onSelect?(idx) }
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        // 仅对候选 (index>=0) 报悬停; 翻页按钮 (index<0) 与空白都视为无悬停。
+        let idx = hitIndex(event) ?? -1
+        let report = idx >= 0 ? idx : -1
+        if report != lastHover { lastHover = report; onHover?(report) }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if lastHover != -1 { lastHover = -1; onHover?(-1) }
     }
 }
 
 final class CandidatePanel: NSPanel {
     private let content = CandidateContentView()
 
-    /// 鼠标点击命中候选时回调 (pageLocalIndex)。
+    /// 鼠标点击命中候选时回调 (pageLocalIndex; <0 = 翻页按钮 -1=上 -2=下)。
     var onSelect: ((Int) -> Void)? {
         get { content.onSelect }
         set { content.onSelect = newValue }
+    }
+    /// 鼠标悬停候选变化时回调 (pageLocalIndex; -1=离开)。
+    var onHover: ((Int) -> Void)? {
+        get { content.onHover }
+        set { content.onHover = newValue }
     }
 
     init() {

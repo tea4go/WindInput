@@ -258,6 +258,15 @@ public enum BinaryCodec {
         return out
     }
 
+    /// 编码 CmdCandidateHover (0x020E upstream): payload = pageLocalIndex i32 LE (-1=无)。
+    public static func encodeCandidateHoverFrame(index: Int) -> Data {
+        var payload = Data(count: 4)
+        payload.writeUInt32LE(UInt32(bitPattern: Int32(index)), at: 0)
+        var out = encodeHeader(cmd: UpstreamCmd.candidateHover, payloadLen: 4)
+        out.append(payload)
+        return out
+    }
+
     /// 解 CmdCandidateRects (0x0503 push): count(u32) + count×(index,x,y,w,h 各 i32 LE)。
     public static func decodeCandidateRectsPayload(_ buf: Data) throws -> [CandidateHitRect] {
         guard buf.count >= 4 else {

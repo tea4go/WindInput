@@ -77,6 +77,11 @@ type Server struct {
 	handler MessageHandler
 	codec   *ipc.BinaryCodec
 
+	// onCandidateHover: forwarder 注入的悬停处理 (按 hoverIndex 重渲染候选框)。
+	// 不走 MessageHandler/coordinator — 悬停高亮纯属 darwin 渲染层状态, 由 forwarder
+	// (缓存当前候选) 处理。nil 时忽略悬停帧。
+	onCandidateHover func(index int)
+
 	// 主请求-响应 listener (bridge.sock)
 	listener net.Listener
 
@@ -366,6 +371,14 @@ func (s *Server) dispatchFrame(conn net.Conn, id connID, header *ipc.IpcHeader, 
 			}
 		}
 		s.writeAck(conn)
+	case ipc.CmdCandidateHover:
+		// NSPanel 鼠标悬停候选, payload = pageLocalIndex i32 (-1=无)。
+		// forwarder 按 hoverIndex 重渲染高亮, 此处仅 Ack。
+		if s.onCandidateHover != nil && len(payload) >= 4 {
+			idx := int(int32(binary.LittleEndian.Uint32(payload[0:4])))
+			s.onCandidateHover(idx)
+		}
+		s.writeAck(conn)
 	default:
 		// 未覆盖的帧 (HostRender setup / token 等 Win-only 概念) 直接 Ack,
 		// macOS forwarder 在自己的 PR 内按需扩展 dispatch。
@@ -485,6 +498,11 @@ func (s *Server) broadcastPush(frame []byte) {
 // 仅是 broadcastPush 的 exported 包装, 给 cmd/service 调用。
 func (s *Server) BroadcastFrame(frame []byte) {
 	s.broadcastPush(frame)
+}
+
+// SetCandidateHoverHandler 注入候选悬停处理 (forwarder 实现, 按 hoverIndex 重渲染)。
+func (s *Server) SetCandidateHoverHandler(h func(index int)) {
+	s.onCandidateHover = h
 }
 
 // GetActiveClientCount 返回当前主连接数。

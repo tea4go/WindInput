@@ -46,15 +46,34 @@ final class IMETextView: NSTextView {
 final class DemoPanelView: NSView {
     private var image: NSImage?
     private var rects: [CandidateHitRect] = []
+    private var lastHover = -1
     var onSelect: ((Int) -> Void)?
+    var onHover: ((Int) -> Void)?
     override var isFlipped: Bool { true }
     func update(_ img: NSImage, _ r: [CandidateHitRect]) { image = img; rects = r; needsDisplay = true }
     func setRects(_ r: [CandidateHitRect]) { rects = r }
     override func draw(_ dirtyRect: NSRect) { image?.draw(in: bounds) }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        for r in rects where r.contains(px: p.x, py: p.y) { onSelect?(Int(r.index)); return }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach { removeTrackingArea($0) }
+        addTrackingArea(NSTrackingArea(rect: .zero,
+            options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self, userInfo: nil))
+    }
+    private func hit(_ e: NSEvent) -> Int? {
+        let p = convert(e.locationInWindow, from: nil)
+        for r in rects where r.contains(px: p.x, py: p.y) { return Int(r.index) }
+        return nil
+    }
+    override func mouseDown(with event: NSEvent) { if let i = hit(event) { onSelect?(i) } }
+    override func mouseMoved(with event: NSEvent) {
+        let idx = hit(event) ?? -1
+        let rep = idx >= 0 ? idx : -1
+        if rep != lastHover { lastHover = rep; onHover?(rep) }
+    }
+    override func mouseExited(with event: NSEvent) {
+        if lastHover != -1 { lastHover = -1; onHover?(-1) }
     }
 }
 
@@ -62,6 +81,9 @@ final class DemoCandidatePanel: NSPanel {
     private let view = DemoPanelView()
     var onSelect: ((Int) -> Void)? {
         get { view.onSelect } set { view.onSelect = newValue }
+    }
+    var onHover: ((Int) -> Void)? {
+        get { view.onHover } set { view.onHover = newValue }
     }
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 200, height: 60),
@@ -104,7 +126,8 @@ final class IMEHarness: NSObject {
         self.client = TextViewClient(textView)
         super.init()
         textView.onKey = { [weak self] ev in self?.handleKey(ev) ?? false }
-        panel.onSelect = { [weak self] idx in self?.sendCandidateSelect(idx) }
+        panel.onSelect = { [weak self] idx in self?.handleClick(idx) }
+        panel.onHover = { [weak self] idx in self?.send(BinaryCodec.encodeCandidateHoverFrame(index: idx)) }
     }
 
     func start() {
@@ -161,11 +184,21 @@ final class IMEHarness: NSObject {
 
     // MARK: 鼠标点选 → CmdCandidateSelect
 
-    private func sendCandidateSelect(_ index: Int) {
+    // 点击: index>=0 选词; -1 翻上页; -2 翻下页。
+    private func handleClick(_ index: Int) {
+        if index >= 0 {
+            send(BinaryCodec.encodeCandidateSelectFrame(index: index))
+        } else if index == -1 {
+            send(BinaryCodec.encodeKeyEventFrame(KeyEventPayload(keyCode: 0x21))) // PgUp
+        } else if index == -2 {
+            send(BinaryCodec.encodeKeyEventFrame(KeyEventPayload(keyCode: 0x22))) // PgDn
+        }
+    }
+
+    private func send(_ frame: Data) {
         guard let bridge = bridge, bridge.isConnected else { return }
-        _ = try? bridge.send(BinaryCodec.encodeCandidateSelectFrame(index: index))
-        _ = try? bridge.readFrame()    // Ack; commit 走 push
-        NSLog("Demo: clicked candidate index=\(index)")
+        _ = try? bridge.send(frame)
+        _ = try? bridge.readFrame()    // Ack; 候选更新/commit 走 push
     }
 
     // MARK: push 通道
