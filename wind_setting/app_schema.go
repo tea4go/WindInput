@@ -313,12 +313,17 @@ func (a *App) GetSchemaConfig(schemaID string) (*SchemaConfig, error) {
 	}
 
 	// Layer 3: 叠加用户覆盖配置（通过 RPC 获取，由 wind_input 统一管理）
+	// dictionaries 数组按 id patch，避免 L3 中 `dictionaries: [{id, enabled}]` 这种
+	// 稀疏 diff 把 L1+L2 合并出的完整词库元数据（label/path/type/role 等）整体替换。
 	if a.rpcClient != nil {
 		override, overrideErr := a.rpcClient.ConfigGetSchemaOverride(schemaID)
 		if overrideErr == nil && override != nil && len(override.Data) > 0 {
 			overrideData, marshalErr := yaml.Marshal(override.Data)
 			if marshalErr == nil {
+				preL3Dicts := make([]SchemaConfigDict, len(cfg.Dicts))
+				copy(preL3Dicts, cfg.Dicts)
 				yaml.Unmarshal(overrideData, cfg)
+				cfg.Dicts = mergeSchemaConfigDicts(preL3Dicts, cfg.Dicts)
 			}
 		}
 	}
@@ -378,10 +383,23 @@ func (a *App) SaveSchemaConfig(schemaID string, cfg *SchemaConfig) error {
 		return fmt.Errorf("计算方案配置差异失败: %w", err)
 	}
 
-	// 移除不应覆盖的元数据字段
+	// 移除不应通过本入口写入的字段：
+	// - schema/encoder：元数据，方案设置对话框不编辑
+	// - dictionaries：附加词库开关由 SetDictEnabled 单独写 L3 管理，
+	//   本入口若把 diff 里的 dictionaries 一并写回会把已有开关覆盖掉
 	delete(diff, "schema")
 	delete(diff, "dictionaries")
 	delete(diff, "encoder")
+
+	// 保留 L3 里已存在的 dictionaries 字段（SetDictEnabled 写入的开关状态），
+	// 防止本次保存把它们清掉。
+	if a.rpcClient != nil {
+		if prev, prevErr := a.rpcClient.ConfigGetSchemaOverride(schemaID); prevErr == nil && prev != nil {
+			if prevDicts, ok := prev.Data["dictionaries"]; ok {
+				diff["dictionaries"] = prevDicts
+			}
+		}
+	}
 
 	// 如果没有差异，删除已有的覆盖配置；否则通过 RPC 写入覆盖层
 	if a.rpcClient != nil {
@@ -398,43 +416,37 @@ func (a *App) SaveSchemaConfig(schemaID string, cfg *SchemaConfig) error {
 }
 
 // SetDictEnabled 切换指定方案下某个附加词库的启用状态。
-// 写入用户方案文件（configDir/schemas/{schemaID}.schema.yaml，Layer 2），
-// 然后通过 RPC 触发 wind_input 重载。
+// 仅写入 Layer 3 (schema_overrides.yaml) 的稀疏 diff，不污染 Layer 1/Layer 2
+// 的方案文件。写入完成后由 ConfigSetSchemaOverride 触发 wind_input 热重载。
+//
+// L3 中的形态示例：
+//
+//	wubi86:
+//	  dictionaries:
+//	    - id: wubi86_xzqy
+//	      enabled: true
+//
+// 引擎侧 SchemaManager.LoadSchemas 在叠加 L3 时按 id patch dictionaries，不会
+// 把 L1+L2 合并出的完整词库元数据替换掉（详见 docs/design/schema-layers.md）。
 func (a *App) SetDictEnabled(schemaID, dictID string, enabled bool) error {
-	configDir, err := config.GetConfigDir()
-	if err != nil {
-		return fmt.Errorf("获取配置目录失败: %w", err)
+	if a.rpcClient == nil {
+		return fmt.Errorf("RPC client not initialized")
 	}
 
-	schemasDir := filepath.Join(configDir, "schemas")
-	userSchemaPath := filepath.Join(schemasDir, schemaID+".schema.yaml")
-
-	// 读取现有用户方案文件（如有），保留其他字段
-	var rawDoc map[string]interface{}
-	if data, err := os.ReadFile(userSchemaPath); err == nil {
-		_ = yaml.Unmarshal(data, &rawDoc)
-	}
-	if rawDoc == nil {
-		rawDoc = make(map[string]interface{})
+	// 读取现有 L3 override（保留其他设置项）
+	override := map[string]any{}
+	if reply, err := a.rpcClient.ConfigGetSchemaOverride(schemaID); err == nil && reply != nil && len(reply.Data) > 0 {
+		override = reply.Data
 	}
 
-	// 确保 schema.id 存在
-	schemaSection, _ := rawDoc["schema"].(map[string]interface{})
-	if schemaSection == nil {
-		schemaSection = map[string]interface{}{"id": schemaID}
-	} else if _, ok := schemaSection["id"]; !ok {
-		schemaSection["id"] = schemaID
-	}
-	rawDoc["schema"] = schemaSection
-
-	// 更新 dictionaries 中对应条目的 enabled 字段
-	var dicts []interface{}
-	if existing, ok := rawDoc["dictionaries"].([]interface{}); ok {
+	// 在 dictionaries 数组中按 id 找/追加并 patch enabled 字段
+	var dicts []any
+	if existing, ok := override["dictionaries"].([]any); ok {
 		dicts = existing
 	}
 	found := false
 	for i, d := range dicts {
-		if dm, ok := d.(map[string]interface{}); ok && dm["id"] == dictID {
+		if dm, ok := d.(map[string]any); ok && dm["id"] == dictID {
 			dm["enabled"] = enabled
 			dicts[i] = dm
 			found = true
@@ -442,36 +454,16 @@ func (a *App) SetDictEnabled(schemaID, dictID string, enabled bool) error {
 		}
 	}
 	if !found {
-		dicts = append(dicts, map[string]interface{}{
+		dicts = append(dicts, map[string]any{
 			"id":      dictID,
 			"enabled": enabled,
 		})
 	}
-	rawDoc["dictionaries"] = dicts
+	override["dictionaries"] = dicts
 
-	// 写回文件
-	if err := os.MkdirAll(schemasDir, 0755); err != nil {
-		return fmt.Errorf("创建方案目录失败: %w", err)
+	if err := a.rpcClient.ConfigSetSchemaOverride(schemaID, override); err != nil {
+		return fmt.Errorf("保存方案覆盖配置失败: %w", err)
 	}
-	data, err := yaml.Marshal(rawDoc)
-	if err != nil {
-		return fmt.Errorf("序列化方案配置失败: %w", err)
-	}
-	if err := os.WriteFile(userSchemaPath, data, 0644); err != nil {
-		return fmt.Errorf("写入方案文件失败: %w", err)
-	}
-
-	// 触发 wind_input 重载：读取现有 Layer 3 override 后重设（触发 ReloadConfig）
-	if a.rpcClient != nil {
-		var overrideData map[string]any
-		if reply, rpcErr := a.rpcClient.ConfigGetSchemaOverride(schemaID); rpcErr == nil && reply != nil && len(reply.Data) > 0 {
-			overrideData = reply.Data
-		} else {
-			overrideData = map[string]any{}
-		}
-		_ = a.rpcClient.ConfigSetSchemaOverride(schemaID, overrideData)
-	}
-
 	return nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/huanfeng/wind_input/pkg/config"
 )
 
 func TestLoadSchemaFile(t *testing.T) {
@@ -566,4 +568,130 @@ func TestMergeDictsByID(t *testing.T) {
 			t.Fatalf("期望 %d，实际 %d", len(base), len(result))
 		}
 	})
+}
+
+// TestLoadSchemas_Layer3PatchesDictionaries 保护 manager.go L3 叠加路径上的关键不变量：
+//
+//	L3 (schema_overrides.yaml) 中稀疏的 `dictionaries: [{id, enabled}]` 不得把
+//	L1 合并出的完整词库元数据（label/path/type/role/default_enabled/...）整体替换掉。
+//
+// 历史失误：附加词库开关曾被写到 L2 用户方案文件而不是 L3；L3 叠加又直接 yaml.Unmarshal
+// 导致 dictionaries 数组被稀疏列表整体替换。详见 docs/design/schema-layers.md。
+func TestLoadSchemas_Layer3PatchesDictionaries(t *testing.T) {
+	exeDir := t.TempDir()
+	dataDir := t.TempDir()
+
+	// 通过 APPDATA / LOCALAPPDATA 把 GetConfigDir() 重定向到临时目录，
+	// 这样 LoadSchemaOverrides 会读到下面写入的 schema_overrides.yaml。
+	tmpAppData := t.TempDir()
+	origApp := os.Getenv("APPDATA")
+	origLocal := os.Getenv("LOCALAPPDATA")
+	os.Setenv("APPDATA", tmpAppData)
+	os.Setenv("LOCALAPPDATA", tmpAppData)
+	t.Cleanup(func() {
+		os.Setenv("APPDATA", origApp)
+		os.Setenv("LOCALAPPDATA", origLocal)
+	})
+
+	// L1 内置方案：两个完整 dict，含 label / role / default_enabled 等元数据
+	exeSchemaDir := filepath.Join(exeDir, "schemas")
+	os.MkdirAll(exeSchemaDir, 0755)
+	builtin := `
+schema:
+  id: l3_dict_patch
+  name: "L3 patch 测试"
+engine:
+  type: codetable
+  codetable:
+    max_code_length: 4
+dictionaries:
+  - id: main
+    label: "主码表"
+    path: "dict/main.txt"
+    type: rime_codetable
+    default: true
+  - id: extra
+    label: "附加词库"
+    path: "dict/extra.txt"
+    type: rime_codetable
+    role: addon
+    default_enabled: false
+`
+	os.WriteFile(filepath.Join(exeSchemaDir, "l3_dict_patch.schema.yaml"), []byte(builtin), 0644)
+
+	// L3 稀疏 override：只 patch extra 词库的 enabled 字段
+	configDir, err := config.GetConfigDir()
+	if err != nil {
+		t.Fatalf("无法解析 configDir: %v", err)
+	}
+	os.MkdirAll(configDir, 0755)
+	overrideYAML := `l3_dict_patch:
+  dictionaries:
+    - id: extra
+      enabled: true
+`
+	os.WriteFile(filepath.Join(configDir, "schema_overrides.yaml"), []byte(overrideYAML), 0644)
+
+	sm := NewSchemaManager(exeDir, dataDir, nil)
+	if err := sm.LoadSchemas(); err != nil {
+		t.Fatalf("LoadSchemas 失败: %v", err)
+	}
+
+	s := sm.GetSchema("l3_dict_patch")
+	if s == nil {
+		t.Fatal("方案未加载")
+	}
+
+	// 不变量 1：dicts 数组长度未被稀疏 override 截断
+	if len(s.Dicts) != 2 {
+		t.Fatalf("L3 稀疏 override 不应改变词库数量，期望 2，实际 %d", len(s.Dicts))
+	}
+
+	// 不变量 2 + 3：找到 extra 词库，Enabled 被 patch，其它元数据保留 L1 值
+	var extra *DictSpec
+	for i := range s.Dicts {
+		if s.Dicts[i].ID == "extra" {
+			extra = &s.Dicts[i]
+			break
+		}
+	}
+	if extra == nil {
+		t.Fatal("extra 词库丢失")
+	}
+	if extra.Enabled == nil || *extra.Enabled != true {
+		t.Errorf("extra.enabled 应被 L3 patch 为 true，实际 %v", extra.Enabled)
+	}
+	if extra.Label != "附加词库" {
+		t.Errorf("extra.label 应保留 L1 元数据，实际 %q", extra.Label)
+	}
+	if extra.Path != "dict/extra.txt" {
+		t.Errorf("extra.path 应保留 L1 元数据，实际 %q", extra.Path)
+	}
+	if string(extra.Type) != "rime_codetable" {
+		t.Errorf("extra.type 应保留 L1 元数据，实际 %q", extra.Type)
+	}
+	if string(extra.Role) != "addon" {
+		t.Errorf("extra.role 应保留 L1 元数据，实际 %q", extra.Role)
+	}
+	if extra.DefaultEnabled == nil || *extra.DefaultEnabled != false {
+		t.Errorf("extra.default_enabled 应保留 L1 元数据 false，实际 %v", extra.DefaultEnabled)
+	}
+
+	// 不变量 4：未被 L3 引用的 main 词库完全未动
+	var main *DictSpec
+	for i := range s.Dicts {
+		if s.Dicts[i].ID == "main" {
+			main = &s.Dicts[i]
+			break
+		}
+	}
+	if main == nil {
+		t.Fatal("main 词库丢失")
+	}
+	if main.Enabled != nil {
+		t.Errorf("main.enabled 应为 nil（未被 L3 引用），实际 %v", main.Enabled)
+	}
+	if main.Label != "主码表" || main.Path != "dict/main.txt" {
+		t.Errorf("main 词库元数据被意外修改: label=%q path=%q", main.Label, main.Path)
+	}
 }

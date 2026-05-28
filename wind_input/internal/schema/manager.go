@@ -47,6 +47,9 @@ func (sm *SchemaManager) LoadSchemas() error {
 	}
 
 	// Layer 3: 叠加 schema_overrides.yaml 覆盖配置
+	// dictionaries 数组按 id patch（与 loader.go 中 Layer 2 合并语义一致），
+	// 避免 L3 写入 `dictionaries: [{id, enabled}]` 时把 L1+L2 合并出的完整词库
+	// 元数据（label/path/type/role 等）整体替换掉。
 	overrides, overrideErr := config.LoadSchemaOverrides()
 	if overrideErr != nil {
 		sm.logger.Warn("加载方案覆盖配置失败，跳过 Layer3", "error", overrideErr)
@@ -61,9 +64,13 @@ func (sm *SchemaManager) LoadSchemas() error {
 				sm.logger.Warn("序列化方案覆盖配置失败", "schema", schemaID, "error", marshalErr)
 				continue
 			}
+			baseDicts := make([]DictSpec, len(s.Dicts))
+			copy(baseDicts, s.Dicts)
 			if err := yaml.Unmarshal(overrideData, s); err != nil {
 				sm.logger.Warn("应用方案覆盖配置失败", "schema", schemaID, "error", err)
+				continue
 			}
+			s.Dicts = mergeDictsByID(baseDicts, s.Dicts)
 		}
 	}
 

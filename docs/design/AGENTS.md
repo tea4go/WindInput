@@ -20,6 +20,7 @@
 | `2026-04-08-english-auto-pair-design.md` | 英文自动配对设计（括号、引号、代码块） |
 | `2026-04-11-status-indicator-window-design.md` | 输入法状态指示窗口设计（UI、样式、显示策略） |
 | `command-bar-design.md` | 命令直通车（Command Bar）：在快捷短语之上的小型表达式语言，支持 `$CC(display, action...)` 组合时间/打开/按键/剪贴板/加词等动作 |
+| `schema-layers.md` | 输入方案配置三层叠加架构（L1 内置 / L2 用户方案 / L3 schema_overrides）：写入位置选型、`dictionaries` 按 id 合并的规则、新增配置项必读的黄金原则 |
 
 ## 文件分类
 
