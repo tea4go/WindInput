@@ -805,3 +805,22 @@ func (c *BinaryCodec) EncodeHostRenderFrame(p HostRenderFramePayload) []byte {
 	binary.LittleEndian.PutUint32(buf[20:24], p.Flags)
 	return append(header, buf...)
 }
+
+// EncodeCandidateRects 编 CmdCandidateRects push 帧 (darwin 候选命中矩形)。
+// payload: count(u32) + count×(index,x,y,w,h 各 i32 LE)。
+func (c *BinaryCodec) EncodeCandidateRects(rects []CandidateHitRect) []byte {
+	payloadLen := 4 + len(rects)*20
+	header := c.EncodeHeader(CmdCandidateRects, uint32(payloadLen))
+	buf := make([]byte, payloadLen)
+	binary.LittleEndian.PutUint32(buf[0:4], uint32(len(rects)))
+	off := 4
+	for _, r := range rects {
+		binary.LittleEndian.PutUint32(buf[off:off+4], uint32(r.Index))
+		binary.LittleEndian.PutUint32(buf[off+4:off+8], uint32(r.X))
+		binary.LittleEndian.PutUint32(buf[off+8:off+12], uint32(r.Y))
+		binary.LittleEndian.PutUint32(buf[off+12:off+16], uint32(r.W))
+		binary.LittleEndian.PutUint32(buf[off+16:off+20], uint32(r.H))
+		off += 20
+	}
+	return append(header, buf...)
+}

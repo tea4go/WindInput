@@ -356,6 +356,16 @@ func (s *Server) dispatchFrame(conn net.Conn, id connID, header *ipc.IpcHeader, 
 	case ipc.CmdToggleMode:
 		_, _ = s.handler.HandleToggleMode()
 		s.writeAck(conn)
+	case ipc.CmdCandidateSelect:
+		// IMKit `.app` NSPanel 鼠标点击命中候选, payload = pageLocalIndex u32。
+		// 结果走 push 通道 (PushCommitTextToActiveClient), 此处仅 Ack。
+		if len(payload) >= 4 {
+			idx := int(binary.LittleEndian.Uint32(payload[0:4]))
+			if cs, ok := s.handler.(candidateSelector); ok {
+				cs.HandleCandidateSelect(idx)
+			}
+		}
+		s.writeAck(conn)
 	default:
 		// 未覆盖的帧 (HostRender setup / token 等 Win-only 概念) 直接 Ack,
 		// macOS forwarder 在自己的 PR 内按需扩展 dispatch。

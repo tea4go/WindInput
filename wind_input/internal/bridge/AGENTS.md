@@ -33,6 +33,7 @@
 | `protocol.go` | 协议类型定义 (ResponseType、KeyEventData、StatusUpdateData 等) + `MessageHandler` 接口 |
 | `deferred_handler.go` | `DeferredHandler`: coordinator 还未就绪时返回安全默认值的代理 |
 | `keycode_name.go` | `keyCodeToKeyName(keyCode)`: VK 码 → 引擎 key 名字符串 (a-z/0-9/标点/功能键); Win+darwin server 共用 (原仅在 server_handler.go) |
+| `protocol.go` 中 `candidateSelector` | 可选扩展接口 (HandleCandidateSelect), 不并入 MessageHandler; darwin 收 CmdCandidateSelect 时类型断言调用, Coordinator 实现 + DeferredHandler 转发 |
 
 ### Windows-only (`//go:build windows`)
 | File | Description |
@@ -106,7 +107,8 @@ bridge handler goroutine 处理仍走同步响应的命令（`CmdHostRenderReque
 - 启动时清理 stale socket 文件 (上次进程未优雅退出残留)
 - `IsActivelyFocusedPID` 始终返回 false: PID 概念在 darwin 不适用, macOS 端通过 IMKit 自报 bundleID 替代 (待 PR-A 接入)
 - KeyEvent 同步响应已完整: `writeKeyResult` 把 commit/composition 编回响应帧 (IMKit `InputController.handle` 同步读取后 insertText/setMarkedText); **不要回退到 default→Ack**, 否则选词文本被吞 → "输了字不上屏"
-- host render: forwarder (`cmd/service/forwarder_darwin.go`) 订阅 `ui.Manager` cmdCh, 收 CandidatesShow → gg 渲染 → `SharedMemory.WriteFrame` → `BroadcastFrame(EncodeHostRenderFrame)`; SHM 在 `SetupHostRender(0)` 懒分配, `CleanupAll` 时 munmap+unlink
+- host render: forwarder (`cmd/service/forwarder_darwin.go`) 订阅 `ui.Manager` cmdCh, 收 CandidatesShow → gg 渲染 → `SharedMemory.WriteFrame` → `BroadcastFrame(EncodeHostRenderFrame)` + `BroadcastFrame(EncodeCandidateRects)`; SHM 在 `SetupHostRender(0)` 懒分配, `CleanupAll` 时 munmap+unlink
+- 鼠标选词: `.app` NSPanel 点中候选 → 发 `CmdCandidateSelect`(pageLocalIndex) → server_darwin dispatch 类型断言 `candidateSelector` → `Coordinator.HandleCandidateSelect` → doSelectCandidate → `PushCommitTextToActiveClient` (commit 走 push 通道, `.app` 路由到 active InputController)
 - POSIX SHM 名 `/WindInput_SHM` ≤30 字符 (macOS PSHMNAMLEN=31); 进程异常退出残留段在 `NewSharedMemory` 起手 `shmUnlink` 清掉
 - 多客户端用 `connID` (accept 自增) 替代 Win 的 PID 索引; macOS 单 IMKit `.app` 进程多 IMKInputController 实例各自独立 socket 连接, 见 [`docs/design/macos-port.md`](../../../docs/design/macos-port.md)
 

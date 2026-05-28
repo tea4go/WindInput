@@ -18,6 +18,7 @@
 | `binary_protocol.go` | 二进制协议命令码常量（上行 `CmdKeyEvent`/`CmdFocusGained` 等，下行 `CmdCommitText`/`CmdStatusUpdate`/`CmdActivationStatusPush`/`CmdHostRenderSetup` 等）；消息头/载荷结构体（`IpcHeader`、`KeyPayload`、`CaretPayload` 等）；共享内存协议常量（`SharedRenderMagic`、`SharedRenderHeaderSize`、`MaxSharedRenderSize`、`SharedFlagVisible`/`SharedFlagContentReady`）；`SharedRenderHeader`、`HostRenderSetupPayload` 结构体；`StatusHostRenderAvail` 状态标志位 |
 | `binary_codec.go` | `BinaryCodec`：消息的二进制编解码；`EncodeStatusUpdateEx`（含 `hostRenderAvail` 参数）、`EncodeActivationStatusPush`（IMEActivated/FocusGained 异步化后的状态回包，含 hotkeys + hostRenderAvail + iconLabel）、`EncodeHostRenderSetup`（编码共享内存名称和事件名称）、`EncodeBatchResponse`/`DecodeBatchEvents`（批量消息）、`EncodeStatePush`（hotkey-less 广播）；`CalcKeyHash`/`ParseKeyHash` 热键哈希函数 |
 | `binary_protocol.go` | 二进制协议命令码常量（上行 `CmdKeyEvent`/`CmdFocusGained` 等，下行 `CmdCommitText`/`CmdStatusUpdate`/`CmdHostRenderSetup`/`CmdHostRenderFrame` 等）；消息头/载荷结构体（`IpcHeader`、`KeyPayload`、`CaretPayload`、`HostRenderFramePayload` 等）；共享内存协议常量（`SharedRenderMagic`、`SharedRenderHeaderSize`、`MaxSharedRenderSize`、`SharedFlagVisible`/`SharedFlagContentReady`）；`SharedRenderHeader`、`HostRenderSetupPayload` 结构体；`StatusHostRenderAvail` 状态标志位 |
+| `binary_protocol.go` | 二进制协议命令码常量（上行 `CmdKeyEvent`/`CmdFocusGained`/`CmdCandidateSelect` 等，下行 `CmdCommitText`/`CmdStatusUpdate`/`CmdHostRenderSetup`/`CmdHostRenderFrame`/`CmdCandidateRects` 等）；消息头/载荷结构体（`IpcHeader`、`KeyPayload`、`CaretPayload`、`HostRenderFramePayload`、`CandidateHitRect` 等）；共享内存协议常量（`SharedRenderMagic`、`SharedRenderHeaderSize`、`MaxSharedRenderSize`、`SharedFlagVisible`/`SharedFlagContentReady`）；`SharedRenderHeader`、`HostRenderSetupPayload` 结构体；`StatusHostRenderAvail` 状态标志位 |
 | `binary_codec.go` | `BinaryCodec`：消息的二进制编解码；`EncodeStatusUpdateEx`（含 `hostRenderAvail`）、`EncodeHostRenderSetup`、`EncodeHostRenderFrame`（darwin SHM 新帧就绪通知, 24B: seq+x+y+w+h+flags）、`EncodeBatchResponse`/`DecodeBatchEvents`、`EncodeStatePush`；`CalcKeyHash`/`ParseKeyHash` 热键哈希 |
 | `server.go` | JSON Named Pipe 服务端（`\\.\pipe\tsf_ime_service`）— 遗留，当前未使用 |
 
@@ -31,6 +32,8 @@
 - 与 `EncodeStatePush`（`CmdStatePush=0x0206`）的区别：StatePush 是状态变更广播（hotkey 不变所以不带），ActivationStatusPush 是 activation 握手回包（必须带完整 hotkeys + hostRenderAvail）
 - `CmdHostRenderSetup`（下行 0x0501）和 `CmdHostRenderRequest`（上行 0x0501，C++ DLL 请求）共用同一命令码值，但方向不同
 - `CmdHostRenderFrame`（下行 0x0502, push）darwin 专用：Win 用命名 Event 通知 host render 新帧, darwin 无等价 API 改走 push 通道发 `HostRenderFramePayload`(seq+几何), 客户端据 seq 从 SHM 取帧 blit
+- `CmdCandidateRects`（下行 0x0503, push）darwin 专用：候选命中矩形 `[]CandidateHitRect` (panel-local), `EncodeCandidateRects`; 供 IMKit `.app` NSPanel 鼠标 hit-test
+- `CmdCandidateSelect`（上行 0x020D）darwin 专用：NSPanel 鼠标点中候选, payload=pageLocalIndex u32; Go 选词结果走 push 通道 (`PushCommitTextToActiveClient`) 异步交付
 - `SharedRenderHeader` 固定 64 字节：前 40 字节有效字段，后 24 字节保留；后跟 BGRA 像素数据
 - `CmdBatchEvents` 是批量事件命令，`bridge` 对其有特殊处理路径
 - `IsAsyncRequest(header)` 判断是否为不需要响应的异步请求（版本字段高位为 `AsyncFlag=0x8000`）

@@ -238,6 +238,14 @@ func (c *Coordinator) setupCandidateCallbacks() {
 	})
 }
 
+// HandleCandidateSelect 是 handleCandidateSelect 的导出包装, 供 darwin bridge
+// 在收到 IMKit `.app` 的 CmdCandidateSelect 帧 (NSPanel 鼠标点击命中候选) 时调用。
+// index 为当前页内的 0-based 候选索引 (与 Win 鼠标回调语义一致)。
+// 异步执行避免阻塞 bridge dispatch goroutine; 结果经 push 管道 (PushCommitTextToActiveClient) 交付。
+func (c *Coordinator) HandleCandidateSelect(index int) {
+	go c.handleCandidateSelect(index)
+}
+
 // handleCandidateSelect 处理鼠标点击选词（在独立 goroutine 中调用，通过 push 管道交付结果）
 func (c *Coordinator) handleCandidateSelect(index int) {
 	c.mu.Lock()

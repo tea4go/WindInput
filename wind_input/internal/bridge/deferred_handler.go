@@ -185,3 +185,11 @@ func (d *DeferredHandler) HandleInputStats(chars, digits, puncts, spaces, elapse
 		h.HandleInputStats(chars, digits, puncts, spaces, elapsedMs)
 	}
 }
+
+// HandleCandidateSelect 转发给底层 handler (若其实现 candidateSelector, Coordinator 实现)。
+// 不在 MessageHandler 接口内, 仅为 darwin 鼠标点选可选扩展。
+func (d *DeferredHandler) HandleCandidateSelect(index int) {
+	if cs, ok := d.getHandler().(candidateSelector); ok {
+		cs.HandleCandidateSelect(index)
+	}
+}

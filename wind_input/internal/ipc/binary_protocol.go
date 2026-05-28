@@ -28,6 +28,7 @@ const (
 	CmdMenuCommand           uint16 = 0x0208 // Menu command (toggle_mode, toggle_width, etc.)
 	CmdCompositionTerminated uint16 = 0x0209 // Composition unexpectedly terminated (e.g., user clicked in input field)
 	CmdShowContextMenu       uint16 = 0x020A // 请求显示右键菜单（TSF发送屏幕坐标）
+	CmdCandidateSelect       uint16 = 0x020D // darwin: IMKit .app NSPanel 鼠标点击命中候选 (payload: pageLocalIndex u32)
 	CmdCaretUpdate           uint16 = 0x0301 // Caret position update
 	CmdSelectionChanged      uint16 = 0x0302 // Selection/caret changed without composition (from ITfTextEditSink)
 	CmdCaretPending          uint16 = 0x0303 // First-show handshake: composition just started, real caret coming after reflow
@@ -61,8 +62,18 @@ const (
 	CmdConsumed             uint16 = 0x0401 // Key consumed (no output)
 	CmdHostRenderSetup      uint16 = 0x0501 // Host render setup (shared memory + event names)
 	CmdHostRenderFrame      uint16 = 0x0502 // Host render frame ready notification (darwin: SHM seq + geometry)
+	CmdCandidateRects       uint16 = 0x0503 // darwin: 当前帧候选命中矩形 (panel-local), 供 .app 鼠标 hit-test
 	CmdBatchResponse        uint16 = 0x0F02 // Batch response container
 )
+
+// CandidateHitRect — 单个候选在候选框 bitmap 内的命中矩形 (panel-local 像素坐标)。
+type CandidateHitRect struct {
+	Index int32 // 当前页内 0-based 索引
+	X     int32
+	Y     int32
+	W     int32
+	H     int32
+}
 
 // HostRenderFramePayload — darwin push 通道 "shm 新帧就绪" 通知。
 // Win 端 hostrender 用命名 Event 同步, darwin 没有等价 API, 改走 push 通道。

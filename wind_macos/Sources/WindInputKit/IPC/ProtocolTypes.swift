@@ -26,6 +26,7 @@ public enum UpstreamCmd {
     public static let toggleMode: UInt16      = 0x0207
     public static let showContextMenu: UInt16 = 0x020A
     public static let systemModeSwitch: UInt16 = 0x020B
+    public static let candidateSelect: UInt16  = 0x020D   // NSPanel 鼠标点击命中候选 (payload: pageLocalIndex u32)
     public static let caretUpdate: UInt16     = 0x0301
     public static let selectionChanged: UInt16 = 0x0302
     public static let caretPending: UInt16    = 0x0303
@@ -52,7 +53,25 @@ public enum DownstreamCmd {
     public static let syncConfig: UInt16       = 0x0303
     public static let hostRenderSetup: UInt16  = 0x0501
     public static let hostRenderFrame: UInt16  = 0x0502   // SHM 新帧就绪通知 (darwin)
+    public static let candidateRects: UInt16   = 0x0503   // 当前帧候选命中矩形 (panel-local)
     public static let batchResponse: UInt16    = 0x0F02
+}
+
+// CandidateHitRect — 单个候选在候选框 bitmap 内的命中矩形 (panel-local 像素).
+// 与 Go ipc.CandidateHitRect 镜像。
+public struct CandidateHitRect: Equatable {
+    public let index: Int32
+    public let x: Int32
+    public let y: Int32
+    public let w: Int32
+    public let h: Int32
+    public init(index: Int32, x: Int32, y: Int32, w: Int32, h: Int32) {
+        self.index = index; self.x = x; self.y = y; self.w = w; self.h = h
+    }
+    public func contains(px: CGFloat, py: CGFloat) -> Bool {
+        return px >= CGFloat(x) && px < CGFloat(x + w) &&
+            py >= CGFloat(y) && py < CGFloat(y + h)
+    }
 }
 
 // HostRenderFramePayload — CmdHostRenderFrame (0x0502) 24 字节 payload.

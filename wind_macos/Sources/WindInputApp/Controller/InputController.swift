@@ -34,6 +34,8 @@ public class InputController: IMKInputController {
     private var keySeq: UInt16 = 0
     private let router = BridgeResponseRouter()
     private var composition: CompositionState { router.composition }
+    // 当前焦点 IMKit client, 供鼠标选词 push commit 路由 (见 applyPushResponse)。
+    private weak var currentClient: (IMKTextInput & NSObjectProtocol)?
 
     public override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
@@ -61,6 +63,11 @@ public class InputController: IMKInputController {
             NSLog("WindInput[handle] bridge not connected, pass through")
             return false
         }
+
+        // 记录当前焦点 client + 把自己登记为 active responder, 让鼠标选词的
+        // push 通道 commit (CandidatePanelHost 收到) 能路由回这个文本框。
+        currentClient = sender as? (IMKTextInput & NSObjectProtocol)
+        CandidatePanelHost.shared.activeResponder = self
 
         keySeq &+= 1
         guard let frame = KeyHandler.encodeKeyEvent(event, seq: keySeq) else {
@@ -124,6 +131,19 @@ public class InputController: IMKInputController {
         return router.apply(frame, to: adapter)
     }
 
+    /// 应用 push 通道帧 (鼠标选词的 commit/composition 异步到达, 非 KeyEvent 同步响应)。
+    /// 路由到当前焦点 client。在主线程调用 (CandidatePanelHost 已 dispatch)。
+    public func applyPushResponse(_ frame: Frame) {
+        guard let client = currentClient else {
+            NSLog("WindInput[applyPushResponse] no current client, drop cmd=\(frame.cmd)")
+            return
+        }
+        _ = router.apply(frame, to: IMKClientAdapter(imkClient: client))
+        if !composition.isEmpty {
+            sendCaretUpdateIfAvailable(client: client)
+        }
+    }
+
     // MARK: - IMKit Adapter (把 IMKTextInput 桥接到 TextInputClient)
 
     /// IMKTextInput → TextInputClient 的适配器, 让 BridgeResponseRouter (在
@@ -153,3 +173,6 @@ public class InputController: IMKInputController {
         }
     }
 }
+
+// PushResponder: 让 CandidatePanelHost 能把 push 通道 commit 路由到此 controller。
+extension InputController: PushResponder {}

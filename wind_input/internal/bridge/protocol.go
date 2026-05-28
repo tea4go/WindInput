@@ -143,3 +143,10 @@ type MessageHandler interface {
 	// Input stats report from TSF English mode (async)
 	HandleInputStats(chars, digits, puncts, spaces, elapsedMs int)
 }
+
+// candidateSelector 是可选扩展接口 (不并入 MessageHandler 以免牵动 Win 实现)。
+// darwin bridge 收到 CmdCandidateSelect (NSPanel 鼠标点选) 时类型断言调用;
+// Coordinator 实现, DeferredHandler 转发。
+type candidateSelector interface {
+	HandleCandidateSelect(index int)
+}

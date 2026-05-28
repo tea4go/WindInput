@@ -96,9 +96,9 @@ func (f *darwinForwarder) showCandidates(p uicmd.CandidatesShowPayload, candidat
 		return
 	}
 
-	// 用真 ui.Renderer 渲染 (与 Win 端同一逻辑)。无 hover (鼠标交互后续 PR),
-	// hoverIndex=-1 / hoverPageBtn="" ; selectedIndex 高亮键盘选中项。
-	img, _ := f.renderer.RenderCandidates(
+	// 用真 ui.Renderer 渲染 (与 Win 端同一逻辑)。hoverIndex=-1 (hover 后续 PR),
+	// selectedIndex 高亮键盘选中项。renderResult.Rects 为每个候选的 panel-local 命中矩形。
+	img, renderResult := f.renderer.RenderCandidates(
 		candidates, p.Input, p.CursorPos,
 		p.Page, p.TotalPages,
 		-1, "", p.SelectedIndex)
@@ -124,6 +124,20 @@ func (f *darwinForwarder) showCandidates(p uicmd.CandidatesShowPayload, candidat
 		Flags:  0x3, // Visible | ContentReady
 	}
 	f.srv.BroadcastFrame(f.codec.EncodeHostRenderFrame(payload))
+
+	// 推候选命中矩形 (panel-local), 供 .app NSPanel 鼠标点选 hit-test。
+	if renderResult != nil && len(renderResult.Rects) > 0 {
+		rects := make([]ipc.CandidateHitRect, 0, len(renderResult.Rects))
+		for _, rc := range renderResult.Rects {
+			rects = append(rects, ipc.CandidateHitRect{
+				Index: int32(rc.Index),
+				X:     int32(rc.X), Y: int32(rc.Y),
+				W: int32(rc.W), H: int32(rc.H),
+			})
+		}
+		f.srv.BroadcastFrame(f.codec.EncodeCandidateRects(rects))
+	}
+
 	f.logger.Debug("darwin forwarder pushed frame",
 		"seq", seq, "n", len(candidates),
 		"size", fmt.Sprintf("%dx%d", img.Bounds().Dx(), img.Bounds().Dy()),

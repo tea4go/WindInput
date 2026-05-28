@@ -245,6 +245,39 @@ public enum BinaryCodec {
             flags: buf.readUInt32LE(at: 20)
         )
     }
+
+    /// 编码 CmdCandidateSelect (0x020D upstream): payload = pageLocalIndex u32 LE。
+    public static func encodeCandidateSelectFrame(index: Int) -> Data {
+        var payload = Data(count: 4)
+        payload.writeUInt32LE(UInt32(max(0, index)), at: 0)
+        var out = encodeHeader(cmd: UpstreamCmd.candidateSelect, payloadLen: 4)
+        out.append(payload)
+        return out
+    }
+
+    /// 解 CmdCandidateRects (0x0503 push): count(u32) + count×(index,x,y,w,h 各 i32 LE)。
+    public static func decodeCandidateRectsPayload(_ buf: Data) throws -> [CandidateHitRect] {
+        guard buf.count >= 4 else {
+            throw IPCError.payloadTooShort(expected: 4, got: buf.count)
+        }
+        let n = Int(buf.readUInt32LE(at: 0))
+        guard buf.count >= 4 + n * 20 else {
+            throw IPCError.payloadTooShort(expected: 4 + n * 20, got: buf.count)
+        }
+        var out: [CandidateHitRect] = []
+        out.reserveCapacity(n)
+        var off = 4
+        for _ in 0..<n {
+            out.append(CandidateHitRect(
+                index: Int32(bitPattern: buf.readUInt32LE(at: off)),
+                x: Int32(bitPattern: buf.readUInt32LE(at: off + 4)),
+                y: Int32(bitPattern: buf.readUInt32LE(at: off + 8)),
+                w: Int32(bitPattern: buf.readUInt32LE(at: off + 12)),
+                h: Int32(bitPattern: buf.readUInt32LE(at: off + 16))))
+            off += 20
+        }
+        return out
+    }
 }
 
 // MARK: - Data little-endian helpers
