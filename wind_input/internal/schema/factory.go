@@ -857,6 +857,12 @@ func preGeneratePinyinWdb(s *Schema, exeDir, dataDir string, logger *slog.Logger
 		pinyinDictPath = resolvePath(exeDir, dataDir, "pinyin/rime_frost.dict.yaml")
 	}
 
+	// 主词库文件不存在时跳过预生成（路径解析失败的防御，避免把错误路径传入构建器）
+	if _, err := os.Stat(pinyinDictPath); err != nil {
+		logger.Debug("预生成拼音 wdat 跳过：主词库文件不存在", "path", pinyinDictPath)
+		return
+	}
+
 	srcPaths := dictcache.RimePinyinSourcePaths(pinyinDictPath)
 
 	// 预生成 wdat（供 dict_format=dat 的方案使用，避免首次切换时同步构建卡顿）
