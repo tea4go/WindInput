@@ -25,7 +25,8 @@
 ### 平台无关 (Win + darwin 共用)
 | File | Description |
 |------|-------------|
-| `types_neutral.go` | 纯数据类型与枚举常量集中: `StatusState/StatusWindowConfig/StatusMenuAction` (+变体)、`ToastLevel/ToastPosition/ToastOptions`、`ToolbarState/ToolbarCallback/ToolbarContextMenuAction`、`GlobalHotkeyEntry`、`MenuItem/PopupMenuCallback`、`CandidateLayout/PositionPreference`、`UnifiedMenu*` 常量 + `UnifiedMenuState/ThemeMenuItem/SchemaMenuItem`。**不可** import windows/cgo/syscall |
+| `types_neutral.go` | 纯数据类型与枚举常量集中: `StatusState/StatusWindowConfig/StatusMenuAction` (+变体)、`ToastLevel/ToastPosition/ToastOptions`、`ToolbarState/ToolbarCallback/ToolbarContextMenuAction`、`GlobalHotkeyEntry`、`MenuItem/PopupMenuCallback`、`CandidateLayout/PositionPreference`、`UnifiedMenu*` 常量 + `UnifiedMenuState/ThemeMenuItem/SchemaMenuItem`。`UnifiedMenuState` 含 `OmitToolbarToggle`/`OmitAdvanced` (darwin 置 true 以隐藏「显示工具栏」「高级(即时候选/定位)」Win 兼容项)。**不可** import windows/cgo/syscall |
+| `unified_menu_build.go` | `BuildUnifiedMenuItems(state UnifiedMenuState) []MenuItem` + `aboutText`: 跨平台构建统一右键菜单树 (方案/简繁/全角/标点/主题/设置/关于); 据 `state.Omit*` 裁剪 Win 专属项 (原在 manager.go, Win-only) |
 | `protocol.go` | `Candidate` (=candidate.Candidate)、`CandidateCallback`、`CandidateRect`、`RenderResult` |
 | `events.go` | `uicmdItem` (Manager 内部 channel 元素, 含 `uicmd.Command` + 旁路 Candidates/Callback/MenuState); `toUICandidates` 平台无关候选切片转换 |
 | `uicmd_convert.go` | Win 业务类型 ↔ uicmd wire 镜像的双向映射 (`toUIToolbarState`/`fromUIToolbarState` 等); `ToastLevel` int↔string 等不能直接 cast 的映射在此 |

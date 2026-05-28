@@ -200,3 +200,18 @@ func (d *DeferredHandler) HandleCandidateContextMenu(index int, action string) {
 		h.HandleCandidateContextMenu(index, action)
 	}
 }
+
+// UnifiedMenuItems 转发: 取底层 handler 构建的统一菜单树 (Coordinator 实现)。
+func (d *DeferredHandler) UnifiedMenuItems() []MenuItem {
+	if h, ok := d.getHandler().(unifiedMenuHandler); ok {
+		return h.UnifiedMenuItems()
+	}
+	return nil
+}
+
+// HandleUnifiedMenuAction 转发统一菜单动作给底层 handler。
+func (d *DeferredHandler) HandleUnifiedMenuAction(id int) {
+	if h, ok := d.getHandler().(unifiedMenuHandler); ok {
+		h.HandleUnifiedMenuAction(id)
+	}
+}

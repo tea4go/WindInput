@@ -677,17 +677,27 @@ func (c *Coordinator) handleShowUnifiedMenu(screenX, screenY, flipRefY int) {
 	if c.uiManager == nil {
 		return
 	}
+	state := c.buildUnifiedMenuState()
+	capturedProcess := state.ActiveProcessName
+	c.uiManager.ShowUnifiedMenu(screenX, screenY, flipRefY, state, func(id int) {
+		go c.handleUnifiedMenuAction(id, capturedProcess)
+	})
+}
 
-	// Build theme menu items from theme info
+// buildUnifiedMenuState 收集统一菜单所需全部状态 (方案/主题/模式/过滤/简繁/高级)。
+func (c *Coordinator) buildUnifiedMenuState() ui.UnifiedMenuState {
+	// theme/schema 显示信息 (uiManager 调用不持 c.mu)
 	themeInfos := c.uiManager.GetAvailableThemeInfos()
 	themeMenuItems := make([]ui.ThemeMenuItem, len(themeInfos))
 	for i, info := range themeInfos {
 		themeMenuItems[i] = ui.ThemeMenuItem{ID: info.ID, DisplayName: info.DisplayName}
 	}
+	currentThemeID := c.uiManager.GetCurrentThemeID()
 
-	// Build schema menu items from config available list
-	var schemaMenuItems []ui.SchemaMenuItem
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var schemaMenuItems []ui.SchemaMenuItem
 	if c.config != nil && c.engineMgr != nil {
 		for _, schemaID := range c.config.Schema.Available {
 			name := c.engineMgr.GetSchemaNameByID(schemaID)
@@ -698,8 +708,6 @@ func (c *Coordinator) handleShowUnifiedMenu(screenX, screenY, flipRefY int) {
 	if c.engineMgr != nil {
 		currentSchemaID = c.engineMgr.GetCurrentSchemaID()
 	}
-
-	// Get current theme style from config
 	currentThemeStyle := config.ThemeStyleSystem
 	if c.config != nil && c.config.UI.ThemeStyle != "" {
 		currentThemeStyle = c.config.UI.ThemeStyle
@@ -708,10 +716,11 @@ func (c *Coordinator) handleShowUnifiedMenu(screenX, screenY, flipRefY int) {
 	if c.config != nil && c.config.Input.FilterMode != "" {
 		currentFilterMode = c.config.Input.FilterMode
 	}
-	activeProcessName := c.activeProcessName
-	skipCaretPending := c.activeCompatRule != nil && c.activeCompatRule.SkipCaretPending
-	pinCandidatePosition := c.activeCompatRule != nil && c.activeCompatRule.PinCandidatePosition
-	state := ui.UnifiedMenuState{
+	s2tVariant := config.S2TStandard
+	if c.config != nil {
+		s2tVariant = c.config.S2T.Variant
+	}
+	return ui.UnifiedMenuState{
 		ChineseMode:          c.chineseMode,
 		FullWidth:            c.fullWidth,
 		ChinesePunct:         c.chinesePunctuation,
@@ -720,26 +729,48 @@ func (c *Coordinator) handleShowUnifiedMenu(screenX, screenY, flipRefY int) {
 		CurrentSchemaID:      currentSchemaID,
 		CurrentFilterMode:    currentFilterMode,
 		Themes:               themeMenuItems,
-		CurrentThemeID:       c.uiManager.GetCurrentThemeID(),
+		CurrentThemeID:       currentThemeID,
 		CurrentThemeStyle:    currentThemeStyle,
 		Version:              c.version,
-		ActiveProcessName:    activeProcessName,
-		SkipCaretPending:     skipCaretPending,
-		PinCandidatePosition: pinCandidatePosition,
+		ActiveProcessName:    c.activeProcessName,
+		SkipCaretPending:     c.activeCompatRule != nil && c.activeCompatRule.SkipCaretPending,
+		PinCandidatePosition: c.activeCompatRule != nil && c.activeCompatRule.PinCandidatePosition,
 		S2TEnabled:           c.config != nil && c.config.S2T.Enabled,
-		S2TVariant: func() config.S2TVariant {
-			if c.config == nil {
-				return config.S2TStandard
-			}
-			return c.config.S2T.Variant
-		}(),
+		S2TVariant:           s2tVariant,
 	}
-	c.mu.Unlock()
+}
 
-	capturedProcess := activeProcessName
-	c.uiManager.ShowUnifiedMenu(screenX, screenY, flipRefY, state, func(id int) {
-		go c.handleUnifiedMenuAction(id, capturedProcess)
-	})
+// UnifiedMenuItems 构建统一菜单树供 darwin bridge 请求 (转 bridge.MenuItem)。
+// macOS 裁掉 Win 专属项: 浮动工具栏开关 + caret-pending/pin-position 高级兼容项。
+func (c *Coordinator) UnifiedMenuItems() []bridge.MenuItem {
+	state := c.buildUnifiedMenuState()
+	state.OmitToolbarToggle = true
+	state.OmitAdvanced = true
+	return toBridgeMenuItems(ui.BuildUnifiedMenuItems(state))
+}
+
+// HandleUnifiedMenuAction 派发 darwin 统一菜单动作 (异步避免阻塞 bridge dispatch)。
+func (c *Coordinator) HandleUnifiedMenuAction(id int) {
+	c.mu.Lock()
+	proc := c.activeProcessName
+	c.mu.Unlock()
+	go c.handleUnifiedMenuAction(id, proc)
+}
+
+// toBridgeMenuItems 递归把 ui.MenuItem 转为 bridge.MenuItem (用于 darwin 下发)。
+func toBridgeMenuItems(items []ui.MenuItem) []bridge.MenuItem {
+	out := make([]bridge.MenuItem, len(items))
+	for i, it := range items {
+		out[i] = bridge.MenuItem{
+			ID:        int32(it.ID),
+			Label:     it.Text,
+			Separator: it.Separator,
+			Checked:   it.Checked,
+			Disabled:  it.Disabled,
+			Children:  toBridgeMenuItems(it.Children),
+		}
+	}
+	return out
 }
 
 // handleUnifiedMenuAction handles a menu item selection from the unified menu.

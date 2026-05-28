@@ -362,13 +362,24 @@ func toastPositionToWire(p ToastPosition) uicmd.ToastPosition {
 // 主题
 // ============================================================================
 
-func (m *Manager) LoadTheme(string) error                           { return nil }
-func (m *Manager) ReapplyTheme()                                    {}
-func (m *Manager) SetDarkMode(bool)                                 {}
-func (m *Manager) GetAvailableThemes() []string                     { return nil }
-func (m *Manager) GetCurrentThemeName() string                      { return "" }
-func (m *Manager) GetCurrentThemeID() string                        { return "" }
-func (m *Manager) GetAvailableThemeInfos() []theme.ThemeDisplayInfo { return nil }
+func (m *Manager) LoadTheme(string) error       { return nil }
+func (m *Manager) ReapplyTheme()                {}
+func (m *Manager) SetDarkMode(bool)             {}
+func (m *Manager) GetAvailableThemes() []string { return nil }
+func (m *Manager) GetCurrentThemeName() string  { return "" }
+
+// GetCurrentThemeID 读 config 的 ui.theme (统一菜单主题项勾选用)。
+func (m *Manager) GetCurrentThemeID() string {
+	if cfg, err := config.Load(); err == nil {
+		return cfg.UI.Theme
+	}
+	return ""
+}
+
+// GetAvailableThemeInfos 经 theme.Manager 列出可用主题 (服务进程内 exeDir/data/themes 可解析)。
+func (m *Manager) GetAvailableThemeInfos() []theme.ThemeDisplayInfo {
+	return theme.NewManager(m.logger).ListAvailableThemeInfos()
+}
 
 // ============================================================================
 // 配置 setter

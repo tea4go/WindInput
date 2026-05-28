@@ -267,6 +267,57 @@ public enum BinaryCodec {
         return out
     }
 
+    /// 编码 CmdMenuAction (0x0210 upstream): payload = id i32 LE。
+    public static func encodeMenuActionFrame(id: Int32) -> Data {
+        var payload = Data(count: 4)
+        payload.writeUInt32LE(UInt32(bitPattern: id), at: 0)
+        var out = encodeHeader(cmd: UpstreamCmd.menuAction, payloadLen: 4)
+        out.append(payload)
+        return out
+    }
+
+    /// 解 CmdMenuShow (0x0506): count(u32) + count×item; item = id(i32)+flags(u8)
+    /// +labelLen(u32)+label+childCount(u32)+children(递归)。flags: 0x01 分隔/0x02 勾选/0x04 禁用。
+    public static func decodeUnifiedMenuPayload(_ buf: Data) throws -> [MenuItemData] {
+        var off = 0
+        let items = try decodeMenuItems(buf, &off)
+        return items
+    }
+
+    private static func decodeMenuItems(_ buf: Data, _ off: inout Int) throws -> [MenuItemData] {
+        guard buf.count >= off + 4 else {
+            throw IPCError.payloadTooShort(expected: off + 4, got: buf.count)
+        }
+        let n = Int(buf.readUInt32LE(at: off)); off += 4
+        var out: [MenuItemData] = []
+        out.reserveCapacity(n)
+        for _ in 0..<n {
+            out.append(try decodeMenuItem(buf, &off))
+        }
+        return out
+    }
+
+    private static func decodeMenuItem(_ buf: Data, _ off: inout Int) throws -> MenuItemData {
+        guard buf.count >= off + 9 else {
+            throw IPCError.payloadTooShort(expected: off + 9, got: buf.count)
+        }
+        let id = Int32(bitPattern: buf.readUInt32LE(at: off)); off += 4
+        let flags = buf[buf.startIndex + off]; off += 1
+        let labelLen = Int(buf.readUInt32LE(at: off)); off += 4
+        guard buf.count >= off + labelLen else {
+            throw IPCError.payloadTooShort(expected: off + labelLen, got: buf.count)
+        }
+        let label = labelLen > 0
+            ? (String(data: buf.subdata(in: (buf.startIndex + off)..<(buf.startIndex + off + labelLen)), encoding: .utf8) ?? "")
+            : ""
+        off += labelLen
+        let children = try decodeMenuItems(buf, &off)
+        return MenuItemData(
+            id: id, label: label,
+            separator: flags & 0x01 != 0, checked: flags & 0x02 != 0, disabled: flags & 0x04 != 0,
+            children: children)
+    }
+
     /// 编码 CmdCandidateContextMenu (0x020F upstream): index i32 + actionLen u32 + action UTF-8。
     public static func encodeCandidateContextMenuFrame(index: Int, action: String) -> Data {
         let actionBytes = Array(action.utf8)

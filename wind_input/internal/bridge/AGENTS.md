@@ -34,6 +34,8 @@
 | `deferred_handler.go` | `DeferredHandler`: coordinator 还未就绪时返回安全默认值的代理 |
 | `keycode_name.go` | `keyCodeToKeyName(keyCode)`: VK 码 → 引擎 key 名字符串 (a-z/0-9/标点/功能键); Win+darwin server 共用 (原仅在 server_handler.go) |
 | `protocol.go` 中 `candidateSelector` | 可选扩展接口 (HandleCandidateSelect), 不并入 MessageHandler; darwin 收 CmdCandidateSelect 时类型断言调用, Coordinator 实现 + DeferredHandler 转发 |
+| `protocol.go` 中 `candidateContextMenuHandler` | 可选扩展接口 (HandleCandidateContextMenu(index int, action string)); darwin 收 CmdCandidateContextMenu 时类型断言调用 |
+| `unified_menu.go` | 统一菜单数据 + 编码: `MenuItem` 树结构 (ID/Label/Separator/Checked/Disabled/Children); `unifiedMenuHandler` 接口 (UnifiedMenuItems() []MenuItem; HandleUnifiedMenuAction(id int)); `encodeUnifiedMenuPayload(items)` 递归编码供 CmdMenuShow 回包; Coordinator 实现 + DeferredHandler 转发 |
 
 ### Windows-only (`//go:build windows`)
 | File | Description |
@@ -110,6 +112,8 @@ bridge handler goroutine 处理仍走同步响应的命令（`CmdHostRenderReque
 - host render: forwarder (`cmd/service/forwarder_darwin.go`) 订阅 `ui.Manager` cmdCh, 收 CandidatesShow → gg 渲染 → `SharedMemory.WriteFrame` → `BroadcastFrame(EncodeHostRenderFrame)` + `BroadcastFrame(EncodeCandidateRects)`; SHM 在 `SetupHostRender(0)` 懒分配, `CleanupAll` 时 munmap+unlink
 - 鼠标选词: `.app` NSPanel 点中候选 → 发 `CmdCandidateSelect`(pageLocalIndex) → server_darwin dispatch 类型断言 `candidateSelector` → `Coordinator.HandleCandidateSelect` → doSelectCandidate → `PushCommitTextToActiveClient` (commit 走 push 通道, `.app` 路由到 active InputController)
 - 鼠标悬停: 发 `CmdCandidateHover` → server_darwin 调 `SetCandidateHoverHandler` 注入的 forwarder 回调 (按 hoverIndex 重渲染高亮, 纯渲染层状态不经 coordinator)
+- 候选右键: 发 `CmdCandidateContextMenu`(index+action) → 类型断言 `candidateContextMenuHandler` → `Coordinator.HandleCandidateContextMenu`
+- 统一菜单 (候选框空白处右键): .app 发上行 `CmdShowContextMenu` → server_darwin 调 `unifiedMenuHandler.UnifiedMenuItems()` 建树 → `encodeUnifiedMenuPayload` 经 conn.Write 回 `CmdMenuShow` (请求-响应, 非 Ack/非 push); .app 据树建 NSMenu, 点中发上行 `CmdMenuAction`(id) → `Coordinator.HandleUnifiedMenuAction`
 - POSIX SHM 名 `/WindInput_SHM` ≤30 字符 (macOS PSHMNAMLEN=31); 进程异常退出残留段在 `NewSharedMemory` 起手 `shmUnlink` 清掉
 - 多客户端用 `connID` (accept 自增) 替代 Win 的 PID 索引; macOS 单 IMKit `.app` 进程多 IMKInputController 实例各自独立 socket 连接, 见 [`docs/design/macos-port.md`](../../../docs/design/macos-port.md)
 

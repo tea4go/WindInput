@@ -29,6 +29,7 @@ public enum UpstreamCmd {
     public static let candidateSelect: UInt16  = 0x020D   // NSPanel 鼠标点击命中候选 (payload: pageLocalIndex u32)
     public static let candidateHover: UInt16   = 0x020E   // NSPanel 鼠标悬停候选 (payload: pageLocalIndex i32, -1=无)
     public static let candidateContextMenu: UInt16 = 0x020F // NSPanel 右键菜单动作 (payload: index i32 + actionLen u32 + action UTF-8)
+    public static let menuAction: UInt16       = 0x0210   // 统一菜单项被选中 (payload: id i32)
     public static let caretUpdate: UInt16     = 0x0301
     public static let selectionChanged: UInt16 = 0x0302
     public static let caretPending: UInt16    = 0x0303
@@ -58,7 +59,29 @@ public enum DownstreamCmd {
     public static let candidateRects: UInt16   = 0x0503   // 当前帧候选命中矩形 (panel-local)
     public static let modeStatus: UInt16       = 0x0504   // 输入模式状态 (中英/全半角/标点/方案), 供菜单栏指示器
     public static let candidateMenuFlags: UInt16 = 0x0505 // 当前页候选右键菜单禁用位 (每候选 1 字节)
+    public static let menuShow: UInt16         = 0x0506   // 统一菜单树 (CmdShowContextMenu 请求的响应)
+    public static let openSettings: UInt16     = 0x0507   // 请求打开设置应用 (payload: page UTF-8)
     public static let batchResponse: UInt16    = 0x0F02
+}
+
+/// 统一菜单项 (CmdMenuShow 0x0506 解码结果, 树形)。供构建原生 NSMenu。
+public struct MenuItemData {
+    public let id: Int32
+    public let label: String
+    public let separator: Bool
+    public let checked: Bool
+    public let disabled: Bool
+    public let children: [MenuItemData]
+
+    public init(id: Int32, label: String, separator: Bool, checked: Bool,
+                disabled: Bool, children: [MenuItemData]) {
+        self.id = id
+        self.label = label
+        self.separator = separator
+        self.checked = checked
+        self.disabled = disabled
+        self.children = children
+    }
 }
 
 /// 输入模式状态 (CmdModeStatus 0x0504 解码结果)。供菜单栏指示器显示。

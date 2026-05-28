@@ -205,6 +205,13 @@ func (f *darwinForwarder) handle(cmd uicmd.Command, candidates []ui.Candidate) {
 		}
 	case uicmd.CmdToolbarHide:
 		f.pushModeStatus(uicmd.ToolbarState{}, false)
+	case uicmd.CmdSettingsOpen:
+		// 统一菜单的 设置/词库管理/关于 → 让 .app 在 GUI 会话用 NSWorkspace 打开设置应用。
+		page := ""
+		if p, ok := cmd.Payload.(uicmd.SettingsOpenPayload); ok {
+			page = p.Page
+		}
+		f.srv.BroadcastFrame(f.codec.EncodeOpenSettings(page))
 	default:
 		// 其它命令 (Toast / Menu 等) 后续 PR 接入
 	}

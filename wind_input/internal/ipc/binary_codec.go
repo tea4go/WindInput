@@ -830,6 +830,13 @@ func (c *BinaryCodec) EncodeCandidateRects(rects []CandidateHitRect) []byte {
 	return append(header, buf...)
 }
 
+// EncodeOpenSettings 编 CmdOpenSettings push 帧 (darwin 请求 .app 打开设置)。payload = page UTF-8。
+func (c *BinaryCodec) EncodeOpenSettings(page string) []byte {
+	pb := []byte(page)
+	header := c.EncodeHeader(CmdOpenSettings, uint32(len(pb)))
+	return append(header, pb...)
+}
+
 // EncodeModeStatus 编 CmdModeStatus push 帧 (darwin 输入模式状态指示器)。
 // Payload: flags(u32) + effectiveMode(u32) + labelLen(u32) + label(UTF-8)。
 // flags 复用 StatusChineseMode/StatusFullWidth/StatusChinesePunct/StatusCapsLock/

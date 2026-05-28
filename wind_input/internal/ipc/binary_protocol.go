@@ -31,6 +31,7 @@ const (
 	CmdCandidateSelect       uint16 = 0x020D // darwin: IMKit .app NSPanel 鼠标点击命中候选 (payload: pageLocalIndex u32)
 	CmdCandidateHover        uint16 = 0x020E // darwin: NSPanel 鼠标悬停候选 (payload: pageLocalIndex i32, -1=无悬停)
 	CmdCandidateContextMenu  uint16 = 0x020F // darwin: NSPanel 右键菜单动作 (payload: index i32 + actionLen u32 + action UTF-8)
+	CmdMenuAction            uint16 = 0x0210 // darwin: 统一菜单项被选中 (payload: id i32)
 	CmdCaretUpdate           uint16 = 0x0301 // Caret position update
 	CmdSelectionChanged      uint16 = 0x0302 // Selection/caret changed without composition (from ITfTextEditSink)
 	CmdCaretPending          uint16 = 0x0303 // First-show handshake: composition just started, real caret coming after reflow
@@ -67,6 +68,8 @@ const (
 	CmdCandidateRects       uint16 = 0x0503 // darwin: 当前帧候选命中矩形 (panel-local), 供 .app 鼠标 hit-test
 	CmdModeStatus           uint16 = 0x0504 // darwin: 输入模式状态推送 (中英/全半角/标点/方案标签), 供 .app 菜单栏指示器
 	CmdCandidateMenuFlags   uint16 = 0x0505 // darwin: 当前页候选右键菜单禁用位 (每候选 1 字节), 供 NSMenu 按候选状态禁用项
+	CmdMenuShow             uint16 = 0x0506 // darwin: 统一菜单树 (CmdShowContextMenu 请求的响应), 供 .app 建 NSMenu
+	CmdOpenSettings         uint16 = 0x0507 // darwin: 请求 .app 打开设置应用 (payload: page UTF-8, 空=默认页)
 	CmdBatchResponse        uint16 = 0x0F02 // Batch response container
 )
 

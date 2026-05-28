@@ -80,7 +80,7 @@ public final class ModeStatusController {
         addState(menu, "全角", on: p.fullWidth)
         addState(menu, "半角", on: !p.fullWidth)
         menu.addItem(.separator())
-        let settings = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: "设置…", action: #selector(openSettingsMenuAction), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
         return menu
@@ -95,16 +95,26 @@ public final class ModeStatusController {
 
     /// 打开设置应用 (wind_setting.app, Wails)。经 LaunchServices 按 bundleID 查找并启动,
     /// 已在运行则激活已有窗口 (macOS .app 天然单实例)。
-    @objc private func openSettings() {
+    @objc private func openSettingsMenuAction() { openSettings(page: "") }
+
+    /// 打开设置应用并可选跳转到指定页 (page 非空时传 --page=<page>)。
+    /// 经 LaunchServices 按 bundleID 启动/激活已有实例。线程安全 (切主线程)。
+    public func openSettings(page: String) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.openSettings(page: page) }
+            return
+        }
         let bundleID = "com.wails.wind_setting"
         let ws = NSWorkspace.shared
         if let url = ws.urlForApplication(withBundleIdentifier: bundleID) {
-            ws.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            let cfg = NSWorkspace.OpenConfiguration()
+            if !page.isEmpty { cfg.arguments = ["--page=\(page)"] }
+            ws.openApplication(at: url, configuration: cfg)
         } else {
             // LaunchServices 尚未登记时的兜底: open -b 触发一次注册+启动。
             let p = Process()
             p.launchPath = "/usr/bin/open"
-            p.arguments = ["-b", bundleID]
+            p.arguments = page.isEmpty ? ["-b", bundleID] : ["-b", bundleID, "--args", "--page=\(page)"]
             try? p.run()
         }
     }

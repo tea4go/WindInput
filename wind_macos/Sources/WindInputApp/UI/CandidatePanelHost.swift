@@ -46,7 +46,10 @@ public final class CandidatePanelHost {
         panel.onContextAction = { [weak self] index, action in
             self?.sendFrame(BinaryCodec.encodeCandidateContextMenuFrame(index: index, action: action))
         }
-        panel.mainMenuProvider = { ModeStatusController.shared.mainMenu() }
+        panel.unifiedMenuProvider = { [weak self] in self?.requestUnifiedMenu() }
+        panel.onUnifiedAction = { [weak self] id in
+            self?.sendFrame(BinaryCodec.encodeMenuActionFrame(id: Int32(id)))
+        }
     }
 
     public func start() {
@@ -97,6 +100,28 @@ public final class CandidatePanelHost {
         }
     }
 
+    /// 空白处右键: 向 Go 请求统一菜单树 (CmdShowContextMenu → CmdMenuShow 响应)。
+    /// 同步走 request 连接 (本地 socket, 快); 失败返回 nil。在主线程调用 (鼠标事件)。
+    private func requestUnifiedMenu() -> [MenuItemData]? {
+        lock.lock()
+        if sendClient == nil {
+            sendClient = try? BridgeClient(socketPath: BridgeEndpoints.requestSocket)
+        }
+        let c = sendClient
+        lock.unlock()
+        guard let c = c else { return nil }
+        do {
+            try c.send(BinaryCodec.encodeEmptyFrame(cmd: UpstreamCmd.showContextMenu))
+            let resp = try c.readFrame()
+            guard resp.cmd == DownstreamCmd.menuShow else { return nil }
+            return try BinaryCodec.decodeUnifiedMenuPayload(resp.payload)
+        } catch {
+            NSLog("CandidatePanelHost: requestUnifiedMenu failed: \(error)")
+            lock.lock(); sendClient?.close(); sendClient = nil; lock.unlock()
+            return nil
+        }
+    }
+
     private func pagerKeyFrame(vk: UInt32) -> Data {
         BinaryCodec.encodeKeyEventFrame(KeyEventPayload(
             keyCode: vk, scanCode: 0, modifiers: 0, eventType: .down, eventSeq: 0, prevChar: 0))
@@ -142,6 +167,9 @@ public final class CandidatePanelHost {
             if let flags = try? BinaryCodec.decodeCandidateMenuFlagsPayload(frame.payload) {
                 DispatchQueue.main.async { [weak self] in self?.panel.updateMenuFlags(flags) }
             }
+        case DownstreamCmd.openSettings:
+            let page = String(data: frame.payload, encoding: .utf8) ?? ""
+            ModeStatusController.shared.openSettings(page: page)
         case DownstreamCmd.commitText, DownstreamCmd.updateComposition, DownstreamCmd.clearComposition:
             // 鼠标选词的 commit / composition 经 push 通道异步到达, 路由到当前焦点 controller。
             let responder = activeResponder

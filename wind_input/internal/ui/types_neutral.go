@@ -252,4 +252,9 @@ type UnifiedMenuState struct {
 	PinCandidatePosition bool
 	S2TEnabled           bool
 	S2TVariant           config.S2TVariant
+
+	// 平台裁剪 (darwin 置 true): macOS 无浮动工具栏概念, 也不需要 Win 的
+	// caret-pending / pin-position 兼容性高级项。
+	OmitToolbarToggle bool
+	OmitAdvanced      bool
 }

@@ -379,6 +379,25 @@ func (s *Server) dispatchFrame(conn net.Conn, id connID, header *ipc.IpcHeader, 
 			s.onCandidateHover(idx)
 		}
 		s.writeAck(conn)
+	case ipc.CmdShowContextMenu:
+		// NSPanel 空白处右键请求统一菜单。同步构建菜单树并作为响应回传 (而非 ack)。
+		if h, ok := s.handler.(unifiedMenuHandler); ok {
+			payload := encodeUnifiedMenuPayload(h.UnifiedMenuItems())
+			frame := s.codec.EncodeHeader(ipc.CmdMenuShow, uint32(len(payload)))
+			frame = append(frame, payload...)
+			_, _ = conn.Write(frame)
+		} else {
+			s.writeAck(conn)
+		}
+	case ipc.CmdMenuAction:
+		// 统一菜单项被选中, payload = id i32。动作经 Coordinator 派发, 此处仅 Ack。
+		if len(payload) >= 4 {
+			id := int(int32(binary.LittleEndian.Uint32(payload[0:4])))
+			if h, ok := s.handler.(unifiedMenuHandler); ok {
+				h.HandleUnifiedMenuAction(id)
+			}
+		}
+		s.writeAck(conn)
 	case ipc.CmdCandidateContextMenu:
 		// NSPanel 右键菜单动作, payload = index i32 + actionLen u32 + action UTF-8。
 		// 动作经 Coordinator 执行 (删词/置顶/恢复等), 候选更新走 push 通道, 此处仅 Ack。

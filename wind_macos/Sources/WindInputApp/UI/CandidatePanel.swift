@@ -24,7 +24,8 @@ final class CandidateContentView: NSView {
     var onSelect: ((Int) -> Void)?
     var onHover: ((Int) -> Void)?
     var onContextAction: ((Int, String) -> Void)? // (pageLocalIndex, action)
-    var mainMenuProvider: (() -> NSMenu?)?         // 空白处右键弹主菜单 (设置/模式状态)
+    var unifiedMenuProvider: (() -> [MenuItemData]?)? // 空白处右键: 取统一菜单树
+    var onUnifiedAction: ((Int) -> Void)?             // 统一菜单项点击 (menu item id)
 
     override var isFlipped: Bool { true } // top-left 原点, 与 wire/rects 坐标系一致
 
@@ -70,9 +71,10 @@ final class CandidateContentView: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        // 候选 (index>=0): 候选上下文菜单; 空白/翻页区: 主菜单 (设置/模式)。
+        // 候选 (index>=0): 候选上下文菜单; 空白/翻页区: 统一主菜单 (方案/主题/简繁/设置…)。
         guard let idx = hitIndex(event), idx >= 0 else {
-            if let menu = mainMenuProvider?() {
+            if let items = unifiedMenuProvider?(), !items.isEmpty {
+                let menu = buildUnifiedNSMenu(items)
                 menu.popUp(positioning: nil, at: convert(event.locationInWindow, from: nil), in: self)
             }
             return
@@ -106,6 +108,37 @@ final class CandidateContentView: NSView {
         }
     }
 
+    /// 递归把 Go 下发的统一菜单树构建为原生 NSMenu。
+    private func buildUnifiedNSMenu(_ items: [MenuItemData]) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for it in items {
+            if it.separator {
+                menu.addItem(.separator())
+                continue
+            }
+            let item = NSMenuItem(title: it.label, action: nil, keyEquivalent: "")
+            item.state = it.checked ? .on : .off
+            if !it.children.isEmpty {
+                item.submenu = buildUnifiedNSMenu(it.children)
+                item.isEnabled = true
+            } else {
+                item.target = self
+                item.action = #selector(unifiedMenuAction(_:))
+                item.representedObject = Int(it.id)
+                item.isEnabled = !it.disabled
+            }
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    @objc private func unifiedMenuAction(_ sender: NSMenuItem) {
+        if let id = sender.representedObject as? Int {
+            onUnifiedAction?(id)
+        }
+    }
+
     override func mouseMoved(with event: NSEvent) {
         // 仅对候选 (index>=0) 报悬停; 翻页按钮 (index<0) 与空白都视为无悬停。
         let idx = hitIndex(event) ?? -1
@@ -136,10 +169,15 @@ final class CandidatePanel: NSPanel {
         get { content.onContextAction }
         set { content.onContextAction = newValue }
     }
-    /// 空白处右键的主菜单提供者。
-    var mainMenuProvider: (() -> NSMenu?)? {
-        get { content.mainMenuProvider }
-        set { content.mainMenuProvider = newValue }
+    /// 空白处右键的统一菜单树提供者。
+    var unifiedMenuProvider: (() -> [MenuItemData]?)? {
+        get { content.unifiedMenuProvider }
+        set { content.unifiedMenuProvider = newValue }
+    }
+    /// 统一菜单项点击回调 (menu item id)。
+    var onUnifiedAction: ((Int) -> Void)? {
+        get { content.onUnifiedAction }
+        set { content.onUnifiedAction = newValue }
     }
 
     init() {
