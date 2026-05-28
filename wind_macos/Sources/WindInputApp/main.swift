@@ -121,6 +121,10 @@ NSLog("WindInputApp boot bundleID=\(bundleID) connection=\(connectionName)")
 let imkServer = IMKServer(name: connectionName, bundleIdentifier: bundleID)
 NSLog("WindInputApp IMKServer ready name=\(connectionName) instance=\(String(describing: imkServer))")
 
+// PR-A.5 Phase 1: 启动候选框 host (订阅 bridge push + mmap SHM)。
+// 失败不致命 — Go 服务可能晚启动, host 内部 lazy retry。
+CandidatePanelHost.shared.start()
+
 let app = NSApplication.shared
 // accessory 策略: 不在 Dock 显示, 也不抢菜单焦点. IMKit `.app` 标准做法.
 app.setActivationPolicy(.accessory)

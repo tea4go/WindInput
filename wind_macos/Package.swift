@@ -18,6 +18,7 @@ let package = Package(
         .library(name: "WindInputKit", targets: ["WindInputKit"]),
         .executable(name: "wind-smoke", targets: ["WindInputSmoke"]),
         .executable(name: "wind-input-app", targets: ["WindInputApp"]),
+        .executable(name: "wind-input-demo", targets: ["WindInputDemo"]),
     ],
     targets: [
         .target(
@@ -43,6 +44,17 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("InputMethodKit"),
+                .linkedFramework("Cocoa"),
+            ]
+        ),
+        .executableTarget(
+            name: "WindInputDemo",
+            dependencies: ["WindInputKit"],
+            path: "Sources/WindInputDemo",
+            // M3 候选框开发期 AppKit demo: 绕开 IMKit 签名/注册墙, 直接 mmap SHM
+            // (/WindInput_SHM) 把 Go 端 hostrender 出的 BGRA 帧贴到 NSWindow,
+            // 让候选框 UI 迭代 < 5 秒闭环 (swift run wind-input-demo)。
+            linkerSettings: [
                 .linkedFramework("Cocoa"),
             ]
         ),

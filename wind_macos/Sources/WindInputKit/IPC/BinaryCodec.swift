@@ -229,6 +229,22 @@ public enum BinaryCodec {
         let label = String(data: buf.subdata(in: labelStart..<buf.endIndex), encoding: .utf8) ?? ""
         return StatePushPayload(flags: flags, iconLabel: label)
     }
+
+    /// 解 CmdHostRenderFrame payload (0x0502, push). 布局 24 字节 LE:
+    /// seq:u32 + x:i32 + y:i32 + w:u32 + h:u32 + flags:u32
+    public static func decodeHostRenderFramePayload(_ buf: Data) throws -> HostRenderFramePayload {
+        guard buf.count >= 24 else {
+            throw IPCError.payloadTooShort(expected: 24, got: buf.count)
+        }
+        return HostRenderFramePayload(
+            seq: buf.readUInt32LE(at: 0),
+            x: Int32(bitPattern: buf.readUInt32LE(at: 4)),
+            y: Int32(bitPattern: buf.readUInt32LE(at: 8)),
+            width: buf.readUInt32LE(at: 12),
+            height: buf.readUInt32LE(at: 16),
+            flags: buf.readUInt32LE(at: 20)
+        )
+    }
 }
 
 // MARK: - Data little-endian helpers

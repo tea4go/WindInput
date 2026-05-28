@@ -50,7 +50,25 @@ public enum DownstreamCmd {
     public static let serviceReady: UInt16     = 0x0207
     public static let syncHotkeys: UInt16      = 0x0301
     public static let syncConfig: UInt16       = 0x0303
+    public static let hostRenderSetup: UInt16  = 0x0501
+    public static let hostRenderFrame: UInt16  = 0x0502   // SHM 新帧就绪通知 (darwin)
     public static let batchResponse: UInt16    = 0x0F02
+}
+
+// HostRenderFramePayload — CmdHostRenderFrame (0x0502) 24 字节 payload.
+// 与 Go internal/ipc/binary_protocol.go HostRenderFramePayload 镜像。
+public struct HostRenderFramePayload: Equatable {
+    public let seq: UInt32
+    public let x: Int32
+    public let y: Int32
+    public let width: UInt32
+    public let height: UInt32
+    public let flags: UInt32
+
+    public init(seq: UInt32, x: Int32, y: Int32, width: UInt32, height: UInt32, flags: UInt32) {
+        self.seq = seq; self.x = x; self.y = y
+        self.width = width; self.height = height; self.flags = flags
+    }
 }
 
 // MARK: - KeyEvent
