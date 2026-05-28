@@ -37,6 +37,11 @@ public class InputController: IMKInputController {
     // 当前焦点 IMKit client, 供鼠标选词 push commit 路由 (见 applyPushResponse)。
     private weak var currentClient: (IMKTextInput & NSObjectProtocol)?
 
+    // 修饰键单击 (tap) 检测: 按下某修饰键 → 抬起且其间无其它键 = tap, 发对应 VK 给
+    // Go 触发模式切换 (如 lshift 切中英)。macOS 修饰键走 .flagsChanged, 不是 keyDown。
+    private var pendingModVK: UInt32?    // 当前按住、待判定的修饰键 Win VK (nil=无)
+    private var pendingModSawOther = false // 修饰键按住期间是否出现过其它键 (→ 非 tap)
+
     public override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
 
@@ -84,20 +89,81 @@ public class InputController: IMKInputController {
         }
     }
 
+    // MARK: - 修饰键 tap (Shift/Ctrl 单击切换模式)
+
+    /// 处理 .flagsChanged: 修饰键按下记录待判定; 抬起且其间无其它键 = tap, 发 VK 给 Go。
+    private func handleFlagsChanged(_ event: NSEvent, client sender: Any!) {
+        guard let (vk, mask) = Self.modifierInfo(forKeyCode: event.keyCode) else {
+            pendingModVK = nil
+            return
+        }
+        let pressed = (event.modifierFlags.rawValue & mask) != 0
+        if pressed {
+            pendingModVK = vk
+            pendingModSawOther = false
+        } else {
+            if pendingModVK == vk && !pendingModSawOther {
+                sendModifierTap(vk, sender: sender)
+            }
+            pendingModVK = nil
+        }
+    }
+
+    /// mac keyCode → (Win VK, NSEvent.ModifierFlags 掩码)。仅可作模式切换的修饰键。
+    private static func modifierInfo(forKeyCode kc: UInt16) -> (UInt32, UInt)? {
+        switch kc {
+        case 56: return (0xA0, NSEvent.ModifierFlags.shift.rawValue)   // 左 Shift → VK_LSHIFT
+        case 60: return (0xA1, NSEvent.ModifierFlags.shift.rawValue)   // 右 Shift → VK_RSHIFT
+        case 59: return (0xA2, NSEvent.ModifierFlags.control.rawValue) // 左 Ctrl → VK_LCONTROL
+        case 62: return (0xA3, NSEvent.ModifierFlags.control.rawValue) // 右 Ctrl → VK_RCONTROL
+        default: return nil
+        }
+    }
+
+    /// 发一个修饰键 VK 的 KeyEvent (eventType=down) 给 Go, 触发模式切换; 应用其响应。
+    private func sendModifierTap(_ vk: UInt32, sender: Any!) {
+        guard let bridge = bridge, bridge.isConnected else { return }
+        keySeq &+= 1
+        let frame = BinaryCodec.encodeKeyEventFrame(KeyEventPayload(
+            keyCode: vk, scanCode: 0, modifiers: 0, eventType: .down, eventSeq: keySeq, prevChar: 0))
+        do {
+            try bridge.send(frame)
+            let resp = try bridge.readFrame()
+            _ = applyResponse(resp, sender: sender)
+        } catch {
+            NSLog("WindInput[modTap] vk=\(vk) io error: \(error)")
+            reconnect()
+        }
+    }
+
     // MARK: - IMKit hook
+
+    /// 告诉 IMKit 本输入法要接收哪些事件。默认只有 keyDown; 必须显式加 flagsChanged
+    /// 才能收到修饰键 (Shift/Ctrl) 变化, 做单击切换检测。
+    public override func recognizedEvents(_ sender: Any!) -> Int {
+        return Int(NSEvent.EventTypeMask.keyDown.rawValue | NSEvent.EventTypeMask.flagsChanged.rawValue)
+    }
 
     public override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event = event else { return false }
-        guard event.type == .keyDown else { return false }
-        guard let bridge = bridge, bridge.isConnected else {
-            NSLog("WindInput[handle] bridge not connected, pass through")
-            return false
-        }
 
         // 记录当前焦点 client + 把自己登记为 active responder, 让鼠标选词的
         // push 通道 commit (CandidatePanelHost 收到) 能路由回这个文本框。
         currentClient = sender as? (IMKTextInput & NSObjectProtocol)
         CandidatePanelHost.shared.activeResponder = self
+
+        // 修饰键变化 (Shift/Ctrl 等): 做 tap 检测, 不消费事件本身。
+        if event.type == .flagsChanged {
+            handleFlagsChanged(event, client: sender)
+            return false
+        }
+        guard event.type == .keyDown else { return false }
+        // 任意真实按键出现 → 取消当前修饰键 tap 判定 (Shift+X 不算 tap)。
+        pendingModSawOther = true
+        guard let bridge = bridge, bridge.isConnected else {
+            NSLog("WindInput[handle] bridge not connected, pass through")
+            return false
+        }
 
         keySeq &+= 1
         guard let frame = KeyHandler.encodeKeyEvent(event, seq: keySeq) else {
