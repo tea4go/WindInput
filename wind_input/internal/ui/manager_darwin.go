@@ -93,6 +93,18 @@ func (m *Manager) Destroy() {}
 // Events 返回反向事件通道, 与 Win 版一致。
 func (m *Manager) Events() <-chan uicmd.Event { return m.eventCh }
 
+// SubscribeCommands 启一个 goroutine 把 darwin Manager 内部 cmdCh (uicmd.Command)
+// 推给 handler。darwin forwarder 用此把命令转成 SHM bitmap + bridge push 帧 (PR-A.5)。
+// item.Candidates 不传给 handler (CandidatesShowPayload.Candidates 已含等价数据)。
+// 多次调用会启多个消费者, 命令会被任一消费者拿到 (channel 抢占), 一般只调一次。
+func (m *Manager) SubscribeCommands(handler func(cmd uicmd.Command)) {
+	go func() {
+		for item := range m.cmdCh {
+			handler(item.Cmd)
+		}
+	}()
+}
+
 // postCmd 投递一个 uicmd.Command (非阻塞)。
 func (m *Manager) postCmd(cmd uicmd.Command) {
 	select {
@@ -537,10 +549,12 @@ func (w *StatusWindow) CancelPendingHide() {}
 // SetMenuCallback darwin 上空实现 (状态指示器菜单由 IMKit `.app` 内自绘 NSMenu)。
 func (w *StatusWindow) SetMenuCallback(cb func(action StatusMenuAction)) {}
 
-func GetCapsLockState() bool   { return false }
-func GetSystemDPI() int        { return 96 }
-func ScaleIntForDPI(v int) int { return v }
-func SetEffectiveDPI(int)      {}
+func GetCapsLockState() bool { return false }
+func GetSystemDPI() int      { return 96 }
+func SetEffectiveDPI(int)    {}
+
+// ScaleIntForDPI / ScaleForDPI / GetDPIScale 由跨平台 dpi_neutral.go 提供
+// (darwin 默认 dpiScaleProvider 返回 1.0)。
 func GetMonitorWorkAreaFromPoint(int, int) (left, top, right, bottom int) {
 	return 0, 0, 1920, 1080
 }

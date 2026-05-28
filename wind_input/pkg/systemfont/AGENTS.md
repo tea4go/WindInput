@@ -4,14 +4,18 @@
 # pkg/systemfont
 
 ## Purpose
-Windows 系统字体目录扫描和信息提供。通过 Windows Registry（`HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`）枚举已安装的字体族，并提供本地化显示名称。仅 Windows 平台（`//go:build windows`）。
+跨平台系统字体目录扫描和信息提供。枚举已安装的字体族并提供本地化显示名称, 供 `internal/ui` 字体解析使用。对外 API (`List`/`HasFamily`/`ResolveFile`/`ResolveDWFamily`) 两平台同名同签名, 调用方零差异。
+
+- **Windows**: 通过 Registry（`HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`）枚举, 异步解析本地化名。
+- **darwin**: 扫描 `/System/Library/Fonts`、`Supplemental`、`/Library/Fonts`、`~/Library/Fonts` + 递归 `/System/Library/AssetsV2`（Tahoe 26 把 PingFang/SF Pro 等迁到此处）, 解 sfnt name table 取 family 名, 一次同步完成。
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `catalog_windows.go` | `FontInfo` 数据结构；`List()`/`ListFamilies()` 函数；Registry 扫描和缓存机制；字体名称本地化异步解析 |
-| `nametable.go` | `NameTable`：TrueType 字体 Name Table（元数据）解析；用于提取本地化的字体显示名称 |
-| `catalog_windows_test.go` | Registry 扫描单元测试 |
+| `catalog_windows.go` | Win 实现 (`//go:build windows`): `FontInfo`；`List`/`HasFamily`/`ResolveFile`/`ResolveDWFamily`；Registry 扫描 + `sync.Once` 缓存 + 字体名本地化异步解析 |
+| `catalog_darwin.go` | darwin 实现 (`//go:build darwin`): 同名 API；目录扫描 (含 AssetsV2 递归) + TTC 全子字体枚举 + name table platformID 0/1/3 三平台解析 (Apple Unicode / Mac Roman / Windows)；`sync.Once` 缓存；fallback PingFang/Helvetica |
+| `nametable.go` | 平台无关: sfnt Name Table 解析 (`readNameTableData`/`parseChineseFamilyName`/`parseAllFamilyNames`/`decodeUTF16BE`)；Win + darwin 共用 |
+| `catalog_windows_test.go` | Registry 扫描单元测试 (Win) |
 
 ## For AI Agents
 
@@ -36,8 +40,8 @@ Windows 系统字体目录扫描和信息提供。通过 Windows Registry（`HKE
 - 无
 
 ### External
-- `golang.org/x/sys/windows/registry` — Windows Registry 操作
-- `os` — 文件操作（TTF 读取）
-- `path/filepath` — 文件路径处理
+- Win: `golang.org/x/sys/windows/registry` — Registry 操作
+- darwin: 仅标准库 `os`/`path/filepath`/`io/fs`/`encoding/binary`
+- 共用: `os`/`path/filepath` — 文件读取与路径处理
 
 <!-- MANUAL: -->

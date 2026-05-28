@@ -110,19 +110,10 @@ func GetSystemDPI() int {
 	return DefaultDPI
 }
 
-// GetDPIScale returns the DPI scale factor (1.0 = 100%, 1.5 = 150%, etc.)
-// Uses the effective DPI (updated by WM_DPICHANGED) for per-monitor awareness.
-func GetDPIScale() float64 {
-	dpi := GetEffectiveDPI()
-	return float64(dpi) / float64(DefaultDPI)
-}
-
-// ScaleForDPI scales a value according to the current DPI
-func ScaleForDPI(value float64) float64 {
-	return value * GetDPIScale()
-}
-
-// ScaleIntForDPI scales an integer value according to the current DPI
-func ScaleIntForDPI(value int) int {
-	return int(float64(value) * GetDPIScale())
+// 把 Win 平台真实 DPI 计算注入跨平台 dpiScaleProvider (dpi_neutral.go)。
+// GetDPIScale/ScaleForDPI/ScaleIntForDPI 现统一在 dpi_neutral.go 提供。
+func init() {
+	SetDPIScaleProvider(func() float64 {
+		return float64(GetEffectiveDPI()) / float64(DefaultDPI)
+	})
 }

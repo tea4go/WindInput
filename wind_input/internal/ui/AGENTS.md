@@ -1,28 +1,56 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-13 | Updated: 2026-04-20 -->
+<!-- Generated: 2026-03-13 | Updated: 2026-05-26 -->
 
 # internal/ui
 
 ## Purpose
-Windows 原生 UI 渲染层。使用 Win32 API 实现输入法的所有可见界面元素：候选词窗口、工具栏、状态指示器（Tooltip）、弹出右键菜单。UI 运行在独立 goroutine 的 Windows 消息循环中，通过 channel 接收来自 coordinator 的命令。DirectWrite 渲染由纯 Go CGO 桥接实现，不再依赖外部 DLL。
+跨平台 UI 层. 历史上仅 Windows 原生渲染, 经 PR-1~PR-5 + PR-A(macOS) 重构后拆为:
+
+1. **平台无关数据/命令模型** — 类型定义 (`types_neutral.go`) + `uicmd.Command` 投递 (`events.go` / `uicmd_convert.go` / `protocol.go`)
+2. **跨平台渲染核心** (PR-A 解耦) — `renderer.go` / `renderer_layout.go` / `text_drawer.go`(freetype) / `font_config.go` / `fontspec.go` / `dpi_neutral.go` 用 `gogpu/gg` 出 `*image.RGBA`, 不再 `//go:build windows`; Win 与 darwin 共用同一渲染源
+3. **Windows 文本后端** — GDI + DirectWrite + CGO 后端 (`gdi_text.go` / `dwrite_*.go` / `text_drawer_windows.go` / `text_backend_windows.go`) + Win32 窗口/工具栏/菜单 (`//go:build windows`)
+4. **darwin 渲染消费** — `text_backend_darwin.go` 只走 freetype; `manager_darwin.go` 保留 cmdCh/eventCh, macOS forwarder 订阅 cmdCh 把 gg 出的位图经 SHM+push 交给 IMKit `.app` 贴 NSPanel
+
+`Manager` 在两个平台同名 struct + 同名方法集 (60+); `TextBackendManager` 两平台同公开 API (darwin 仅 freetype 分支); coordinator 调用面零变化.
 
 ## Key Files
+
+### 平台无关 (Win + darwin 共用)
 | File | Description |
 |------|-------------|
-| `manager.go` | `Manager`：UI 管理器主体，channel 消息循环，`Start()`/`WaitReady()`/`UpdateCandidates()` 等 |
+| `types_neutral.go` | 纯数据类型与枚举常量集中: `StatusState/StatusWindowConfig/StatusMenuAction` (+变体)、`ToastLevel/ToastPosition/ToastOptions`、`ToolbarState/ToolbarCallback/ToolbarContextMenuAction`、`GlobalHotkeyEntry`、`MenuItem/PopupMenuCallback`、`CandidateLayout/PositionPreference`、`UnifiedMenu*` 常量 + `UnifiedMenuState/ThemeMenuItem/SchemaMenuItem`。**不可** import windows/cgo/syscall |
+| `protocol.go` | `Candidate` (=candidate.Candidate)、`CandidateCallback`、`CandidateRect`、`RenderResult` |
+| `events.go` | `uicmdItem` (Manager 内部 channel 元素, 含 `uicmd.Command` + 旁路 Candidates/Callback/MenuState); `toUICandidates` 平台无关候选切片转换 |
+| `uicmd_convert.go` | Win 业务类型 ↔ uicmd wire 镜像的双向映射 (`toUIToolbarState`/`fromUIToolbarState` 等); `ToastLevel` int↔string 等不能直接 cast 的映射在此 |
+| `uicmd_convert_test.go` | 双向映射 roundtrip 测试 |
+
+### 跨平台渲染核心 (无 build tag, Win + darwin 共用)
+| File | Description |
+|------|-------------|
+| `renderer.go` | `Renderer`: gg 渲染候选词列表 (文字/颜色/高亮/序号圈), 出 `*image.RGBA`; 嵌入 `TextBackendManager` |
+| `renderer_layout.go` | 候选窗布局计算 (水平/垂直, DPI 感知), 纯函数易测 |
+| `text_drawer.go` | `TextDrawer` 接口 + `freeTypeDrawer` (gg/text 实现, 含 glyph 级字体 fallback) + `fontCache` |
+| `font_config.go` | `FontConfig`: 字体路径/大小/样式; 调 `systemfont.ResolveFile/HasFamily/ResolveDWFamily` 解析系统字体 |
+| `fontspec.go` | `FontSpecToName` + `knownFontNames`: 字体规格字符串归一化 (纯字符串处理, 原在 gdi_text.go) |
+| `dpi_neutral.go` | `GetDPIScale`/`ScaleForDPI`/`ScaleIntForDPI` + `SetDPIScaleProvider`; Win 在 dpi.go init 注入真实 DPI, darwin 默认 1.0 |
+
+### Windows-only (`//go:build windows`)
+| File | Description |
+|------|-------------|
+| `manager.go` | `Manager` Win 版主体, channel 消息循环, `Start()`/`WaitReady()`/`processOneCommand` 按 `uicmd.CommandType` 分发 |
 | `manager_candidate.go` | 候选窗口管理：显示/隐藏/更新候选列表和分页 |
 | `manager_config.go` | 配置更新：字体、主题、布局、Tooltip 延迟等 |
 | `manager_indicator.go` | 状态指示器（模式切换时短暂显示的浮动提示） |
 | `manager_toolbar.go` | 工具栏管理：显示/隐藏/更新状态（中英文、全角、标点） |
+| `manager_screenshot.go` | `doTakeScreenshot`：截图所有可见 UI 窗口存盘 (`uicmd.CmdScreenshot` 触发) |
 | `window.go` | Win32 候选词窗口创建、WndProc、GDI 渲染 |
 | `window_mouse.go` | 候选词窗口鼠标事件处理（点击选词、鼠标悬停） |
 | `window_registry.go` | `WindowRegistry[T]`：泛型 HWND→`*T` 映射，供 WndProc 回调安全查找窗口实例 |
 | `layered_window.go` | `UpdateLayeredWindowFromImage`：将 `image.RGBA` 渲染到分层窗口（`WS_EX_LAYERED`），处理 RGBA→BGRA 转换、CreateDIBSection、UpdateLayeredWindow |
-| `text_backend.go` | `TextBackendManager`：统一管理 GDI/FreeType/DirectWrite 三种文字渲染后端的生命周期；`NewTextBackendManager(label)` 创建实例 |
+| `text_backend_windows.go` | `TextBackendManager` Win 版：统一管理 GDI/FreeType/DirectWrite 三后端生命周期；`SetTextRenderMode` 三分支切换 |
+| `text_drawer_windows.go` | `gdiDrawer` + `directWriteDrawer`：`TextDrawer` 的 GDI/DirectWrite 实现 (依赖 `TextRenderer`/`DWriteRenderer`) |
 | `dwrite_cgo_windows.go` | CGO 桥接文件（仅 Windows）：C trampoline `cDrawGlyphRunTrampoline` 从 XMM 寄存器正确接收 float 参数后转发给 Go 导出函数 `goDrawGlyphRunBridge`；解决 Windows x64 COM 回调中 float 参数无法通过 `syscall.NewCallback` 可靠提取的问题；`dwCGODrawGlyphRunCallback()` 返回 C 函数指针供 COM vtable 使用 |
-| `dwrite_text.go` | DirectWrite 文字渲染实现（IDWriteFactory/IDWriteTextLayout COM 接口调用） |
-| `renderer.go` | `Renderer`：GDI 渲染候选词列表（文字、颜色、高亮） |
-| `renderer_layout.go` | 候选窗口布局计算（水平/垂直排列，DPI 感知） |
+| `dwrite_text.go` | DirectWrite 文字渲染实现（IDWriteFactory/IDWriteTextLayout COM 接口调用）；`TextRenderer`(GDI)/`DWriteRenderer` 类型定义在此与 gdi_text.go |
 | `toolbar_window.go` | 工具栏 Win32 窗口创建和消息循环 |
 | `toolbar_window_event.go` | 工具栏鼠标事件（拖拽、按钮点击） |
 | `toolbar_renderer.go` | 工具栏 GDI 渲染（模式按钮、全角按钮、标点按钮、设置按钮） |
@@ -35,16 +63,36 @@ Windows 原生 UI 渲染层。使用 Win32 API 实现输入法的所有可见界
 | `toast_window.go` | `ToastWindow`：独立 layered 通知窗口，用于错误提示 / 词库就绪等一次性 toast；支持 4 个 Level（Info/Success/Warn/Error）× 4 个 Position（Center/BottomRight/TopRight/Top）+ 自动隐藏（版本号取消）+ 左键点击关闭 + 右键回调预留；目标显示器以鼠标光标定位，避免跨屏错位 |
 | `toast_renderer.go` | `ToastRenderer`：toast 图像渲染（标题 + 多行正文 + 圆角矩形 + Level accent 边框），复用 `TextBackendManager`（DirectWrite） |
 | `monitor.go` | 多显示器支持：获取目标显示器工作区，用于窗口位置计算 |
-| `dpi.go` | DPI 缩放工具函数 |
-| `gdi_text.go` | GDI 文字渲染实现 |
-| `font_config.go` | `FontConfig`：字体路径/大小/样式配置 |
-| `text_drawer.go` | `TextDrawer` 接口：统一 GDI/DirectWrite 绘制 API |
-| `protocol.go` | UI 内部消息类型（`UICommand`、`Candidate`、`ToolbarState`、`MenuItem`） |
+| `dpi.go` | Win DPI 检测 (`GetEffectiveDPI`/WM_DPICHANGED)；`init()` 注入 `dpiScaleProvider` 给跨平台 `dpi_neutral.go` |
+| `gdi_text.go` | GDI 文字渲染实现 (`TextRenderer` + `containsSymbolChars`)；`FontSpecToName` 已移至跨平台 `fontspec.go` |
+| `uicmd_post.go` | `postCmd` 投递 helper + `snapshotCandidatesMarkers/Config/PinState` 全量快照构造器 (供 setter 末尾投递 snapshot 命令到 cmdCh) |
+| `uicmd_events.go` | 反向事件通道: `Events() <-chan uicmd.Event` + `wrapCandidateCallbacks/wrapToolbarCallbacks/wrapHotkeyCallback` 双流并行包装 (原 callback + 推一份 uicmd.Event) |
+| `uicmd_post_test.go` | snapshot helper + wrap callback 双流行为 + 背压测试 |
+
+### darwin-only (`//go:build darwin`)
+| File | Description |
+|------|-------------|
+| `manager_darwin.go` | `Manager` darwin stub: 保留 cmdCh/eventCh; 60+ method 投递 uicmd.Command; `SubscribeCommands(handler)` 启 goroutine 把 cmdCh 推给 macOS forwarder; Win 渲染/窗口/钩子 no-op; 含 `StatusWindow`/`GetCapsLockState`/`ParseHotkeyString` 等 stub |
+| `text_backend_darwin.go` | `TextBackendManager` darwin 版: 仅 freetype (gg/text) 后端, 公开 API 与 Win 版对齐; `SetTextRenderMode` 忽略 mode 恒走 freetype; `SetGDIFontParams`/`SetDWriteFontFallbackForPUA` 为 no-op 兼容占位 |
+| `manager_darwin_test.go` | 18 个 darwin Manager 命令投递测试 (ShowCandidates/SetXxx/Hide/Toast/Toolbar/Hotkeys/Menu 等) |
 
 ## For AI Agents
 
 ### Working In This Directory
-- UI 线程（Windows 消息循环）与 coordinator goroutine 通过 `chan UICommand` 通信
+
+**架构理解**:
+- coordinator 调 `ui.Manager.ShowCandidates(...)` 等外观方法; Manager 内部构造 `uicmd.Command` 投递到 `cmdCh chan uicmdItem`
+- Win 端: `processOneCommand` 消费 cmdCh → 调本地 do* 方法画窗口
+- darwin 端: `processOneCommand` 不存在; 未来 macOS forwarder 直接订阅 cmdCh, 把命令序列化转发到 IMKit `.app`
+- 反向事件: Win 端 `wrapXxxCallbacks` 拦截 callback 同时推 `uicmd.Event` 到 `eventCh`; `Manager.Events() <-chan uicmd.Event` 暴露给订阅方
+
+**平台无关层 (`types_neutral.go` 等) 红线**:
+- 不能 import windows / cgo / syscall / unsafe
+- 任何新增"两个平台都用到的数据类型"集中在 types_neutral.go, 避免在 *_darwin.go 复刻
+- darwin Manager 在 `manager_darwin.go` 内独立 struct + 同名方法, 与 Win 版字段不共享
+
+**Win 端旧文档** (channel/UI 渲染基础不变):
+- UI 线程 (Windows 消息循环) 与 coordinator goroutine 通过 `chan uicmdItem` 通信 (历史上是 `chan UICommand`, PR-2 已迁移)
 - `Manager.Start()` 创建窗口并进入消息循环（阻塞，必须在独立 goroutine 运行）
 - `Manager.WaitReady()` 阻塞直到 UI 线程初始化完成（main.go 中等待）
 - GDI 渲染：所有绘制在 `WM_PAINT` 中进行，使用双缓冲避免闪烁
@@ -78,9 +126,19 @@ Windows 原生 UI 渲染层。使用 Win32 API 实现输入法的所有可见界
 
 ## Dependencies
 ### Internal
+- `internal/uicmd` — 平台无关命令/事件模型 (cmdCh / eventCh 元素类型)
+- `internal/candidate` — `Candidate` 数据 (protocol.go 中 type alias)
+- `internal/cmdbar` — 候选词 Action / 副作用判定 (Win 端 renderer_layout.go 用)
 - `pkg/theme` — 主题颜色定义
+- `pkg/config` — 配置枚举类型 (Layout/PreeditMode 等)
 
 ### External
-- `golang.org/x/sys/windows` — Win32 API（窗口、GDI、消息、分层窗口、RegisterHotKey）
+- 共用: `github.com/gogpu/gg` + `gg/text` (2D 渲染 + freetype 文本, 跨平台渲染核心)
+- Win: `golang.org/x/sys/windows` (Win32 API), CGO 桥接 DirectWrite
+- darwin: gg + 标准库 (image, log/slog, sync); 字体定位走 `pkg/systemfont` darwin catalog
+
+## 全局约束
+- 枚举与魔法字符串约束: 见 [`/docs/design/enum-constraint.md`](../../../docs/design/enum-constraint.md)
+- macOS 移植设计: 见 [`/docs/design/macos-port.md`](../../../docs/design/macos-port.md) — Manager 命令模型如何接入 IMKit `.app`
 
 <!-- MANUAL: -->

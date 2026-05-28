@@ -1,5 +1,3 @@
-//go:build windows
-
 package ui
 
 import (
@@ -278,7 +276,10 @@ func (r *Renderer) UpdateFont(fontSize float64, fontFamily string) {
 
 // refreshDPIIfNeeded checks if DPI has changed since last render and recalculates if needed.
 func (r *Renderer) refreshDPIIfNeeded() {
-	currentDPI := GetEffectiveDPI()
+	// 用跨平台 GetDPIScale * 96 还原成 int dpi, 保持原 lastDPI int 字段语义不变。
+	// Win 端 GetDPIScale() = GetEffectiveDPI()/96, 反推回 currentDPI = GetEffectiveDPI()。
+	// darwin 端 GetDPIScale() 默认 1.0, currentDPI = 96 恒定 (无 per-monitor 切换)。
+	currentDPI := int(GetDPIScale() * 96.0)
 	if r.lastDPI != currentDPI {
 		r.lastDPI = currentDPI
 		r.RefreshDPIScale()
