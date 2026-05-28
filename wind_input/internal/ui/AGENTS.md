@@ -93,6 +93,8 @@
 | File | Description |
 |------|-------------|
 | `manager_darwin.go` | `Manager` darwin stub: 保留 cmdCh/eventCh; 60+ method 投递 uicmd.Command (供 macOS forwarder 订阅); Win 渲染/窗口/钩子全部 no-op; 含 `StatusWindow` / `GetCapsLockState` / `ParseHotkeyString` 等独立函数 stub |
+| `manager_darwin.go` | `Manager` darwin stub: 保留 cmdCh/eventCh; 60+ method 投递 uicmd.Command; `SubscribeCommands(func(cmd, candidates []Candidate))` 启 goroutine 把 cmdCh + 旁路候选推给 macOS forwarder (候选含完整字段供 ui.Renderer); Win 渲染/窗口/钩子 no-op; 含 `StatusWindow`/`GetCapsLockState`/`ParseHotkeyString` 等 stub |
+| `text_backend_darwin.go` | `TextBackendManager` darwin 版: 仅 freetype (gg/text) 后端; 用 `ResolvePrimaryFont` (allow TTC, 因 PingFang 是 .ttc 且当前 gg/text 支持集合) 而非 `ResolveTextPrimaryFont` (TTF-only); `SetTextRenderMode` 忽略 mode 恒走 freetype; `SetGDIFontParams`/`SetDWriteFontFallbackForPUA` no-op 占位 |
 | `manager_darwin_test.go` | 18 个 darwin Manager 命令投递测试 (ShowCandidates/SetXxx/Hide/Toast/Toolbar/Hotkeys/Menu 等) |
 
 ## For AI Agents

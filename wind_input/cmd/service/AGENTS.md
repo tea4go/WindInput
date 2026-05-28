@@ -12,7 +12,7 @@
 | File | Description |
 |------|-------------|
 | `main.go` | 服务入口，组件初始化、生命周期管理、热重载；`startPlatformForwarder` hook 在 UI 就绪后调用 |
-| `forwarder_darwin.go` | (`//go:build darwin`) `darwinForwarder`: 订阅 `ui.Manager.SubscribeCommands`, 收 `CmdCandidatesShow`/`Hide` → gg 渲染候选位图 (PingFang, 与 cmd/shmwriter 同源) → `SharedMemory.WriteFrame` → `BroadcastFrame(EncodeHostRenderFrame)`; `startPlatformForwarder` darwin 实现 |
+| `forwarder_darwin.go` | (`//go:build darwin`) `darwinForwarder`: 订阅 `ui.Manager.SubscribeCommands(cmd, candidates)`, 收 `CmdCandidatesShow`/`Hide` → 真 `ui.Renderer.RenderCandidates` (跨平台 gg 核心, freetype + PingFang, 与 Win 视觉一致) → `SharedMemory.WriteFrame` → `BroadcastFrame(EncodeHostRenderFrame)`; `startPlatformForwarder` darwin 实现 |
 | `forwarder_windows.go` | (`//go:build windows`) `startPlatformForwarder` no-op (Win 候选框走 LayeredWindow 直绘) |
 | `logging.go` | 日志轮转（`rotatingWriter`）和多路 slog Handler（`multiHandler`），5MB × 3 轮转 |
 | `version.go` | 版本号变量，通过 ldflags 在构建时注入（`-X main.version=x.y.z`） |

@@ -79,10 +79,12 @@ func DefaultRenderConfig() RenderConfig {
 		InputTextColor:  color.RGBA{100, 100, 100, 255},
 		BorderColor:     color.RGBA{200, 200, 200, 255},
 		HoverBgColor:    color.RGBA{230, 240, 255, 255}, // Light blue for hover
-		Layout:          config.LayoutHorizontal,        // Default to horizontal layout
-		HidePreedit:     false,
-		ShowPageNumber:  true,
-		CmdbarPrefix:    DefaultCmdbarCandidatePrefix,
+		SelectedBgColor: color.RGBA{204, 228, 255, 255}, // 键盘选中高亮 (默认值; 主题 SetTheme 会覆盖)。
+		// 不设默认会在无主题渲染 (如 darwin forwarder) 选中项走 dc.SetColor(nil) 崩溃。
+		Layout:         config.LayoutHorizontal, // Default to horizontal layout
+		HidePreedit:    false,
+		ShowPageNumber: true,
+		CmdbarPrefix:   DefaultCmdbarCandidatePrefix,
 	}
 }
 

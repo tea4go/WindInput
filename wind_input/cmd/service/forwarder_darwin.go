@@ -4,13 +4,8 @@ package main
 
 import (
 	"fmt"
-	"image"
 	"log/slog"
-	"strings"
 	"sync"
-
-	"github.com/gogpu/gg"
-	ggtext "github.com/gogpu/gg/text"
 
 	"github.com/huanfeng/wind_input/internal/bridge"
 	"github.com/huanfeng/wind_input/internal/ipc"
@@ -19,27 +14,23 @@ import (
 	"github.com/huanfeng/wind_input/pkg/systemfont"
 )
 
-// forwarder_darwin.go — PR-A.5 Phase 2: 把 ui.Manager 的 uicmd 命令转成 SHM bitmap
-// + bridge push CmdHostRenderFrame 帧, 让 macOS IMKit `.app` 端 CandidatePanelHost
+// forwarder_darwin.go — PR-A M4: 把 ui.Manager 的 uicmd 命令转成 SHM bitmap +
+// bridge push CmdHostRenderFrame 帧, 让 macOS IMKit `.app` 端 CandidatePanelHost
 // 收到并贴出 NSPanel。
 //
-// 简化策略 (M3 第一版):
-//   - 仅处理 CmdCandidatesShow / CmdCandidatesHide / CmdCandidatesPosition
-//   - 不复用 wind_input/internal/ui/renderer.go (那套需要 RenderConfig + theme 完整
-//     接入, M3 范围太大), 改用与 cmd/shmwriter 同源的最小 gg 渲染 (圆角白底 +
-//     蓝色序号圈 + PingFang 文本)
-//   - 后续 PR (M4) 把 ui.Renderer 真接入 → 主题/字体配置/动画统一
+// M4 用**真** ui.Renderer (跨平台 gg 渲染核心) 替代 M3 的 mockup, 与 Win 端共用
+// 同一渲染逻辑 (主题/布局/字体/序号圈/分页/选中高亮), 实现 Win/Mac 视觉一致。
+// renderer freetype 后端 + PingFang 字体 (systemfont darwin catalog 定位)。
 //
-// Toolbar / Toast / Tooltip / Menu / Mode 等 uicmd 暂时 ignore, 走后续阶段。
+// 处理 CmdCandidatesShow / CmdCandidatesHide; Toolbar/Toast/Mode 等后续 PR 接入。
 
 type darwinForwarder struct {
-	mu         sync.Mutex
-	logger     *slog.Logger
-	srv        *bridge.Server
-	hrm        *bridge.HostRenderManager
-	codec      *ipc.BinaryCodec
-	fontSource *ggtext.FontSource
-	lastSeq    uint32
+	mu       sync.Mutex
+	logger   *slog.Logger
+	srv      *bridge.Server
+	hrm      *bridge.HostRenderManager
+	codec    *ipc.BinaryCodec
+	renderer *ui.Renderer
 }
 
 // startCandidateForwarder 启动 darwin 渲染转发 goroutine。
@@ -48,23 +39,17 @@ func startCandidateForwarder(srv *bridge.Server, mgr *ui.Manager,
 	hrm *bridge.HostRenderManager, codec *ipc.BinaryCodec,
 	logger *slog.Logger) {
 
-	// 解析字体一次, 失败也不致命 (forwarder 仍 run, 收到 CandidatesShow 时再试)
-	fontPath := systemfont.ResolveFile("PingFang SC", false)
-	if fontPath == "" {
-		fontPath = systemfont.ResolveFile("Helvetica", false)
+	renderer := ui.NewRenderer(ui.DefaultRenderConfig())
+	// darwin 仅 freetype 后端 (text_backend_darwin.go 忽略 mode 恒走 freetype)
+	renderer.SetTextRenderMode(ui.TextRenderModeFreetype)
+
+	// 主力中文字体: PingFang SC (systemfont darwin → AssetsV2 PingFang.ttc)
+	fontFamily := "PingFang SC"
+	if systemfont.ResolveFile(fontFamily, false) == "" {
+		fontFamily = "Helvetica"
 	}
-	var src *ggtext.FontSource
-	if fontPath != "" {
-		s, err := ggtext.NewFontSourceFromFile(fontPath)
-		if err == nil {
-			src = s
-			logger.Info("darwin forwarder font loaded", "path", fontPath)
-		} else {
-			logger.Warn("darwin forwarder font load failed", "path", fontPath, "err", err)
-		}
-	} else {
-		logger.Warn("darwin forwarder no system font found")
-	}
+	renderer.UpdateFont(18, fontFamily)
+	logger.Info("darwin forwarder renderer ready", "font", fontFamily)
 
 	// 提前 setup SHM, 让 push notify 时 client mmap 已 ready
 	if _, err := hrm.SetupHostRender(0); err != nil {
@@ -72,27 +57,27 @@ func startCandidateForwarder(srv *bridge.Server, mgr *ui.Manager,
 	}
 
 	f := &darwinForwarder{
-		logger:     logger,
-		srv:        srv,
-		hrm:        hrm,
-		codec:      codec,
-		fontSource: src,
+		logger:   logger,
+		srv:      srv,
+		hrm:      hrm,
+		codec:    codec,
+		renderer: renderer,
 	}
 
-	mgr.SubscribeCommands(func(cmd uicmd.Command) {
-		f.handle(cmd)
+	mgr.SubscribeCommands(func(cmd uicmd.Command, candidates []ui.Candidate) {
+		f.handle(cmd, candidates)
 	})
 	logger.Info("darwin candidate forwarder started")
 }
 
-func (f *darwinForwarder) handle(cmd uicmd.Command) {
+func (f *darwinForwarder) handle(cmd uicmd.Command, candidates []ui.Candidate) {
 	switch cmd.Type {
 	case uicmd.CmdCandidatesShow:
 		p, ok := cmd.Payload.(uicmd.CandidatesShowPayload)
 		if !ok {
 			return
 		}
-		f.showCandidates(p)
+		f.showCandidates(p, candidates)
 	case uicmd.CmdCandidatesHide:
 		f.hideCandidates()
 	default:
@@ -100,9 +85,9 @@ func (f *darwinForwarder) handle(cmd uicmd.Command) {
 	}
 }
 
-func (f *darwinForwarder) showCandidates(p uicmd.CandidatesShowPayload) {
-	if f.fontSource == nil {
-		f.logger.Debug("darwin forwarder font not ready, skip render")
+func (f *darwinForwarder) showCandidates(p uicmd.CandidatesShowPayload, candidates []ui.Candidate) {
+	if len(candidates) == 0 {
+		f.hideCandidates()
 		return
 	}
 	state := f.hrm.GetActiveState(0)
@@ -110,33 +95,39 @@ func (f *darwinForwarder) showCandidates(p uicmd.CandidatesShowPayload) {
 		f.logger.Debug("darwin forwarder SHM not ready, skip")
 		return
 	}
-	img := f.renderCandidates(p)
+
+	// 用真 ui.Renderer 渲染 (与 Win 端同一逻辑)。无 hover (鼠标交互后续 PR),
+	// hoverIndex=-1 / hoverPageBtn="" ; selectedIndex 高亮键盘选中项。
+	img, _ := f.renderer.RenderCandidates(
+		candidates, p.Input, p.CursorPos,
+		p.Page, p.TotalPages,
+		-1, "", p.SelectedIndex)
 	if img == nil {
 		return
 	}
-	seq, err := state.SHM.WriteFrame(img, int(p.CaretX), int(p.CaretY)+int(p.CaretHeight)+4)
+
+	// 候选框贴在 caret 下方 (top-left wire 坐标)
+	x := p.CaretX
+	y := p.CaretY + p.CaretHeight + 4
+	seq, err := state.SHM.WriteFrame(img, x, y)
 	if err != nil {
 		f.logger.Warn("darwin forwarder WriteFrame", "err", err)
 		return
 	}
-	f.mu.Lock()
-	f.lastSeq = seq
-	f.mu.Unlock()
 
 	payload := ipc.HostRenderFramePayload{
 		Seq:    seq,
-		X:      int32(p.CaretX),
-		Y:      int32(p.CaretY) + int32(p.CaretHeight) + 4,
+		X:      int32(x),
+		Y:      int32(y),
 		Width:  uint32(img.Bounds().Dx()),
 		Height: uint32(img.Bounds().Dy()),
 		Flags:  0x3, // Visible | ContentReady
 	}
-	frame := f.codec.EncodeHostRenderFrame(payload)
-	f.srv.BroadcastFrame(frame)
+	f.srv.BroadcastFrame(f.codec.EncodeHostRenderFrame(payload))
 	f.logger.Debug("darwin forwarder pushed frame",
-		"seq", seq,
+		"seq", seq, "n", len(candidates),
 		"size", fmt.Sprintf("%dx%d", img.Bounds().Dx(), img.Bounds().Dy()),
-		"at", fmt.Sprintf("(%d,%d)", payload.X, payload.Y))
+		"at", fmt.Sprintf("(%d,%d)", x, y))
 }
 
 func (f *darwinForwarder) hideCandidates() {
@@ -145,84 +136,9 @@ func (f *darwinForwarder) hideCandidates() {
 		return
 	}
 	seq := state.SHM.WriteHide()
-	payload := ipc.HostRenderFramePayload{
-		Seq:   seq,
-		Flags: 0, // not visible
-	}
-	frame := f.codec.EncodeHostRenderFrame(payload)
-	f.srv.BroadcastFrame(frame)
-}
-
-// renderCandidates 与 cmd/shmwriter/main.go 同源 (M4 后会替换为 ui.Renderer)。
-func (f *darwinForwarder) renderCandidates(p uicmd.CandidatesShowPayload) *image.RGBA {
-	const (
-		padX      = 12.0
-		padY      = 10.0
-		itemH     = 32.0
-		gapItems  = 8.0
-		indexBoxW = 18.0
-		indexGap  = 6.0
-		corner    = 8.0
-		fontSize  = 18.0
-		idxSize   = 12.0
-	)
-
-	probe := gg.NewContext(1, 1)
-	face := f.fontSource.Face(fontSize)
-	probe.SetFont(face)
-
-	type sized struct {
-		text string
-		w    float64
-	}
-	var items []sized
-	totalW := padX
-	for _, c := range p.Candidates {
-		t := strings.TrimSpace(c.Text)
-		if t == "" {
-			continue
-		}
-		w, _ := probe.MeasureString(t)
-		itemW := indexBoxW + indexGap + w + 12
-		items = append(items, sized{text: t, w: itemW})
-		totalW += itemW + gapItems
-	}
-	if len(items) == 0 {
-		return nil
-	}
-	totalW -= gapItems
-	totalW += padX
-	totalH := padY*2 + itemH
-
-	dc := gg.NewContext(int(totalW), int(totalH))
-	dc.SetHexColor("#FFFFFF")
-	dc.DrawRoundedRectangle(0, 0, totalW, totalH, corner)
-	dc.Fill()
-	dc.SetHexColor("#DCDCDC")
-	dc.SetLineWidth(1)
-	dc.DrawRoundedRectangle(0.5, 0.5, totalW-1, totalH-1, corner)
-	dc.Stroke()
-
-	face = f.fontSource.Face(fontSize)
-	idxFace := f.fontSource.Face(idxSize)
-
-	x := padX
-	y := padY + itemH/2
-	for i, it := range items {
-		cx := x + indexBoxW/2
-		cy := y
-		dc.SetHexColor("#4285F4")
-		dc.DrawCircle(cx, cy, indexBoxW/2)
-		dc.Fill()
-		dc.SetFont(idxFace)
-		dc.SetHexColor("#FFFFFF")
-		dc.DrawStringAnchored(fmt.Sprintf("%d", i+1), cx, cy, 0.5, 0.35)
-		dc.SetFont(face)
-		dc.SetHexColor("#1E1E1E")
-		dc.DrawStringAnchored(it.text, x+indexBoxW+indexGap, y, 0, 0.35)
-		x += it.w + gapItems
-	}
-	return dc.Image().(*image.RGBA)
+	f.srv.BroadcastFrame(f.codec.EncodeHostRenderFrame(ipc.HostRenderFramePayload{
+		Seq: seq, Flags: 0,
+	}))
 }
 
 // startPlatformForwarder 是 cmd/service/main.go 的平台 hook (darwin: 启 candidate

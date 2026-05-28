@@ -48,12 +48,15 @@ func (m *TextBackendManager) ResolvePrimaryFontPath() string {
 }
 
 // EnsureFontCache lazily creates the gg/text font cache.
+// darwin 用 ResolvePrimaryFont (singleFontOnly=false) 而非 ResolveTextPrimaryFont:
+// 当前 gg/text 已支持 TTC 集合, 而 macOS 主力中文字体 PingFang 正是 .ttc,
+// TTF-only 解析会跳过它。Win 端仍走 TTF-only 的历史路径不受影响。
 func (m *TextBackendManager) EnsureFontCache() *fontCache {
 	if m.fontCache == nil {
 		m.fontCache = newFontCache()
 	}
 	m.fontConfig.SetPrimaryFont(m.fontSpec)
-	resolved := m.fontConfig.ResolveTextPrimaryFont()
+	resolved := m.fontConfig.ResolvePrimaryFont()
 	if resolved == "" {
 		return m.fontCache
 	}
@@ -76,10 +79,10 @@ func (m *TextBackendManager) SetTextRenderMode(mode TextRenderMode) {
 func (m *TextBackendManager) SetFontFamily(fontSpec string) {
 	m.fontSpec = fontSpec
 	m.fontConfig.SetPrimaryFont(m.fontSpec)
-	textResolved := m.fontConfig.ResolveTextPrimaryFont()
-	if m.fontCache != nil && textResolved != "" {
+	resolved := m.fontConfig.ResolvePrimaryFont() // 允许 TTC (PingFang)
+	if m.fontCache != nil && resolved != "" {
 		m.fontCache.mu.Lock()
-		_ = m.fontCache.loadFont(textResolved)
+		_ = m.fontCache.loadFont(resolved)
 		m.fontCache.mu.Unlock()
 		m.fontReady = true
 	}
