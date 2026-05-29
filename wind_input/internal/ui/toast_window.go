@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -77,6 +78,23 @@ func (w *ToastWindow) SetOnRightClick(cb func(x, y int)) {
 }
 
 // IsVisible 返回 toast 当前是否可见。
+// CaptureToFile re-renders the toast using current options and saves as PNG to path.
+func (w *ToastWindow) CaptureToFile(path string) error {
+	w.mu.Lock()
+	opts := w.currentOpts
+	width := w.width
+	w.mu.Unlock()
+	maxContentPx := opts.MaxWidth
+	if maxContentPx <= 0 {
+		maxContentPx = width
+	}
+	img := w.renderer.Render(opts, maxContentPx)
+	if img == nil {
+		return fmt.Errorf("toast render returned nil")
+	}
+	return savePNG(img, path)
+}
+
 func (w *ToastWindow) IsVisible() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()

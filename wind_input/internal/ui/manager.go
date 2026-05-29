@@ -579,6 +579,8 @@ func (m *Manager) processOneCommand(cmd UICommand) {
 		}
 	case cmdToastHide:
 		m.doHideToast()
+	case cmdScreenshot:
+		m.doTakeScreenshot()
 	}
 }
 
@@ -643,6 +645,17 @@ func (m *Manager) RegisterGlobalHotkeys(entries []GlobalHotkeyEntry) {
 		SetEvent(m.cmdEvent)
 	default:
 		m.logger.Warn("Command channel full, dropping register_hotkeys")
+	}
+}
+
+// TakeUIScreenshots 触发所有当前可见 UI 窗口的截图，保存到用户数据目录的 screenshots/ 子目录。
+// 可从任意 goroutine 调用，实际截图在 UI 线程执行。
+func (m *Manager) TakeUIScreenshots() {
+	select {
+	case m.cmdCh <- UICommand{Type: cmdScreenshot}:
+		SetEvent(m.cmdEvent)
+	default:
+		m.logger.Warn("Command channel full, dropping screenshot command")
 	}
 }
 

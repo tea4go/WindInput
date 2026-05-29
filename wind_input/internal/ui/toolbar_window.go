@@ -380,6 +380,18 @@ func (w *ToolbarWindow) GetPosition() (int, int) {
 	return w.x, w.y
 }
 
+// CaptureToFile re-renders the toolbar using current state and saves as PNG to path.
+func (w *ToolbarWindow) CaptureToFile(path string) error {
+	w.mu.Lock()
+	state := w.state
+	w.mu.Unlock()
+	img := w.renderer.Render(state)
+	if img == nil {
+		return fmt.Errorf("toolbar render returned nil")
+	}
+	return savePNG(img, path)
+}
+
 // Render renders the toolbar content
 func (w *ToolbarWindow) Render() {
 	if w.hwnd == 0 {

@@ -91,6 +91,14 @@ func GetThemesUserDir() (string, error) {
 	return filepath.Join(base, "themes"), nil
 }
 
+func GetScreenshotsDir() (string, error) {
+	base, err := ResolveUserDataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "screenshots"), nil
+}
+
 // IsPortableMode returns whether the application is running in portable mode.
 func IsPortableMode() bool {
 	exeDir, err := GetExeDir()

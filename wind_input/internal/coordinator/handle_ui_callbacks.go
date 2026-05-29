@@ -88,6 +88,10 @@ func (c *Coordinator) handleGlobalHotkeyCommand(command string) {
 		c.HandleMenuCommand("toggle_toolbar")
 	case "open_settings":
 		c.HandleMenuCommand("open_settings")
+	case "take_screenshot":
+		if c.uiManager != nil {
+			c.uiManager.TakeUIScreenshots()
+		}
 	}
 }
 

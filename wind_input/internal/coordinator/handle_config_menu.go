@@ -300,6 +300,7 @@ func (c *Coordinator) buildGlobalHotkeyEntries() []ui.GlobalHotkeyEntry {
 		"toggle_toolbar":    c.config.Hotkeys.ToggleToolbar,
 		"open_settings":     c.config.Hotkeys.OpenSettings,
 		"add_word":          c.config.Hotkeys.AddWord,
+		"take_screenshot":   c.config.Hotkeys.TakeScreenshot,
 	}
 
 	var entries []ui.GlobalHotkeyEntry

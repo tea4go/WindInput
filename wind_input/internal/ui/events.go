@@ -22,4 +22,5 @@ const (
 	cmdHideTooltip       managerCommand = "hide_tooltip"
 	cmdToast             managerCommand = "toast"
 	cmdToastHide         managerCommand = "toast_hide"
+	cmdScreenshot        managerCommand = "screenshot"
 )

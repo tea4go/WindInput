@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"sync"
 	"syscall"
@@ -757,6 +758,15 @@ func (m *PopupMenu) IsVisible() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.visible
+}
+
+// CaptureToFile re-renders the menu using current state and saves as PNG to path.
+func (m *PopupMenu) CaptureToFile(path string) error {
+	img := m.render()
+	if img == nil {
+		return fmt.Errorf("popup menu render returned nil")
+	}
+	return savePNG(img, path)
 }
 
 // Destroy destroys the popup menu window

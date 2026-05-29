@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -370,6 +371,19 @@ func (w *StatusWindow) UpdateContent(state StatusState) {
 	if err := UpdateLayeredWindowFromImage(w.hwnd, img, x, y); err != nil {
 		w.logger.Warn("更新状态窗口内容失败", "error", err)
 	}
+}
+
+// CaptureToFile re-renders the status window using current state and saves as PNG to path.
+func (w *StatusWindow) CaptureToFile(path string) error {
+	w.mu.Lock()
+	state := w.state
+	cfg := w.config
+	w.mu.Unlock()
+	img := w.renderer.Render(state, cfg)
+	if img == nil {
+		return fmt.Errorf("status render returned nil")
+	}
+	return savePNG(img, path)
 }
 
 // SetConfig 设置运行时配置

@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"log/slog"
@@ -309,6 +310,23 @@ func (w *TooltipWindow) IsVisible() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.visible
+}
+
+// CaptureToFile re-renders the tooltip using stored text and saves as PNG to path.
+func (w *TooltipWindow) CaptureToFile(path string) error {
+	w.mu.Lock()
+	text := w.text
+	w.mu.Unlock()
+	if text == "" {
+		return fmt.Errorf("tooltip has no text to render")
+	}
+	scale := GetDPIScale()
+	maxWidth := float64(int(400 * scale))
+	img := w.render(text, maxWidth)
+	if img == nil {
+		return fmt.Errorf("tooltip render returned nil")
+	}
+	return savePNG(img, path)
 }
 
 // Destroy destroys the tooltip window

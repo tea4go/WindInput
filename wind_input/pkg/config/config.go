@@ -108,6 +108,7 @@ type HotkeyConfig struct {
 	OpenSettings    string   `yaml:"open_settings" json:"open_settings"`       // 打开设置: 通用按键组合或 "none"
 	AddWord         string   `yaml:"add_word" json:"add_word"`                 // 快捷加词: 通用按键组合或 "none"
 	ToggleS2T       string   `yaml:"toggle_s2t" json:"toggle_s2t"`             // 简入繁出开关切换: 通用按键组合或 "none"
+	TakeScreenshot  string   `yaml:"take_screenshot" json:"take_screenshot"`   // UI 截图: 通用按键组合或 "none"
 	GlobalHotkeys   []string `yaml:"global_hotkeys" json:"global_hotkeys"`     // 注册为全局热键的快捷键名称列表
 }
 
@@ -415,6 +416,8 @@ func DefaultConfig() *Config {
 			OpenSettings:    "none",
 			AddWord:         "ctrl+equal",
 			ToggleS2T:       "ctrl+shift+j",
+			TakeScreenshot:  "ctrl+shift+f11",
+			GlobalHotkeys:   []string{},
 		},
 		UI: UIConfig{
 			FontSize:                18,

@@ -143,6 +143,14 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		return c.handleToggleS2T()
 	}
 
+	// UI 截图快捷键：仅在输入法激活（正在处理按键）时生效，非全局热键
+	if c.config != nil && c.matchHotkey(c.config.Hotkeys.TakeScreenshot, hasCtrl, hasShift, hasAlt, data.KeyCode) {
+		if c.uiManager != nil {
+			c.uiManager.TakeUIScreenshots()
+		}
+		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+	}
+
 	// 候选词操作快捷键（仅在输入态且有候选时生效）
 	if c.config != nil && hasCtrl && len(c.candidates) > 0 && len(c.inputBuffer) > 0 {
 		if num := c.matchCandidateActionKey(c.config.Hotkeys.DeleteCandidate, hasCtrl, hasShift, data.KeyCode); num > 0 {
