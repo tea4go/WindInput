@@ -568,8 +568,14 @@ func (b *dwBackend) copyFromImage(src *image.RGBA, srcX, srcY, w, h int) {
 	)
 }
 
-// copyToImageRGB reads BGRA pixels from the GDI bitmap and writes only
-// the R,G,B channels back to the target image, preserving the original alpha.
+// copyToImageRGB reads BGRA pixels from the GDI bitmap and writes the R,G,B
+// channels back to the target image, preserving the original alpha.
+//
+// 文字像素（DrawGlyphRun 修改过 RGB 的像素）写回前会按当前 alpha 预乘
+// (R' = R×A/255)，使其成为合法预乘像素，从而与背景共享同一透明度——
+// 半透明窗口上的文字会随背景一起透出，而非以直通色顶亮显示。
+// 背景像素（GDI 位图中未被字形覆盖、读回值与原值相同）保持不动，
+// 它们本就是 gg 输出的合法预乘值，不可重复预乘。
 func (b *dwBackend) copyToImageRGB(dst *image.RGBA, dstX, dstY, w, h int) {
 	memDC := b.getMemoryDC()
 	if memDC == 0 {
@@ -615,10 +621,21 @@ func (b *dwBackend) copyToImageRGB(dst *image.RGBA, dstX, dstY, w, h int) {
 			}
 			si := py*stride + px*4
 			di := (imgY-bounds.Min.Y)*dst.Stride + (imgX-bounds.Min.X)*4
-			// BGRA → RGB (keep original alpha)
-			dst.Pix[di+0] = pixels[si+2] // R
-			dst.Pix[di+1] = pixels[si+1] // G
-			dst.Pix[di+2] = pixels[si+0] // B
+			// BGRA → RGB
+			newR := pixels[si+2]
+			newG := pixels[si+1]
+			newB := pixels[si+0]
+			oldR := dst.Pix[di+0]
+			oldG := dst.Pix[di+1]
+			oldB := dst.Pix[di+2]
+			if newR == oldR && newG == oldG && newB == oldB {
+				continue // 背景像素未被字形覆盖，保持原预乘值
+			}
+			// 文字像素：把直通色按当前 alpha 预乘，得到合法预乘像素
+			a := uint32(dst.Pix[di+3])
+			dst.Pix[di+0] = uint8(uint32(newR) * a / 255)
+			dst.Pix[di+1] = uint8(uint32(newG) * a / 255)
+			dst.Pix[di+2] = uint8(uint32(newB) * a / 255)
 		}
 	}
 }

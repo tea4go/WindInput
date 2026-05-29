@@ -494,10 +494,10 @@ func (tr *TextRenderer) endDrawInternal() {
 	}
 
 	// Copy pixels back (BGRA → RGBA).
-	// For pixels modified by GDI text rendering (RGB changed), force alpha to 255
-	// so text appears fully opaque even on semi-transparent backgrounds (e.g. A=245).
-	// Without this fix, text inherits the background's alpha and appears washed out
-	// after premultiplied alpha compositing in UpdateLayeredWindow.
+	// GDI 在不透明 DIB 上以直通色绘制文字（BeginDraw 已把 DIB alpha 强制为 255）。
+	// 文字像素（RGB 被改过的）写回前按原 alpha 预乘 (R'=R×A/255)，使其成为合法预乘
+	// 像素，从而与背景共享同一透明度——与 DWrite 后端 copyToImageRGB 行为一致。
+	// 背景像素（RGB 未变）保持原值，本就是 gg 输出的合法预乘值，不可重复预乘。
 	pixelCount := tr.drawWidth * tr.drawHeight
 	srcSlice := unsafe.Slice((*byte)(tr.drawBits), pixelCount*4)
 	for i := 0; i < pixelCount; i++ {
@@ -509,15 +509,13 @@ func (tr *TextRenderer) endDrawInternal() {
 		oldG := tr.drawImg.Pix[si+1]
 		oldB := tr.drawImg.Pix[si+2]
 
-		tr.drawImg.Pix[si+0] = newR
-		tr.drawImg.Pix[si+1] = newG
-		tr.drawImg.Pix[si+2] = newB
-
-		// If GDI changed any RGB component, this pixel has text on it → make fully opaque
-		if newR != oldR || newG != oldG || newB != oldB {
-			tr.drawImg.Pix[si+3] = 255
+		if newR == oldR && newG == oldG && newB == oldB {
+			continue // 背景像素未被字形覆盖，保持原预乘值
 		}
-		// Otherwise keep original alpha (background pixels unchanged)
+		a := uint32(tr.drawImg.Pix[si+3])
+		tr.drawImg.Pix[si+0] = uint8(uint32(newR) * a / 255)
+		tr.drawImg.Pix[si+1] = uint8(uint32(newG) * a / 255)
+		tr.drawImg.Pix[si+2] = uint8(uint32(newB) * a / 255)
 	}
 
 	// Cleanup GDI resources
