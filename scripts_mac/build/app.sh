@@ -9,13 +9,13 @@
 # 输出: wind_macos/build/WindInput.app
 #
 # 用法:
-#   scripts/build_macos_app.sh            # release build + ad-hoc 签名
-#   scripts/build_macos_app.sh --debug    # debug build (swift build -c debug)
-#   scripts/build_macos_app.sh --no-sign  # 不 codesign (调试用)
+#   scripts_mac/build/app.sh            # release build + ad-hoc 签名
+#   scripts_mac/build/app.sh --debug    # debug build (swift build -c debug)
+#   scripts_mac/build/app.sh --no-sign  # 不 codesign (调试用)
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 MACOS_DIR="$REPO_DIR/wind_macos"
 APP_NAME="WindInput"
 APP_BUNDLE="$MACOS_DIR/build/$APP_NAME.app"
@@ -23,8 +23,8 @@ APP_BUNDLE="$MACOS_DIR/build/$APP_NAME.app"
 SWIFT_CONFIG="release"
 DO_SIGN=1
 # 默认 ad-hoc (-). 真实证书:
-#   SIGN_IDENTITY="WindInput Dev" scripts/build_macos_app.sh
-# 自签证书的创建方法见 scripts/setup_signing.md.
+#   SIGN_IDENTITY="WindInput Dev" scripts_mac/build/app.sh
+# 自签证书的创建方法见 scripts_mac/deploy/setup_signing.md.
 # macOS 26 (Tahoe) 对 IME 强制要求 codesign 有真实 Authority, adhoc 被 TIS
 # 静默拒绝注册 — 本地开发期请用自签证书签名.
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"
@@ -116,5 +116,5 @@ fi
 
 bold "==> Done"
 info "Bundle: $APP_BUNDLE"
-info "下一步: sudo scripts/install_macos_app.sh"
+info "下一步: sudo scripts_mac/deploy/install_app.sh"
 info "       (会把 .app 复制到 /Library/Input Methods/ 并 killall 旧实例)"

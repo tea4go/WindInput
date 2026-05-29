@@ -45,11 +45,11 @@ security find-identity -v -p codesigning
 
 ```bash
 # 构建
-SIGN_IDENTITY="WindInput Dev" scripts/build_macos_app.sh
+SIGN_IDENTITY="WindInput Dev" scripts_mac/build/app.sh
 
 # 卸旧的 + 重装
-sudo scripts/install_macos_app.sh --uninstall
-sudo SIGN_IDENTITY="WindInput Dev" scripts/install_macos_app.sh
+sudo scripts_mac/deploy/install_app.sh --uninstall
+sudo SIGN_IDENTITY="WindInput Dev" scripts_mac/deploy/install_app.sh
 ```
 
 ### 5. 验证签名 + TIS 注册
@@ -59,7 +59,7 @@ sudo SIGN_IDENTITY="WindInput Dev" scripts/install_macos_app.sh
 codesign -dv --verbose=4 "/Library/Input Methods/WindInput.app" 2>&1 | grep -E "Authority|Signature|TeamIdentifier"
 
 # TIS 应该终于收录我们
-swift scripts/list_input_sources.swift
+swift scripts_mac/test/list_input_sources.swift
 ```
 
 期望:
@@ -71,4 +71,4 @@ swift scripts/list_input_sources.swift
 
 ## 删除证书 (后续不想要时)
 
-钥匙串访问 → 登录 → 我的证书 → 找到 `WindInput Dev` → 右键 → 删除. 删完跑 `scripts/install_macos_app.sh --uninstall` 卸掉签了它的 .app.
+钥匙串访问 → 登录 → 我的证书 → 找到 `WindInput Dev` → 右键 → 删除. 删完跑 `scripts_mac/deploy/install_app.sh --uninstall` 卸掉签了它的 .app.

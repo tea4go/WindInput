@@ -5,14 +5,14 @@
 # 添加一次, 后续就能在状态栏 IME 切换菜单看到.
 #
 # 用法:
-#   scripts/install_macos_app.sh                  # 装 release build
-#   scripts/install_macos_app.sh --debug          # 装 debug build (路径同)
-#   scripts/install_macos_app.sh --build          # 先 build 再装
-#   scripts/install_macos_app.sh --uninstall      # 卸载
+#   scripts_mac/deploy/install_app.sh                  # 装 release build
+#   scripts_mac/deploy/install_app.sh --debug          # 装 debug build (路径同)
+#   scripts_mac/deploy/install_app.sh --build          # 先 build 再装
+#   scripts_mac/deploy/install_app.sh --uninstall      # 卸载
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 MACOS_DIR="$REPO_DIR/wind_macos"
 APP_NAME="WindInput"
 APP_BUNDLE="$MACOS_DIR/build/$APP_NAME.app"
@@ -119,8 +119,8 @@ PY
     # 7. 验证
     sleep 0.5
     info "verify (TIS 内 WindInput 条目):"
-    if [[ -f "$SCRIPT_DIR/list_input_sources.swift" ]]; then
-        local_count=$(swift "$SCRIPT_DIR/list_input_sources.swift" 2>/dev/null | grep -c "$BUNDLE_ID" || true)
+    if [[ -f "$REPO_DIR/scripts_mac/test/list_input_sources.swift" ]]; then
+        local_count=$(swift "$REPO_DIR/scripts_mac/test/list_input_sources.swift" 2>/dev/null | grep -c "$BUNDLE_ID" || true)
         info "    $local_count 条 (期望 0)"
     fi
 
@@ -133,10 +133,17 @@ fi
 if [[ $DO_BUILD -eq 1 ]]; then
     # 空数组 + set -u 在 bash 5 之前展开会报 unbound; 用 ${arr[@]+"${arr[@]}"} 形式
     # 在数组未设/空时整体不展开任何参数, 非空时正常按数组逐项展开.
-    "$SCRIPT_DIR/build_macos_app.sh" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
+    # 本脚本通常以 sudo 跑 (要写 /Library). 但 build 不能用 root: 否则
+    # wind_macos/build/WindInput.app 会被 root 拥有, 下次普通用户 build 时
+    # rm -rf 删不掉 (踩过的坑). 有 SUDO_USER 时降权回原用户 build.
+    if [[ $EUID -eq 0 && -n "${SUDO_USER:-}" ]]; then
+        sudo -u "$SUDO_USER" bash "$REPO_DIR/scripts_mac/build/app.sh" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
+    else
+        "$REPO_DIR/scripts_mac/build/app.sh" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
+    fi
 fi
 
-[[ -d "$APP_BUNDLE" ]] || { err "未找到 $APP_BUNDLE, 先跑 scripts/build_macos_app.sh"; exit 1; }
+[[ -d "$APP_BUNDLE" ]] || { err "未找到 $APP_BUNDLE, 先跑 scripts_mac/build/app.sh"; exit 1; }
 
 # -------- install --------
 bold "==> Install $APP_BUNDLE -> $INSTALL_APP"
@@ -241,6 +248,6 @@ cat <<EOF
          IME 端: "WindInput[InputController] bridge connected"
                 "WindInput[handle] ..." 或 PassThrough/Consumed 路径
 
-  卸载:    sudo scripts/install_macos_app.sh --uninstall
+  卸载:    sudo scripts_mac/deploy/install_app.sh --uninstall
 
 EOF

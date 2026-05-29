@@ -61,7 +61,8 @@ Schema 驱动流程:
 | `docs/` | 项目文档：design/ 设计方案、requirements/ 需求规划、testing/ 测试指南、archive/ 历史文档 (see `docs/AGENTS.md`) |
 | `dict/` | 运行时词库数据（unigram 等） |
 | `installer/` | 安装/卸载脚本 (see `installer/AGENTS.md`) |
-| `scripts/` | 构建辅助和工具脚本（版本管理、诊断工具）(see `scripts/AGENTS.md`) |
+| `scripts/` | 构建辅助和工具脚本（Windows 版本管理、IME/窗口诊断）(see `scripts/AGENTS.md`) |
+| `scripts_mac/` | macOS 构建/部署/诊断工具链（build/deploy/test/vm）(see `scripts_mac/AGENTS.md`) |
 | `wind_portable/` | 便携版启动器工具（部署、进程管理、TSF 动态注册）(see `wind_portable/AGENTS.md`) |
 | `pic/` | 项目截图和图片资源 |
 
@@ -185,6 +186,7 @@ Schema 驱动流程:
 | [`data/schemas/AGENTS.md`](data/schemas/AGENTS.md) | Schema YAML 定义 |
 | [`installer/AGENTS.md`](installer/AGENTS.md) | 安装器总览 |
 | [`installer/nsis/AGENTS.md`](installer/nsis/AGENTS.md) | NSIS 安装脚本 |
-| [`scripts/AGENTS.md`](scripts/AGENTS.md) | 构建辅助与工具脚本 |
+| [`scripts/AGENTS.md`](scripts/AGENTS.md) | Windows 构建辅助与诊断脚本 |
+| [`scripts_mac/AGENTS.md`](scripts_mac/AGENTS.md) | macOS 构建/部署/诊断工具链 |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

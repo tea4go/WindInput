@@ -2,8 +2,8 @@
 # redeploy.sh — 一键重新签名 + 卸载 + 安装 + 验证 TIS 注册.
 #
 # 用法:
-#   sudo scripts/redeploy.sh                     # 默认用 "WindInput Dev" 证书
-#   sudo SIGN_IDENTITY="My Cert" scripts/redeploy.sh
+#   sudo scripts_mac/deploy/redeploy.sh                     # 默认用 "WindInput Dev" 证书
+#   sudo SIGN_IDENTITY="My Cert" scripts_mac/deploy/redeploy.sh
 #
 # 完整流程:
 #   1. (drop sudo) 用 SIGN_IDENTITY 重 build .app (注入 hardened runtime + entitlements + 真证书)
@@ -12,7 +12,7 @@
 #   4. 验证 .app 签名 / spctl / TIS list
 set -uo pipefail
 
-REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
+REPO_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 SIGN_IDENTITY="${SIGN_IDENTITY:-WindInput Dev}"
 
 bold() { printf "\n\033[1m==> %s\033[0m\n" "$*"; }
@@ -24,7 +24,7 @@ err()  { printf "\033[31m[错误] %s\033[0m\n" "$*" >&2; }
 # errSecInternalComponent). 内部对需要 root 的步骤显式 invoke sudo.
 if [[ $EUID -eq 0 ]]; then
     err "请直接以普通用户跑 (不要 sudo). 我会在需要 root 时自动 invoke sudo."
-    err "  用法: scripts/redeploy.sh"
+    err "  用法: scripts_mac/deploy/redeploy.sh"
     exit 1
 fi
 
@@ -52,7 +52,7 @@ security set-key-partition-list -S apple-tool:,apple:,codesign: -s "$KEYCHAIN" \
     >/dev/null 2>&1 || info "set-key-partition-list 已是允许状态 (或弹密码框被取消)"
 
 bold "3. 重 build .app (release + hardened runtime + \"$SIGN_IDENTITY\" 签名)"
-"$REPO_DIR/scripts/build_macos_app.sh" 2>&1 | tail -20 | sed 's/^/  /'
+"$REPO_DIR/scripts_mac/build/app.sh" 2>&1 | tail -20 | sed 's/^/  /'
 
 # 立刻验证 build 出的 .app 真用了 SIGN_IDENTITY 签
 BUILT_APP="$REPO_DIR/wind_macos/build/WindInput.app"
@@ -67,20 +67,20 @@ fi
 info "build OK, $BUILT_AUTH"
 
 bold "4. uninstall 旧版 (sudo)"
-sudo "$REPO_DIR/scripts/install_macos_app.sh" --uninstall 2>&1 | tail -10 | sed 's/^/  /'
+sudo "$REPO_DIR/scripts_mac/deploy/install_app.sh" --uninstall 2>&1 | tail -10 | sed 's/^/  /'
 
 bold "5. 装新版 (sudo, 含 lsregister + --register-input-source + --enable-input-source)"
-sudo "$REPO_DIR/scripts/install_macos_app.sh" 2>&1 | sed 's/^/  /'
+sudo "$REPO_DIR/scripts_mac/deploy/install_app.sh" 2>&1 | sed 's/^/  /'
 
 bold "6. 验证安装后 .app 签名"
 codesign -dv --verbose=4 "/Library/Input Methods/WindInput.app" 2>&1 \
     | grep -E "Authority|Signature|flags|TeamIdentifier|Runtime|Format" | sed 's/^/  /'
 
 bold "7. TIS list 看本 IME 是否终于收录"
-/usr/bin/swift "$REPO_DIR/scripts/list_input_sources.swift" 2>&1 | head -30 | sed 's/^/  /'
+/usr/bin/swift "$REPO_DIR/scripts_mac/test/list_input_sources.swift" 2>&1 | head -30 | sed 's/^/  /'
 
 bold "8. 结果"
-if /usr/bin/swift "$REPO_DIR/scripts/list_input_sources.swift" 2>&1 \
+if /usr/bin/swift "$REPO_DIR/scripts_mac/test/list_input_sources.swift" 2>&1 \
         | grep -q "to.feng.wind_input"; then
     info "✓ TIS 收录成功. 现在去 系统设置 → 键盘 → 文本输入 → 编辑 → +"
     info "  → 简体中文 → 选 \"清风输入法\" 添加, 然后切到 WindInput 测试"

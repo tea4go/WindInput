@@ -5,7 +5,7 @@
 // 目标:
 //   - WindInputKit   : 二进制协议 codec + UDS BridgeClient (Pure Swift, 跨 target 共享)
 //   - WindInputSmoke : 命令行 smoke 工具, 连真实 bridge 收发帧 (用于无 IMKit 时的协议验证)
-//   - WindInputApp   : IMKit 输入法主体, swift build 出来的二进制由 scripts/build_macos_app.sh
+//   - WindInputApp   : IMKit 输入法主体, swift build 出来的二进制由 scripts_mac/build/app.sh
 //                       打成 .app bundle (含 Info.plist + Resources), 系统通过 .app 加载
 //
 // 注: SwiftPM 自身不支持直接产出 .app bundle, build script 负责后处理.

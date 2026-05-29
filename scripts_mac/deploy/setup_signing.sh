@@ -3,9 +3,9 @@
 # 用 openssl + security cli, 完全跳过 Keychain Access GUI.
 #
 # 输出: 一个名为 "WindInput Dev" 的可用于 codesign 的本机证书.
-# 用法: scripts/setup_signing.sh        # 创建
-#       scripts/setup_signing.sh check  # 仅检查现状
-#       scripts/setup_signing.sh remove  # 删掉证书
+# 用法: scripts_mac/deploy/setup_signing.sh        # 创建
+#       scripts_mac/deploy/setup_signing.sh check  # 仅检查现状
+#       scripts_mac/deploy/setup_signing.sh remove  # 删掉证书
 set -uo pipefail
 
 CERT_NAME="WindInput Dev"
@@ -114,10 +114,10 @@ security find-identity -v -p codesigning | sed 's/^/  /'
 if security find-identity -v -p codesigning | grep -q "\"$CERT_NAME\""; then
     bold "成功"
     info "现在跑:"
-    info "  SIGN_IDENTITY=\"$CERT_NAME\" scripts/build_macos_app.sh"
-    info "  sudo scripts/install_macos_app.sh --uninstall"
-    info "  sudo SIGN_IDENTITY=\"$CERT_NAME\" scripts/install_macos_app.sh"
-    info "  swift scripts/list_input_sources.swift"
+    info "  SIGN_IDENTITY=\"$CERT_NAME\" scripts_mac/build/app.sh"
+    info "  sudo scripts_mac/deploy/install_app.sh --uninstall"
+    info "  sudo SIGN_IDENTITY=\"$CERT_NAME\" scripts_mac/deploy/install_app.sh"
+    info "  swift scripts_mac/test/list_input_sources.swift"
 else
     err "证书仍未 valid. 看上面 add-trusted-cert 输出"
     exit 1

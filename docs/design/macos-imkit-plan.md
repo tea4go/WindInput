@@ -518,4 +518,4 @@ M2.2+ 代码层 (composition / candidates / commit / push pipe 解码) 继续用
 
 ### 12.5 诊断脚本入口
 
-`scripts/list_input_sources.swift` 是 TIS 注册状态的金标准工具 (调 Apple `TISCreateInputSourceList` API), 任何时候都可以用它确认 IME 是否真被系统收录.
+`scripts_mac/test/list_input_sources.swift` 是 TIS 注册状态的金标准工具 (调 Apple `TISCreateInputSourceList` API), 任何时候都可以用它确认 IME 是否真被系统收录.

@@ -3,8 +3,8 @@
 // 用于诊断 WindInput.app 是否真的被 macOS 注册到了 TIS 数据库.
 //
 // 用法:
-//   swift scripts/list_input_sources.swift            # 全量摘要 + 关键词高亮
-//   swift scripts/list_input_sources.swift wind       # 只显示 ID/Bundle 含 "wind" 的
+//   swift scripts_mac/test/list_input_sources.swift            # 全量摘要 + 关键词高亮
+//   swift scripts_mac/test/list_input_sources.swift wind       # 只显示 ID/Bundle 含 "wind" 的
 import Carbon
 import Foundation
 
@@ -19,9 +19,9 @@ func bool(from src: TISInputSource, _ key: CFString) -> Bool {
 }
 
 // 用法:
-//   swift scripts/list_input_sources.swift            # 默认: 列出所有非 com.apple.* 输入源 (含第三方 IME)
-//   swift scripts/list_input_sources.swift wind       # 模糊搜 ID/bundle 含 "wind" 的
-//   swift scripts/list_input_sources.swift --all      # 全 320 项原样列出
+//   swift scripts_mac/test/list_input_sources.swift            # 默认: 列出所有非 com.apple.* 输入源 (含第三方 IME)
+//   swift scripts_mac/test/list_input_sources.swift wind       # 模糊搜 ID/bundle 含 "wind" 的
+//   swift scripts_mac/test/list_input_sources.swift --all      # 全 320 项原样列出
 let raw = CommandLine.arguments.dropFirst().first ?? ""
 let filter = raw.lowercased()
 let showAll = (raw == "--all")
@@ -75,4 +75,4 @@ print(String(repeating: "-", count: 70))
 print("匹配 \(matched) 项 (过滤词: \(filter.isEmpty ? "wind/huanfeng/qingg/aodaren" : filter))")
 
 // 若仍想看全表头, 跑下面这条:
-//   swift scripts/list_input_sources.swift '' | grep -E '^(ID|bundle)' | sort -u
+//   swift scripts_mac/test/list_input_sources.swift '' | grep -E '^(ID|bundle)' | sort -u

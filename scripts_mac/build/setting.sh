@@ -9,13 +9,13 @@
 # 扫描内置方案与主题, 而 macOS .app 的可执行目录 (Contents/MacOS) 旁边没有 data。
 #
 # 前置: 已装 wails CLI (go install github.com/wailsapp/wails/v2/cmd/wails) + pnpm;
-#       已跑过 scripts/build_macos.sh 生成 build/data (内置方案/主题/词库)。
+#       已跑过 scripts_mac/build/build.sh 生成 build/data (内置方案/主题/词库)。
 #
 # 输出: wind_setting/build/bin/wind_setting.app
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 SETTING_DIR="$REPO_DIR/wind_setting"
 APP="$SETTING_DIR/build/bin/wind_setting.app"
 
@@ -48,7 +48,7 @@ if [[ -d "$REPO_DIR/build/data" ]]; then
     cp -R "$REPO_DIR/build/data" "$APP/Contents/MacOS/data"
     printf "  data: %s 文件\n" "$(find "$APP/Contents/MacOS/data" -type f | wc -l | tr -d ' ')"
 else
-    err "未找到 $REPO_DIR/build/data, 先跑 scripts/build_macos.sh data"
+    err "未找到 $REPO_DIR/build/data, 先跑 scripts_mac/build/build.sh data"
     exit 1
 fi
 

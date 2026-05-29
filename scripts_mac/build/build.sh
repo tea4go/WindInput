@@ -8,18 +8,18 @@
 #   - 只构建 Go 服务 + 词库数据准备
 #
 # 用法:
-#   scripts/build_macos.sh             # 全量: 下载词库 + 构建服务 + 准备 data
-#   scripts/build_macos.sh service     # 仅构建 Go 服务
-#   scripts/build_macos.sh data        # 仅下载词库 + 准备 data
-#   scripts/build_macos.sh --debug     # debug variant (build_debug/, _debug 后缀)
-#   scripts/build_macos.sh clean       # 清 build/ 与 build_debug/
+#   scripts_mac/build/build.sh             # 全量: 下载词库 + 构建服务 + 准备 data
+#   scripts_mac/build/build.sh service     # 仅构建 Go 服务
+#   scripts_mac/build/build.sh data        # 仅下载词库 + 准备 data
+#   scripts_mac/build/build.sh --debug     # debug variant (build_debug/, _debug 后缀)
+#   scripts_mac/build/build.sh clean       # 清 build/ 与 build_debug/
 #
 # 输出 (release): build/{wind_input,data/}
 # 输出 (debug)  : build_debug/{wind_input_debug,data/}
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 CACHE_DIR="$REPO_DIR/.cache"
 
 # -------- 参数解析 --------

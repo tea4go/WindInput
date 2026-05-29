@@ -1,0 +1,141 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-05-29 | Updated: 2026-05-29 -->
+
+# scripts_mac/ - macOS 构建/部署/诊断工具链
+
+## Purpose
+
+WindInput 在 macOS 上的全部辅助脚本：Go 服务与 IMKit `.app` 的构建、签名、本机/VM 安装部署、TIS 注册诊断。不参与主构建流程，供开发者手动调用。
+
+按职责分四个子目录：
+
+| 子目录 | 角色 |
+|--------|------|
+| `build/` | 构建产物（Go 服务、`.app` bundle、Wails 设置端） |
+| `deploy/` | 本机安装/卸载、重部署、代码签名设置 |
+| `test/` | TIS 注册状态诊断 |
+| `vm/` | host→tart VM 一键远程部署 |
+
+仓库根 `dev_mac.sh`（macOS 开发菜单）调用本目录的 `build/build.sh`、`build/app.sh`、`deploy/install_app.sh`、`test/list_input_sources.swift`。
+
+## Key Files
+
+### build/
+
+| File | Description |
+|------|-------------|
+| `build.sh` | macOS 端 Go 服务构建（对位 `build_all.ps1` 的可裁剪子集）：下载 rime-frost / rime-wubi / OpenCC 词库源到 `.cache/`，跑 `gen_unigram` + `dictgen` + `gen_opencc_dict`，产出 `build/{wind_input, data/}`（debug variant 产出 `build_debug/{wind_input_debug, data/}`）。子命令：`all` / `service` / `data` / `clean`，开关：`--debug` |
+| `app.sh` | macOS IMKit `.app` 打包：`swift build --product wind-input-app` + 拼 `Contents/{MacOS,Resources/lproj,Info.plist,PkgInfo}` + `codesign --options runtime`（默认 ad-hoc；`SIGN_IDENTITY="cert name"` 切真证书）。输出 `wind_macos/build/WindInput.app` |
+| `setting.sh` | 在 macOS 上构建 `wind_setting.app`（Wails+Vue 设置界面）：容忍 pnpm 11 ignored-builds 退出码、用 `vite build` 跳过 vue-tsc 门禁、把 `build/data` 拷进 `.app`。需 `build/build.sh data` 先产出词库。输出 `wind_setting/build/bin/wind_setting.app` |
+
+### deploy/
+
+| File | Description |
+|------|-------------|
+| `install_app.sh` | 把 `WindInput.app` 装到 `/Library/Input Methods/`：cp + 不重签（保留 build 阶段签名）+ `lsregister -f -R` 刷 LS DB + `WindInput --register-input-source` / `--enable-input-source` 让 IME 自身进程调 TIS API。`--uninstall` 卸载，`--build` 先 build。需 sudo |
+| `install_service.sh` | 把 Go 服务（`wind_input` + `data/`）装到 per-user `~/Library/Application Support/WindInput/service/`，生成并装 LaunchAgent `to.feng.windinput.service.plist`（`RunAtLoad`+`KeepAlive` 开机自启），`launchctl bootstrap/enable/kickstart` 启动，末尾验证 push socket + err.log。普通用户运行（不要 sudo）。开关：`--debug` / `--from <dir>`（指定源目录，部署脚本远程用）/ `--uninstall`。服务用 `exeDir/data` 定位词库，故二进制与 `data/` 必须同目录 |
+| `redeploy.sh` | 一键 build + uninstall + install + 自动验证签名链 + 跑 TIS list 看是否被收录。必须以普通用户跑（codesign 要 user login keychain），内部对需 root 步骤显式 invoke sudo。强制用 `SIGN_IDENTITY` 真证书签名（默认 "WindInput Dev"）。开发期 `.app` 主入口 |
+| `setup_signing.sh` | 命令行创建本机 self-signed Code Signing 证书：openssl 生成 RSA + X509（codeSigning EKU）→ PKCS12（`-legacy`）→ import 到 login keychain → `add-trusted-cert` 加 trust。子命令: 默认创建 / `check` / `remove` |
+| `setup_signing.md` | self-signed 证书的手动（Keychain Access GUI）创建步骤备份；macOS 26 Tahoe 上路径菜单与老版本不同时可作参考 |
+
+### test/
+
+| File | Description |
+|------|-------------|
+| `list_input_sources.swift` | 调 Apple `TISCreateInputSourceList` API 列系统已注册的输入源；诊断 IME 是否真被 macOS 收录到 TIS 数据库。默认只列非 `com.apple.*`（第三方），`--all` 列全部，`<keyword>` 模糊搜 |
+
+### vm/
+
+| File | Description |
+|------|-------------|
+| `deploy.sh` | host→VM 一键部署：宿主机构建产物 rsync 到目标 macOS 机后远程调 `deploy/install_service.sh`/`deploy/install_app.sh`。目标解析顺序：位置参数 > `SSH_TARGET` 环境变量 > 默认 `admin@$(tart ip ime-dev)`。远端 staging（`~/wind_deploy`）镜像仓库结构（`scripts_mac/{deploy,test}/`+`build/`+`wind_macos/build/`）让 install 脚本 `REPO_DIR`（`$SCRIPT_DIR/../..`）自对齐到 staging 根。开关：`--build` / `--debug` / `--service-only` / `--app-only` / `--uninstall`（远程卸载服务+.app 并验证清除：LaunchAgent bootout、plist/service 目录、`.app`、TIS 残留条目；不需本地产物，可叠加 `--service-only`/`--app-only` 限定范围） |
+
+## Usage
+
+### build/build.sh
+
+```bash
+scripts_mac/build/build.sh             # 全量: 下载词库 + 构建服务 + 准备 data
+scripts_mac/build/build.sh service     # 仅构建 Go 服务
+scripts_mac/build/build.sh data        # 仅词库下载 + 准备 data
+scripts_mac/build/build.sh --debug     # debug variant (build_debug/)
+scripts_mac/build/build.sh clean       # 清 build/ 与 build_debug/
+```
+
+输出：release `build/{wind_input, data/}`；debug `build_debug/{wind_input_debug, data/}`。
+
+### `.app` 工具链 (build/app.sh + deploy/*)
+
+```bash
+# 一次性: 建本机自签证书 (会弹 2 次密码框: keychain 解锁 + sudo add-trusted-cert)
+scripts_mac/deploy/setup_signing.sh
+
+# 之后每次改了 wind_macos/ 代码:
+SIGN_IDENTITY="WindInput Dev" scripts_mac/deploy/redeploy.sh
+```
+
+`redeploy.sh` 流程: 验证 identity → 解锁 keychain + partition list → `build/app.sh` → `sudo deploy/install_app.sh --uninstall` → `sudo deploy/install_app.sh`（cp + lsregister + IME 自身 `--register-input-source`/`--enable-input-source`）→ 验证签名 + `test/list_input_sources.swift` → ✓/✗ 总结。
+
+单独跑各步：
+
+```bash
+SIGN_IDENTITY="WindInput Dev" scripts_mac/build/app.sh        # 仅 build
+sudo SIGN_IDENTITY="WindInput Dev" scripts_mac/deploy/install_app.sh
+sudo scripts_mac/deploy/install_app.sh --uninstall
+
+swift scripts_mac/test/list_input_sources.swift              # 第三方 IME
+swift scripts_mac/test/list_input_sources.swift --all        # 全部
+swift scripts_mac/test/list_input_sources.swift wind         # 模糊搜
+```
+
+**已知限制 (macOS 26 Tahoe)**: self-signed cert + Personal Team Apple Development 都过不了 macOS 26 IME 注册校验，`TISRegisterInputSource` 返回 `OSStatus=0` 但 silent 不入库。需要 Apple Developer Distribution + Notarization 才能让 IME 出现在 系统设置 → 键盘 → 输入法 列表里。完整踩坑过程见 `../docs/design/macos-imkit-plan.md` "踩坑记录"。
+
+### deploy/install_service.sh
+
+```bash
+scripts_mac/deploy/install_service.sh             # 装 build/ 的 release 产物
+scripts_mac/deploy/install_service.sh --debug     # 装 build_debug/ 的 debug 产物
+scripts_mac/deploy/install_service.sh --from <dir># 从指定目录装 (内含 wind_input + data/)
+scripts_mac/deploy/install_service.sh --uninstall # 卸载服务 (保留用户数据)
+```
+
+### vm/deploy.sh
+
+```bash
+scripts_mac/vm/deploy.sh                       # rsync + 远程装 (服务 + .app)
+scripts_mac/vm/deploy.sh --build               # 先在宿主机 build 再部署
+scripts_mac/vm/deploy.sh --service-only        # 只部署 Go 服务
+scripts_mac/vm/deploy.sh --app-only            # 只部署 .app
+scripts_mac/vm/deploy.sh admin@192.168.64.9    # 显式指定目标
+SSH_TARGET=ime-vm scripts_mac/vm/deploy.sh     # 用 ssh 别名
+scripts_mac/vm/deploy.sh --uninstall           # 远程卸载 (服务+.app) 并验证清除
+scripts_mac/vm/deploy.sh --uninstall --service-only  # 只卸 Go 服务
+```
+
+## For AI Agents
+
+### Working In This Directory
+
+- 所有 bash 脚本以 `set -euo pipefail` 开头；调用 `go run` 前 `cd "$REPO_DIR/wind_input"`（仓库根本身不是 Go module）
+- 脚本下沉两级（`scripts_mac/<子目录>/`），`REPO_DIR` 必须用 `$(cd "$SCRIPT_DIR/../.." && pwd)` 解析；跨子目录调用兄弟脚本走 `$REPO_DIR/scripts_mac/<子目录>/<名>`（不要用 `$SCRIPT_DIR/<名>`）
+- 新增脚本按职责放进 `build/` / `deploy/` / `test/` / `vm/`，并在本表登记
+- `build/build.sh` 词库下载到 `.cache/`（已被 `.gitignore` 排除），dictgen / unigram 输出到 `build/data/schemas/`
+
+## Dependencies
+
+### Internal
+- `build/build.sh` 依赖 `wind_input/cmd/{gen_unigram,gen_opencc_dict}`、`wind_input/tools/dictgen`、仓库根 `data/`、`VERSION`
+- `build/app.sh` / `deploy/install_app.sh` / `deploy/redeploy.sh` 依赖 `wind_macos/Package.swift`（含 `wind-input-app` target）+ `wind_macos/Sources/WindInputApp/Resources/{Info.plist, WindInput.entitlements, *.lproj/}`
+- `build/setting.sh` 依赖 `wind_setting/`（Wails 工程）+ `build/data`
+- `deploy/install_service.sh` 依赖 `build/build.sh` 的产物（`build/{wind_input, data/}`）；服务的词库定位逻辑见 `wind_input/pkg/config/paths.go`（`GetDataDir` = `exeDir/data`）
+- `vm/deploy.sh` 依赖 `deploy/install_service.sh` + `deploy/install_app.sh` + `test/list_input_sources.swift`（rsync 到远端 staging 后调用）+ 构建产物（`build/`、`wind_macos/build/WindInput.app`）；默认目标解析需要宿主机装 `tart`
+- `deploy/setup_signing.sh` 操作 `~/Library/Keychains/login.keychain-db` 与 `/Library/Keychains/System.keychain`（后者需 sudo）
+- `test/list_input_sources.swift` 用 Apple Carbon `TextInputSources` API，无外部依赖
+
+### External
+- `build/build.sh` 需要 macOS + Go 1.24+ + `curl`
+- `build/app.sh` / `deploy/install_app.sh` / `deploy/redeploy.sh` / `test/list_input_sources.swift` 需要 Xcode（含 `swift 5.9+`、`codesign`、`/usr/libexec/PlistBuddy`）
+- `build/setting.sh` 需要 wails CLI（`go install github.com/wailsapp/wails/v2/cmd/wails`）+ pnpm
+- `deploy/setup_signing.sh` 需要 `openssl 3+`（系统 libressl 不支持 `-legacy`，建议 `brew install openssl`）+ 用户 login keychain 已解锁
+
+<!-- MANUAL: -->
