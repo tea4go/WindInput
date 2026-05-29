@@ -513,6 +513,9 @@ func (m *Manager) UnregisterGlobalHotkeys() {
 	m.postCmd(uicmd.NewCommand(uicmd.CmdHotkeysUnregister, 0, uicmd.HotkeysUnregisterPayload{}))
 }
 
+// TakeUIScreenshots 在 darwin 为 no-op: 候选/状态等窗口由 IMKit .app 渲染, Go 端无可截窗口。
+func (m *Manager) TakeUIScreenshots() {}
+
 // ============================================================================
 // Host render (Win 专有, darwin 无概念)
 // ============================================================================
