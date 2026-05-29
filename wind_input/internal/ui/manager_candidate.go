@@ -326,7 +326,7 @@ func (m *Manager) doHide() {
 }
 
 // UpdatePosition 投递 CmdCandidatesPosition 命令到 UI 线程更新候选框位置。
-// 历史上为 sync 直接 m.window.SetPosition; PR-3 改为 async 投递, 集中线程与跨进程兼容。
+// 历史上为 sync 直接 m.window.SetPosition; 后改为 async 投递, 集中线程与跨进程兼容。
 func (m *Manager) UpdatePosition(x, y int) {
 	m.mu.Lock()
 	m.caretX = x
@@ -490,7 +490,7 @@ func (m *Manager) CandidateMenuContainsPoint(screenX, screenY int) bool {
 }
 
 // SetPinyinMode 设置是否为拼音模式（影响右键菜单前移/后移启用状态）。
-// PR-3: 末尾投递 CmdCandidatesMarkers 全量快照, 供跨进程同步。
+// 末尾投递 CmdCandidatesMarkers 全量快照, 供跨进程同步。
 func (m *Manager) SetPinyinMode(isPinyin bool) {
 	m.mu.Lock()
 	m.isPinyinMode = isPinyin

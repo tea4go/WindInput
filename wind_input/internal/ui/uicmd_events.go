@@ -198,7 +198,7 @@ func (m *Manager) wrapToolbarCallbacks(cb *ToolbarCallback) *ToolbarCallback {
 
 	origShowMenu := cb.OnShowMenu
 	wrap.OnShowMenu = func(screenX, screenY, flipRefY int) {
-		// flipRefY 不进 wire (PR-4 暂忽略, macOS IMKit 自己算翻转)。
+		// flipRefY 不进 wire (暂忽略, macOS IMKit 自己算翻转)。
 		m.postEvent(uicmd.NewEvent(uicmd.EvtToolbarClick, uicmd.ToolbarClickPayload{
 			Action: uicmd.ToolbarActionOpenMenu,
 			X:      int32(screenX),

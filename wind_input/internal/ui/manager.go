@@ -272,7 +272,7 @@ type Manager struct {
 
 	// snapshot 追踪字段: 用于 setter 在末尾构造 CmdCandidatesConfig 等"全量快照"
 	// 命令时读取当前完整状态。Win 端这些命令为 no-op (state 已被 sync setter 应用);
-	// macOS forwarder 在 PR-5 接入时会消费这些命令做跨进程同步。
+	// macOS forwarder 接入时会消费这些命令做跨进程同步。
 	//
 	// 注: appPinEnabled / appPinPositions / hideCandidateWindow / maxCandidateChars /
 	// pagerDisplayMode / isPinyinMode / isQuickInputMode / modeLabel / modeAccentColor
@@ -550,9 +550,9 @@ func (m *Manager) processOneCommand(item uicmdItem) {
 		uicmd.CmdStatusConfig,
 		uicmd.CmdConfigUpdate,
 		uicmd.CmdThemeApply:
-		// PR-3: 这些 "snapshot" 命令的 state 已被 sync setter 在调用线程直接应用,
+		// 这些 "snapshot" 命令的 state 已被 sync setter 在调用线程直接应用,
 		// Windows 端 processOneCommand 不需要重复处理。
-		// 命令仍通过 cmdCh 流转, 是为了 PR-5 中 macOS forwarder 能拦截转发到 IMKit。
+		// 命令仍通过 cmdCh 流转, 是为了 macOS forwarder 能拦截转发到 IMKit。
 	default:
 		m.logger.Warn("Unknown UI command type", "type", cmd.Type.String())
 	}
@@ -607,7 +607,7 @@ func (m *Manager) Destroy() {
 }
 
 // SetGlobalHotkeyCallback sets the callback for global hotkey events.
-// PR-4: 内部包装 callback, 触发时同时推一份 EvtHotkeyTriggered 到 Manager.Events()。
+// 内部包装 callback, 触发时同时推一份 EvtHotkeyTriggered 到 Manager.Events()。
 func (m *Manager) SetGlobalHotkeyCallback(cb func(command string)) {
 	m.globalHotkeys.callback = m.wrapHotkeyCallback(cb)
 }
@@ -667,7 +667,7 @@ func (m *Manager) IsHostRendering() bool {
 }
 
 // SetToolbarCallbacks sets the callbacks for toolbar actions.
-// PR-4: 用 wrapToolbarCallbacks 包装传入 callbacks, 每次触发同时推一份 EvtToolbarClick。
+// 用 wrapToolbarCallbacks 包装传入 callbacks, 每次触发同时推一份 EvtToolbarClick。
 func (m *Manager) SetToolbarCallbacks(callbacks *ToolbarCallback) {
 	wrapped := m.wrapToolbarCallbacks(callbacks)
 	m.mu.Lock()
@@ -684,7 +684,7 @@ func (m *Manager) GetStatusWindow() *StatusWindow {
 }
 
 // SetCandidateCallbacks sets the callbacks for candidate window mouse interactions.
-// PR-4: 用 wrapCandidateCallbacks 包装, 每次触发同时推 EvtCandidateXxx 到 Events()。
+// 用 wrapCandidateCallbacks 包装, 每次触发同时推 EvtCandidateXxx 到 Events()。
 func (m *Manager) SetCandidateCallbacks(callbacks *CandidateCallback) {
 	wrapped := m.wrapCandidateCallbacks(callbacks)
 	m.mu.Lock()

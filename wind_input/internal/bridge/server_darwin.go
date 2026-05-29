@@ -24,7 +24,7 @@ import (
 //
 // 设计:
 //   - 主 socket (BridgePipeName / bridge.sock): 请求-响应通道, 每个 IMKit 端的
-//     IMKInputController 实例打开一条独立连接 (与 PR-1 设计文档的方案 A 一致)
+//     IMKInputController 实例打开一条独立连接 (与设计文档的方案 A 一致)
 //   - 推送 socket (PushPipeName / bridge_push.sock): 服务端主动写, 客户端只读
 //   - 协议: 完全复用 internal/ipc 二进制帧, 与 Windows 端的 wire 完全一致,
 //     IMKit `.app` 端写一次解码器即可服务两个平台
@@ -52,7 +52,7 @@ const (
 )
 
 // RequestProcessTimeout 复刻 Windows 端同名常量, 供 server_handler.go 等
-// 平台无关代码引用 (虽然 server_handler.go 已在 PR-6 中 Win-only, 但保留以备未来
+// 平台无关代码引用 (虽然 server_handler.go 现为 Win-only, 但保留以备未来
 // 把 handler 业务层提到平台无关时不漏定义)。
 const RequestProcessTimeout = darwinRequestProcessTimeout
 
@@ -132,7 +132,7 @@ func (s *Server) GetHostRenderManager() *HostRenderManager { return s.hostRender
 
 // IsActivelyFocusedPID darwin 上 PID 概念不适用; 始终返回 false。
 // 调用方 (coordinator 工具栏前台 hook) 在 darwin 上应改用 IMKit 自报的 bundleID,
-// 但本次 PR-6 范围未触及那层, 故此 stub 保留以让代码可编译。
+// 但当前范围未触及那层, 故此 stub 保留以让代码可编译。
 func (s *Server) IsActivelyFocusedPID(pid uint32) bool { return false }
 
 // GetActiveHostRender darwin 上始终返回 nil (无 host render)。
@@ -282,7 +282,7 @@ func (s *Server) handleClient(conn net.Conn, id connID) {
 // 这是 darwin 上的极简 dispatch (Win 端 server_handler.go 一千行业务路径
 // 涵盖 token / focus 多客户端等场景, darwin 上 macOS forwarder 接入时按需重写)。
 //
-// PR-6 范围: 只覆盖 KeyEvent / FocusGained / FocusLost / Caret / IMEActivated /
+// 当前覆盖 KeyEvent / FocusGained / FocusLost / Caret / IMEActivated /
 // IMEDeactivated / ToggleMode 等核心帧, 其他帧暂时打日志后忽略 (返回 Ack)。
 func (s *Server) dispatchFrame(conn net.Conn, id connID, header *ipc.IpcHeader, payload []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), darwinRequestProcessTimeout)

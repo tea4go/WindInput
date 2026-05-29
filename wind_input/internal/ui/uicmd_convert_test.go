@@ -105,7 +105,7 @@ func TestToastLevelUnknownFallback(t *testing.T) {
 
 func TestToastPositionMapping(t *testing.T) {
 	// ToastPosition: int iota → string wire, ToastBottomRight 是显式映射,
-	// 其它 (Center/TopRight/Top) 当前统一回退到 wire 的 Center (PR-1 wire 设计简化)。
+	// 其它 (Center/TopRight/Top) 当前统一回退到 wire 的 Center (wire 设计简化)。
 	if got := toUIToastPosition(ToastBottomRight); got != uicmd.ToastBottomRight {
 		t.Errorf("ToastBottomRight wire = %q, want %q", got, uicmd.ToastBottomRight)
 	}

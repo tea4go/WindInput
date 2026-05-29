@@ -10,7 +10,7 @@ import (
 
 // listenWindows 与 listen_darwin.go 对称, 为 server.go / event.go 提供平台 listener。
 //
-// 通过 go-winio overlapped I/O 监听 Named Pipe, 与 PR-6 之前的行为完全一致。
+// 通过 go-winio overlapped I/O 监听 Named Pipe, 与历史行为完全一致。
 
 // listenRPCEndpoint 启动 RPC 端点监听 (Windows: Named Pipe)。
 // inputBuf / outputBuf 分别控制 input/output 缓冲区大小 (字节)。

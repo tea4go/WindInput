@@ -55,7 +55,7 @@ func (m *Manager) snapshotCandidatesMarkers() uicmd.Command {
 
 // snapshotCandidatesConfig 构造 CmdCandidatesConfig 全量快照。
 // 注意: FontSize/FontFamily 当前未在 Manager 层追踪 (由 renderer 内部持有),
-// 留空; PR-3 后续可补 renderer.GetFontSize/GetFontFamily 后填充。
+// 留空; 后续可补 renderer.GetFontSize/GetFontFamily 后填充。
 func (m *Manager) snapshotCandidatesConfig() uicmd.Command {
 	m.mu.Lock()
 	payload := uicmd.CandidatesConfigPayload{

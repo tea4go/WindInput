@@ -144,7 +144,7 @@ func (m *Manager) HideTooltip() {
 // ShowTooltipText 投递 CmdTooltipShow 命令到 UI 线程显示 tooltip 文本（无延迟）。
 // belowY 为候选项下沿（首选位置），aboveY 为候选项上沿（下方放不下时使用）。
 //
-// 历史上为 sync 直接 m.tooltip.ForceHide+Show, PR-3 改为 async 投递, 1 个 UI tick
+// 历史上为 sync 直接 m.tooltip.ForceHide+Show, 后改为 async 投递, 1 个 UI tick
 // 的延迟肉眼无感, 但带来两个好处:
 //   - 跨进程兼容: macOS forwarder 可消费该命令转发到 IMKit
 //   - 线程隔离: tooltip.ForceHide/Show 都集中在 UI 线程执行

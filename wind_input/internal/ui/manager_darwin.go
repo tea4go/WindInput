@@ -18,7 +18,7 @@ import (
 //
 // 设计要点:
 //   - 保留 cmdCh / eventCh 通道, 让所有 setter / show / hide 调用仍投递 uicmd.Command。
-//     这样未来 PR-6/7 加入的 macOS forwarder 可从 cmdCh 抽取命令转发给 IMKit `.app`,
+//     这样未来加入的 macOS forwarder 可从 cmdCh 抽取命令转发给 IMKit `.app`,
 //     从 Events() 订阅用户交互事件。
 //   - Win-only 渲染 / 窗口管理 / 钩子均为 no-op, 函数返回零值。
 //   - 类型镜像不依赖 windows.Handle, 所有 stub method 自洽无 cgo。
@@ -94,7 +94,7 @@ func (m *Manager) Destroy() {}
 func (m *Manager) Events() <-chan uicmd.Event { return m.eventCh }
 
 // SubscribeCommands 启一个 goroutine 把 darwin Manager 内部 cmdCh (uicmd.Command)
-// 推给 handler。darwin forwarder 用此把命令转成 SHM bitmap + bridge push 帧 (PR-A.5)。
+// 推给 handler。darwin forwarder 用此把命令转成 SHM bitmap + bridge push 帧。
 // item.Candidates 不传给 handler (CandidatesShowPayload.Candidates 已含等价数据)。
 // 多次调用会启多个消费者, 命令会被任一消费者拿到 (channel 抢占), 一般只调一次。
 func (m *Manager) SubscribeCommands(handler func(cmd uicmd.Command)) {

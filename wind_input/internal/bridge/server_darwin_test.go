@@ -225,7 +225,7 @@ func TestDarwinBridge_FocusGained(t *testing.T) {
 	}
 
 	// IsActivelyFocusedPID darwin 上始终 false (即使 internal 标记了 focus)。
-	// 这是 PR-6 的设计约定: PID 概念在 darwin 不适用。
+	// 这是设计约定: PID 概念在 darwin 不适用。
 	if srv.IsActivelyFocusedPID(12345) {
 		t.Error("IsActivelyFocusedPID should be false on darwin even after focus")
 	}

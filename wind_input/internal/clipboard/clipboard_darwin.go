@@ -6,7 +6,7 @@ import "errors"
 
 // clipboard_darwin.go 提供 darwin 上的 stub 实现。
 //
-// 现状: PR-7 决定 clipboard 暂时留 stub, 待 macOS IMKit `.app` 工程落地后,
+// 现状: clipboard 暂时留 stub, 待 macOS IMKit `.app` 工程落地后,
 // 再决定走以下哪条路径:
 //   - osascript "the clipboard as text" / "set the clipboard to" (无需权限, 进程级)
 //   - CGO 调 NSPasteboard.generalPasteboard (需要 AppKit, 直接调用最高性能)

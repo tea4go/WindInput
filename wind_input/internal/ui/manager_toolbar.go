@@ -190,7 +190,7 @@ func (m *Manager) ToolbarMenuContainsPoint(screenX, screenY int) bool {
 //
 // 跨进程兼容设计: 投递时 uicmd.MenuShowPayload.Items 暂时留空, Win 端通过 uicmdItem.MenuState
 // 旁路字段直接消费 UnifiedMenuState; macOS forwarder 接入时再补转换填充 Items, 让 IMKit 端
-// 渲染原生 NSMenu。Callback 通过 SessionID 路由替代 (PR-1 AGENTS.md 已说明)。
+// 渲染原生 NSMenu。Callback 通过 SessionID 路由替代 (AGENTS.md 已说明)。
 func (m *Manager) ShowUnifiedMenu(screenX, screenY, flipRefY int, state UnifiedMenuState, callback func(id int)) {
 	m.mu.Lock()
 	if !m.ready {

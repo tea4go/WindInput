@@ -6,7 +6,7 @@ import "github.com/huanfeng/wind_input/pkg/config"
 //
 // 历史上这些定义散落在 status_window.go / toast_renderer.go / toolbar_window.go /
 // global_hotkey.go / popup_menu.go / monitor.go / manager.go 等 Win-only 文件中,
-// 导致 darwin 构建无法编译。PR-5 把它们集中提到此文件 (无 windows / cgo / Win32 引用),
+// 导致 darwin 构建无法编译。后把它们集中提到此文件 (无 windows / cgo / Win32 引用),
 // 让 darwin stub 也能复用同一份类型定义, 避免在 *_darwin.go 中复刻一遍。
 //
 // 此文件**不能** import windows / unsafe / syscall 等平台相关包。
