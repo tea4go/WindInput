@@ -8,7 +8,7 @@
 # 完整流程:
 #   1. (drop sudo) 用 SIGN_IDENTITY 重 build .app (注入 hardened runtime + entitlements + 真证书)
 #   2. uninstall 旧版
-#   3. install 新版 (cp + sudo 重签 + lsregister + TISRegisterInputSource + TISEnableInputSource)
+#   3. install 新版 (用户域 ~/Library, 无 sudo; cp + lsregister + TISRegisterInputSource)
 #   4. 验证 .app 签名 / spctl / TIS list
 set -uo pipefail
 
@@ -66,14 +66,14 @@ if [[ "$BUILT_AUTH" != "Authority=$SIGN_IDENTITY" ]]; then
 fi
 info "build OK, $BUILT_AUTH"
 
-bold "4. uninstall 旧版 (sudo)"
-sudo "$REPO_DIR/scripts_mac/deploy/install_app.sh" --uninstall 2>&1 | tail -10 | sed 's/^/  /'
+bold "4. uninstall 旧版 (用户域, 无 sudo)"
+"$REPO_DIR/scripts_mac/deploy/install_app.sh" --uninstall 2>&1 | tail -10 | sed 's/^/  /'
 
-bold "5. 装新版 (sudo, 含 lsregister + --register-input-source + --enable-input-source)"
-sudo "$REPO_DIR/scripts_mac/deploy/install_app.sh" 2>&1 | sed 's/^/  /'
+bold "5. 装新版 (用户域, 含 lsregister + --register-input-source)"
+"$REPO_DIR/scripts_mac/deploy/install_app.sh" 2>&1 | sed 's/^/  /'
 
 bold "6. 验证安装后 .app 签名"
-codesign -dv --verbose=4 "/Library/Input Methods/WindInput.app" 2>&1 \
+codesign -dv --verbose=4 "$HOME/Library/Input Methods/WindInput.app" 2>&1 \
     | grep -E "Authority|Signature|flags|TeamIdentifier|Runtime|Format" | sed 's/^/  /'
 
 bold "7. TIS list 看本 IME 是否终于收录"
@@ -81,7 +81,7 @@ bold "7. TIS list 看本 IME 是否终于收录"
 
 bold "8. 结果"
 if /usr/bin/swift "$REPO_DIR/scripts_mac/test/list_input_sources.swift" 2>&1 \
-        | grep -q "to.feng.wind_input"; then
+        | grep -q "to.feng.inputmethod.WindInput"; then
     info "✓ TIS 收录成功. 现在去 系统设置 → 键盘 → 文本输入 → 编辑 → +"
     info "  → 简体中文 → 选 \"清风输入法\" 添加, 然后切到 WindInput 测试"
 else

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# install_macos_app.sh — 把 WindInput.app 装到 /Library/Input Methods/.
+# install_macos_app.sh — 把 WindInput.app 装到 ~/Library/Input Methods/ (用户域).
 #
-# 需要 sudo. 装完后用户去 系统设置 → 键盘 → 输入法 → + 号 → 中文 → WindInput
-# 添加一次, 后续就能在状态栏 IME 切换菜单看到.
+# 不需要 sudo (用户域安装). 装完后用户去 系统设置 → 键盘 → 文本输入 → 编辑 → + 号
+# → 简体中文 → WindInput 添加一次, 后续就能在状态栏 IME 切换菜单看到.
+#
+# 为何用户域 (~/Library) 而非系统域 (/Library): 实测在 macOS 26 (Tahoe) 上, 用户域 +
+# ad-hoc 签名的 IME 能正常进「可添加列表」(与 Fcitx5 一致); 且无需 sudo, 也避开了
+# /Library 下 root 拥有 + spctl 策略的一堆坑.
 #
 # 用法:
 #   scripts_mac/deploy/install_app.sh                  # 装 release build
@@ -16,7 +20,7 @@ REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 MACOS_DIR="$REPO_DIR/wind_macos"
 APP_NAME="WindInput"
 APP_BUNDLE="$MACOS_DIR/build/$APP_NAME.app"
-INSTALL_DIR="/Library/Input Methods"
+INSTALL_DIR="$HOME/Library/Input Methods"
 INSTALL_APP="$INSTALL_DIR/$APP_NAME.app"
 
 DO_BUILD=0
@@ -35,6 +39,13 @@ bold() { printf "\033[1m%s\033[0m\n" "$*"; }
 info() { printf "  %s\n" "$*"; }
 err()  { printf "\033[31m[错误] %s\033[0m\n" "$*" >&2; }
 
+# 用户域安装一律以普通用户运行 (不要 sudo): ~/Library 归属当前用户, 用 sudo 反而会让
+# .app / register 进程变成 root 拥有, 引发权限错乱.
+if [[ $EUID -eq 0 ]]; then
+    err "请以普通用户运行 (用户域 ~/Library 安装, 不要 sudo)."
+    exit 1
+fi
+
 # -------- uninstall (完整清理) --------
 # 仅 rm .app 是不够的: register 守护进程残留 / HIToolbox plist 启用项 / TIS LS DB
 # 缓存 / Caches & Application Support 都可能残留, 导致系统设置里出现幽灵条目.
@@ -45,17 +56,20 @@ if [[ $DO_UNINSTALL -eq 1 ]]; then
 
     # 1. 杀所有 WindInput 进程 (含 --register-input-source 后台守护)
     info "kill WindInput processes"
-    sudo pkill -9 -f "WindInput.app/Contents/MacOS/WindInput" 2>/dev/null || true
-    sudo pkill -9 -x "$APP_NAME" 2>/dev/null || true
+    pkill -9 -f "WindInput.app/Contents/MacOS/WindInput" 2>/dev/null || true
+    pkill -9 -x "$APP_NAME" 2>/dev/null || true
     rm -f /tmp/wind_register.log
 
-    # 2. 删 .app
-    if [[ -d "$INSTALL_APP" ]]; then
-        sudo rm -rf "$INSTALL_APP"
-        info "removed $INSTALL_APP"
-    else
-        info "(no $INSTALL_APP)"
-    fi
+    # 2. 删 .app (用户域旧路径 + 历史可能装过的系统域 /Library 都尝试清)
+    for app in "$INSTALL_APP" "/Library/Input Methods/$APP_NAME.app"; do
+        if [[ -d "$app" ]]; then
+            if [[ -w "$(dirname "$app")" ]]; then
+                rm -rf "$app" && info "removed $app"
+            else
+                info "(跳过 $app: 无写权限, 如需删请手动 sudo rm -rf)"
+            fi
+        fi
+    done
 
     # 3. 清 HIToolbox plist 内启用项 / 选中项 (本 bundleID 相关)
     #    显式走 /usr/bin/python3 (Apple framework, plistlib 稳定);
@@ -92,13 +106,6 @@ PY
         fi
     done
 
-    # 4b. 撤销 install 阶段写入的 Gatekeeper 白名单条目 (与 install 步骤 3a 配对).
-    #     spctl --add 会往 /var/db/SystemPolicy 写持久规则, 不撤会无限累积.
-    if command -v spctl >/dev/null; then
-        sudo spctl --remove --label "WindInputDev" 2>/dev/null || true
-        info "removed Gatekeeper label WindInputDev"
-    fi
-
     # 5. *绝不* 跑 lsregister -u / -kill (血泪教训).
     #    - lsregister -u <已删除路径>: 行为未定义, 会污染 LaunchServices DB, 导致系统设置
     #      "添加输入法" picker 对所有用户(含全新账户)报 "键盘布局不可用". 实测后果严重.
@@ -111,9 +118,9 @@ PY
     #    踩过的坑: killall -9 (SIGKILL) 这些 LaunchAgent 在 macOS 26 SIP 下不能
     #    用 launchctl kickstart 手动重启; 必须只发 SIGTERM, 靠 launchd 自动 respawn.
     info "restart text input agents (SIGTERM, launchd auto-respawn)"
-    sudo killall -HUP cfprefsd 2>/dev/null || true
-    sudo killall TextInputMenuAgent 2>/dev/null || true
-    sudo killall TextInputSwitcher 2>/dev/null || true
+    killall -HUP cfprefsd 2>/dev/null || true
+    killall TextInputMenuAgent 2>/dev/null || true
+    killall TextInputSwitcher 2>/dev/null || true
     killall imklaunchagent 2>/dev/null || true
 
     # 7. 验证
@@ -133,14 +140,7 @@ fi
 if [[ $DO_BUILD -eq 1 ]]; then
     # 空数组 + set -u 在 bash 5 之前展开会报 unbound; 用 ${arr[@]+"${arr[@]}"} 形式
     # 在数组未设/空时整体不展开任何参数, 非空时正常按数组逐项展开.
-    # 本脚本通常以 sudo 跑 (要写 /Library). 但 build 不能用 root: 否则
-    # wind_macos/build/WindInput.app 会被 root 拥有, 下次普通用户 build 时
-    # rm -rf 删不掉 (踩过的坑). 有 SUDO_USER 时降权回原用户 build.
-    if [[ $EUID -eq 0 && -n "${SUDO_USER:-}" ]]; then
-        sudo -u "$SUDO_USER" bash "$REPO_DIR/scripts_mac/build/app.sh" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
-    else
-        "$REPO_DIR/scripts_mac/build/app.sh" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
-    fi
+    "$REPO_DIR/scripts_mac/build/app.sh" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
 fi
 
 [[ -d "$APP_BUNDLE" ]] || { err "未找到 $APP_BUNDLE, 先跑 scripts_mac/build/app.sh"; exit 1; }
@@ -151,36 +151,43 @@ bold "==> Install $APP_BUNDLE -> $INSTALL_APP"
 # 1. 关掉旧实例 (IMKit 进程通常常驻; 不杀的话 cp 会被持锁)
 if pgrep -x "$APP_NAME" >/dev/null; then
     info "停止旧 $APP_NAME 进程"
-    sudo killall "$APP_NAME" 2>/dev/null || true
+    killall "$APP_NAME" 2>/dev/null || true
     sleep 0.5
 fi
 
 # 2. 复制 .app
-sudo rm -rf "$INSTALL_APP"
-sudo cp -R "$APP_BUNDLE" "$INSTALL_DIR/"
+mkdir -p "$INSTALL_DIR"
+rm -rf "$INSTALL_APP"
+cp -R "$APP_BUNDLE" "$INSTALL_DIR/"
 info "已复制 $INSTALL_APP"
 
-# 3. (不再重签) build_macos_app.sh 已经签好 (用 user keychain 里的 SIGN_IDENTITY).
-#    早期版本在这里跑 `sudo codesign --sign "$SIGN_IDENTITY"` 想重签, 但 root 的
-#    keychain 里没用户证书, 重签静默失败让 .app 退回 linker-signed adhoc, 反而
-#    破坏了 build 阶段的真证书签名 (踩过的坑: flags 显示 0x20002 adhoc+linker).
-#    cp -R 已保留原签名, 直接验证即可.
-info "(不重签, 沿用 build 阶段 SIGN_IDENTITY 的签名)"
+# 3. ad-hoc 产物: 就地去 hardened-runtime 重签 (实测必要).
+#    build/app.sh 默认产出 `flags=0x10002(adhoc,runtime)` (ad-hoc + hardened runtime).
+#    实测可正常进可添加列表的配置是「纯 ad-hoc」(flags=0x2, 无 runtime 标志, 与 Fcitx5 一致);
+#    带 runtime 的 ad-hoc 在 macOS 26 上行为存疑. 这里对 ad-hoc 产物原地重签去掉 runtime 标志.
+#    注: ad-hoc 重签 (`-s -`) 不涉及 keychain/证书, 普通用户即可, 幂等.
+#    若 build 用了真实证书 (SIGN_IDENTITY / 已公证), 则保留原签名, 不降级成 ad-hoc.
+# 检测须用 --verbose=2: 默认 -dv (verbose=1) 不打印 "Signature=adhoc" 行 (踩过的坑).
+# 判据: CodeDirectory flags 里含 adhoc / 或 Signature=adhoc; 真证书则有 Authority=Developer ID.
+if codesign -dv --verbose=2 "$INSTALL_APP" 2>&1 | grep -qi "adhoc"; then
+    info "ad-hoc 产物: 去 hardened-runtime 重签 (codesign --force --sign -)"
+    codesign --force --sign - --deep "$INSTALL_APP" 2>&1 | sed 's/^/    /' || true
+else
+    info "(检测到真实证书签名, 保留原签名不重签)"
+fi
 codesign -dv --verbose=2 "$INSTALL_APP" 2>&1 | grep -E "Authority|flags|Signature" | sed 's/^/    /'
 
-# 3a. 把 .app 加入 Gatekeeper 白名单. ad-hoc 签名默认被 spctl reject, 而新版
-#     macOS 的 IMK 注册流程会拒绝 spctl rejected 的第三方 IME (踩过的坑: spctl
-#     -a 显示 rejected → TIS 列表无本 IME). spctl --add 给本 .app 单独通行证.
-#     注意: 该规则写入 /var/db/SystemPolicy 持久存在, uninstall 用同名 label --remove 撤销.
-if command -v spctl >/dev/null; then
-    sudo spctl --add --label "WindInputDev" "$INSTALL_APP" 2>&1 | sed 's/^/    /' || true
-fi
+# 3a. (已移除 spctl --add 白名单步骤 — 踩过的坑 + 证伪)
+#     早期以为 ad-hoc IME 被 spctl reject 会导致 TIS 不收录, 故加 spctl --add 白名单.
+#     实测证伪: Fcitx5 同为 ad-hoc + `spctl -a` rejected, 仍能正常进可添加列表; 而
+#     macOS 26 (Tahoe) 已移除该能力 (`spctl --add` 报 "This operation is no longer
+#     supported"). 真正决定能否进列表的是 Info.plist 不再带 tsInputModeDefaultStateKey
+#     (见 wind_macos .../Resources/Info.plist 内说明), 与签名 / spctl 无关. 不再做 spctl 操作.
 
 # 4. 让系统重新发现 IME bundle.
-#    macOS 改 IME plist 后, 仅 cp 进 /Library/Input Methods/ 不足以让系统刷新
-#    "输入源" 列表 —— LaunchServices 用 ChangeCount 缓存 bundle 信息, 不会因为
-#    .app 替换而主动失效. 必须显式跑 lsregister -f 强制重读, 才能让新字段
-#    (tsInputModeCharacterRepertoireKey / ComponentInputModeDict 等) 进入索引.
+#    macOS 改 IME plist 后, 仅 cp 进 Input Methods/ 不足以让系统刷新 "输入源" 列表 ——
+#    LaunchServices 用 ChangeCount 缓存 bundle 信息, 不会因为 .app 替换而主动失效.
+#    必须显式跑 lsregister -f 强制重读, 才能让新字段 (ComponentInputModeDict 等) 进入索引.
 #    这是 Big Sur+ 上很多自打包 IME 装完看不见的真因.
 
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
@@ -188,37 +195,32 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchS
 # 4a. 强制 lsregister 重读本 bundle 元数据 (LaunchServices DB).
 if [[ -x "$LSREGISTER" ]]; then
     info "lsregister -f $INSTALL_APP"
-    sudo "$LSREGISTER" -f -R "$INSTALL_APP" 2>&1 | tail -3 | sed 's/^/    /'
+    "$LSREGISTER" -f -R "$INSTALL_APP" 2>&1 | tail -3 | sed 's/^/    /'
 else
     info "(lsregister 不在标准位置, 跳过)"
 fi
 
-# 4b. 杀缓存进程, 让它们重启时按新 LS DB 重扫 /Library/Input Methods/.
-sudo killall -HUP cfprefsd 2>/dev/null || true
-sudo killall TextInputMenuAgent 2>/dev/null || true
-sudo killall TextInputSwitcher  2>/dev/null || true
-# 只发 SIGTERM (不要 -9): SIP 下这些 LaunchAgent 不能 launchctl kickstart 手动重启,
-# 必须靠 launchd 在收到 SIGTERM 后自动 respawn; SIGKILL 可能让它不被重启.
-killall imklaunchagent 2>/dev/null || true   # 当前用户 IMK 调度器, 不需 sudo
+# 4b. 杀缓存进程, 让它们重启时按新 LS DB 重扫 Input Methods/.
+#    只发 SIGTERM (不要 -9): SIP 下这些 LaunchAgent 不能 launchctl kickstart 手动重启,
+#    必须靠 launchd 在收到 SIGTERM 后自动 respawn; SIGKILL 可能让它不被重启.
+killall -HUP cfprefsd 2>/dev/null || true
+killall TextInputMenuAgent 2>/dev/null || true
+killall TextInputSwitcher  2>/dev/null || true
+killall imklaunchagent 2>/dev/null || true
 
 # 4c. 触发一次 input sources 重读
 defaults read com.apple.HIToolbox AppleEnabledInputSources >/dev/null 2>&1 || true
 
-# 4d. *关键*: 调本 .app 自身 binary 的 --register-input-source.
-#     macOS Tahoe (26) 起 TIS 仅接受来自 IME 自身进程的 TISRegisterInputSource
-#     调用 (校验 codesign identity 匹配 bundleID), 外部 swift CLI 调 silently
-#     no-op. 与 Squirrel 的 postinstall 路径一致.
+# 4d. 调本 .app 自身 binary 的 --register-input-source 立即注册 (免重启即可在 picker 出现).
+#     macOS Tahoe (26) 起 TIS 仅接受来自 IME 自身进程的 TISRegisterInputSource 调用
+#     (校验 codesign identity 匹配 bundleID), 外部 swift CLI 调 silently no-op.
+#     (用户域无 sudo, 直接以当前用户跑.)
 APP_EXEC="$INSTALL_APP/Contents/MacOS/WindInput"
 if [[ -x "$APP_EXEC" ]]; then
-    RUN_AS=( )
-    if [[ -n "${SUDO_USER:-}" ]]; then
-        RUN_AS=(sudo -u "$SUDO_USER")
-    fi
-
-    # 重要: register 进程必须**持续运行**才能让 TIS 注册维持 (踩过的坑: register
-    # 完立刻 exit 后 mode 会被系统在几秒内清掉). 后台 fork, 主流程不阻塞.
+    # 重要: register 进程保持运行以维持 TIS 注册 (踩过的坑: register 完立刻 exit 后
+    # mode 可能被系统在几秒内清掉). 后台 fork, 主流程不阻塞.
     info "$APP_EXEC --register-input-source (后台常驻维持注册)"
-    "${RUN_AS[@]}" "$APP_EXEC" --register-input-source > /tmp/wind_register.log 2>&1 &
+    "$APP_EXEC" --register-input-source > /tmp/wind_register.log 2>&1 &
     REGISTER_PID=$!
     sleep 1  # 等 TIS DB 写完
     info "    PID=$REGISTER_PID (要停止后台 register: kill $REGISTER_PID)"
@@ -234,13 +236,14 @@ cat <<EOF
          a) ls -la "$INSTALL_APP" 看 .app 是否真的在
          b) /usr/libexec/PlistBuddy -c "Print" "$INSTALL_APP/Contents/Info.plist" | head -40
             必须有 InputMethodConnectionName / InputMethodServerControllerClass /
-            ComponentInputModeDict / LSUIElement=true (不能是 LSBackgroundOnly)
-         c) codesign -dv "$INSTALL_APP" 应输出 adhoc 签名信息
+            ComponentInputModeDict / LSUIElement=true (不能是 LSBackgroundOnly);
+            *不应* 出现 tsInputModeDefaultStateKey (有的话该 mode 会被「+」列表过滤掉)
+         c) codesign -dv "$INSTALL_APP" 应输出 adhoc 签名信息 (flags 不含 runtime)
          d) 注销重登一次系统 (最暴力但有效, 让 TextInputSources 全量重扫)
     2. 切到 WindInput (Ctrl+Space 或菜单栏 IME 切换)
     3. 在任意文本框敲一个字母键, 然后:
 
-         tail -F "\$HOME/Library/Caches/WindInput/logs/wind_input.log"
+         tail -F "\$HOME/Library/Logs/WindInput/wind_input.log"
          log stream --predicate 'process == "WindInput"' --info --debug
 
        应看到:
@@ -248,6 +251,6 @@ cat <<EOF
          IME 端: "WindInput[InputController] bridge connected"
                 "WindInput[handle] ..." 或 PassThrough/Consumed 路径
 
-  卸载:    sudo scripts_mac/deploy/install_app.sh --uninstall
+  卸载:    scripts_mac/deploy/install_app.sh --uninstall
 
 EOF

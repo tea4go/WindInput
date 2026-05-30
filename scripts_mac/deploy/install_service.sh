@@ -89,12 +89,29 @@ if launchctl print "$GUI_DOMAIN/$LABEL" >/dev/null 2>&1; then
     info "停止旧服务实例"
     launchctl bootout "$GUI_DOMAIN/$LABEL" 2>/dev/null || true
 fi
+# 清理孤儿进程: bootout 只杀 launchd 托管实例, 但前台跑过 (如 dev_mac.sh r) 或上次
+# bootout 漏网的旧 wind_input 会继续占着 bridge socket, 导致新实例起来后抢不到
+# socket 立即退出 (表现为 launchd 每 10s 重启、新代码看似没生效). 按安装路径精确匹配,
+# 避免误杀同名的其它二进制.
+if pgrep -f "$INSTALL_ROOT/wind_input" >/dev/null 2>&1; then
+    info "清理残留的旧 wind_input 进程"
+    pkill -f "$INSTALL_ROOT/wind_input" 2>/dev/null || true
+    sleep 1
+fi
 
 # 2. 复制二进制 + 词库 (data/ 用 rsync --delete 保证与源一致, 删掉旧版残留词库).
 mkdir -p "$INSTALL_ROOT" "$LOG_DIR" "$HOME/Library/LaunchAgents"
 # 统一安装为 wind_input (即便 debug 源是 wind_input_debug), plist 路径稳定.
 cp -f "$SRC_EXE" "$INSTALL_ROOT/wind_input"
 chmod +x "$INSTALL_ROOT/wind_input"
+# VM 侧 ad-hoc 重签: 跨机部署到同一路径时, 内核 amfi 会缓存上一版二进制的 cdhash,
+# 新二进制 (cdhash 不同) 经 launchd 启动时缓存失配, 触发 OS_REASON_CODESIGNING 起不来.
+# 原地 --force 重签生成全新签名, 刷新校验. Go 二进制本就自带 ad-hoc 签名, 这里幂等.
+if command -v codesign >/dev/null; then
+    codesign --force -s - "$INSTALL_ROOT/wind_input" 2>/dev/null \
+        && info "ad-hoc 重签 wind_input" \
+        || info "codesign 重签跳过 (非致命)"
+fi
 if command -v rsync >/dev/null; then
     rsync -a --delete "$SRC_DATA/" "$INSTALL_ROOT/data/"
 else
@@ -145,8 +162,10 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     [[ -S "$PUSH_SOCK" ]] && break
     sleep 0.3
 done
-STATE=$(launchctl print "$GUI_DOMAIN/$LABEL" 2>/dev/null | grep -E '^[[:space:]]*state =' | head -1 | sed 's/^[[:space:]]*//')
-PID=$(launchctl print "$GUI_DOMAIN/$LABEL" 2>/dev/null | grep -E '^[[:space:]]*pid =' | head -1 | sed 's/^[[:space:]]*//')
+# 注意: 末尾 `|| true` 必不可少. 服务尚未起 pid 时 grep 'pid =' 无匹配返回 1,
+# 叠加 set -e + pipefail 会让赋值失败直接中止本「诊断报告」段 (反而吞掉真正的错误信息).
+STATE=$(launchctl print "$GUI_DOMAIN/$LABEL" 2>/dev/null | grep -E '^[[:space:]]*state =' | head -1 | sed 's/^[[:space:]]*//' || true)
+PID=$(launchctl print "$GUI_DOMAIN/$LABEL" 2>/dev/null | grep -E '^[[:space:]]*pid =' | head -1 | sed 's/^[[:space:]]*//' || true)
 info "launchd: ${STATE:-未知} ${PID:-}"
 if [[ -S "$PUSH_SOCK" ]]; then
     info "✓ push socket 存在: $PUSH_SOCK"

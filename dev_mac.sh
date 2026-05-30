@@ -12,20 +12,23 @@ usage() {
 WindInput - Dev Menu (macOS)     调试版加前缀 d (如 d1 / d2 / dr / di / du)
 
   -- 构建 --
-  1      构建全部 (Go 服务 + 词库 + IME .app)
-  2      仅构建 Go 服务 (跳过词库下载)
-  app    仅构建 IME .app bundle
-  clean  清 build/ 与 build_debug/
+  1        构建全部 (Go 服务 + 词库 + IME .app + 设置应用)
+  2        仅构建 Go 服务 (跳过词库下载)
+  app      仅构建 IME .app bundle
+  setting  仅构建设置应用 wind_setting.app (Wails)
+  clean    清 build/ 与 build_debug/
 
   -- 本机安装 / 卸载 --
-  i         本机安装 (Go 服务 LaunchAgent + IME .app)
+  i         本机安装全部 (Go 服务 LaunchAgent + IME .app + 设置应用)
+  m <模块…> 单模块 构建+安装 (模块: service / app / setting; 如 m setting / m service app)
   redeploy  IME .app 重签 + 重装 + TIS 验证 (需 SIGN_IDENTITY, macOS 26 主入口)
-  u         本机卸载 (Go 服务 + IME .app)
+  u         本机卸载全部 (Go 服务 + IME .app + 设置应用)
 
   -- 远程 VM (余参透传给 scripts_mac/vm/deploy.sh) --
-  deploy    host→VM 一键部署 (服务 + .app)
+  deploy    host→VM 一键部署 (服务 + .app; 加 --setting 含设置应用)
   undeploy  host→VM 远程卸载 + 验证清除
-            (附加 --service-only / --app-only / 目标 admin@ip 均透传)
+            (附加 --service-only / --app-only / --setting / --setting-only
+             / 目标 admin@ip 均透传)
 
   -- 运行 / 诊断 (macOS IME 专用) --
   r      前台运行 Go 服务 (debug 日志)
@@ -57,24 +60,49 @@ case "$CHOICE" in
 esac
 
 # ---- 构建 ----
-do_build_all() { "$MAC/build/build.sh" all ${VARIANT:+$VARIANT}; "$MAC/build/app.sh" ${VARIANT:+$VARIANT}; }
-do_build_svc() { "$MAC/build/build.sh" service ${VARIANT:+$VARIANT}; }
-do_build_app() { "$MAC/build/app.sh" ${VARIANT:+$VARIANT}; }
-do_clean()     { "$MAC/build/build.sh" clean; }
+# 设置应用 (Wails) 无 debug 变体, VARIANT 仅作用于 Go 服务 / IME .app.
+do_build_all()     { "$MAC/build/build.sh" all ${VARIANT:+$VARIANT}; "$MAC/build/app.sh" ${VARIANT:+$VARIANT}; "$MAC/build/setting.sh"; }
+do_build_svc()     { "$MAC/build/build.sh" service ${VARIANT:+$VARIANT}; }
+do_build_app()     { "$MAC/build/app.sh" ${VARIANT:+$VARIANT}; }
+do_build_setting() { "$MAC/build/setting.sh"; }
+do_clean()         { "$MAC/build/build.sh" clean; }
 
 # ---- 安装 / 部署 ----
-# install_service.sh 是 per-user (不要 sudo); install_app.sh 装到 /Library/ 需 sudo.
+# install_service.sh / install_app.sh / install_setting.sh 均为 per-user (装到 ~/Library
+# 或 ~/Applications), 都不要 sudo.
 do_install() {
     "$MAC/deploy/install_service.sh" ${VARIANT:+$VARIANT}
-    sudo bash "$MAC/deploy/install_app.sh"
+    bash "$MAC/deploy/install_app.sh"
+    bash "$MAC/deploy/install_setting.sh"
 }
 do_redeploy() { bash "$MAC/deploy/redeploy.sh"; }
 do_deploy()   { bash "$MAC/vm/deploy.sh" "$@"; }
 
+# 单模块 构建+安装 (对位 Windows dev.ps1 的 m[N]). 模块: service / app / setting.
+do_module() {
+    [[ $# -gt 0 ]] || { echo "[错误] m 需指定模块: service / app / setting (如 m setting)" >&2; exit 1; }
+    local mod
+    for mod in "$@"; do
+        case "$mod" in
+            service|svc)
+                "$MAC/build/build.sh" service ${VARIANT:+$VARIANT}
+                "$MAC/deploy/install_service.sh" ${VARIANT:+$VARIANT} ;;
+            app)
+                "$MAC/build/app.sh" ${VARIANT:+$VARIANT}
+                bash "$MAC/deploy/install_app.sh" ;;
+            setting|set)
+                "$MAC/build/setting.sh"
+                bash "$MAC/deploy/install_setting.sh" ;;
+            *) echo "[错误] 未知模块: $mod (可选 service / app / setting)" >&2; exit 1 ;;
+        esac
+    done
+}
+
 # ---- 卸载 ----
 do_uninstall() {
     "$MAC/deploy/install_service.sh" --uninstall
-    sudo bash "$MAC/deploy/install_app.sh" --uninstall
+    bash "$MAC/deploy/install_app.sh" --uninstall
+    bash "$MAC/deploy/install_setting.sh" --uninstall
 }
 
 # ---- 运行 / 诊断 ----
@@ -118,8 +146,10 @@ case "$CHOICE" in
     1)         do_build_all ;;
     2)         do_build_svc ;;
     app)       do_build_app ;;
+    setting)   do_build_setting ;;
     clean)     do_clean ;;
     i)         do_install ;;
+    m)         do_module "${@:2}" ;;
     redeploy)  do_redeploy ;;
     u)         do_uninstall ;;
     deploy)    do_deploy "${@:2}" ;;

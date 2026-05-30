@@ -89,9 +89,15 @@
     <string>menu_icon.pdf</string>
 
     <!--
-        加回 ComponentInputModeDict (sub-mode) 结构, 因为系统设置 UI 不显示
-        WithoutModes 类型 (Apple 自带 + 所有第三方主流 IME 都是 ModeEnabled+Mode).
-        组合: mode dict + register 进程常驻, 应该能让 mode 持久不被清.
+        ComponentInputModeDict (sub-mode) 结构: 系统设置 UI 只显示带 mode 的 IME
+        (Apple 自带 + 主流第三方都是 ModeEnabled+Mode, 不显示 WithoutModes 类型).
+
+        *不要* 在 mode 里写 tsInputModeDefaultStateKey=true (踩过的坑):
+        该键会让 mode 一注册就被标成「已启用」, 但这个启用态只活在运行期 TIS, 从不落进
+        用户的 AppleEnabledInputSources; 结果是「+ 添加输入法」列表(只列未启用项)把它过滤掉,
+        而主列表里也没有它 → 中英文分组下两头都看不见 (Tahoe 实测; Sequoia 旧版对此更宽松).
+        去掉该键后 mode 注册为「未启用」态, 正常出现在「+」列表里供用户手动添加.
+        (对照 fcitx5-macos assets: 其 mode dict 同样不带 default-state.)
     -->
     <key>ComponentInputModeDict</key>
     <dict>
@@ -110,8 +116,6 @@
                 </array>
                 <key>tsInputModeScriptKey</key>
                 <string>smUnicodeScript</string>
-                <key>tsInputModeDefaultStateKey</key>
-                <true/>
                 <key>tsInputModePrimaryInScriptKey</key>
                 <true/>
                 <key>tsInputModeKeyEquivalentModifiersKey</key>

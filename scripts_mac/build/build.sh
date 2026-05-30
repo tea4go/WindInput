@@ -260,5 +260,5 @@ bold "==> Build complete"
 [[ -d "$BUILD_DIR/data"      ]] && info "data   : $BUILD_DIR/data ($(find "$BUILD_DIR/data" -type f | wc -l | tr -d ' ') 文件)"
 echo
 info "调试启动:   cd $BUILD_DIR && WIND_INPUT_LOG_LEVEL=debug ./$EXE_NAME"
-info "日志:      \$HOME/Library/Caches/WindInput/logs/wind_input.log"
+info "日志:      \$HOME/Library/Logs/WindInput/wind_input.log"
 info "Socket:    \$HOME/Library/Application Support/WindInput/bridge{,_push}.sock"
