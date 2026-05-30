@@ -3,8 +3,13 @@
     <dict>
         <key>CFBundlePackageType</key>
         <string>APPL</string>
+        <!-- macOS 固定显示「清风输入法设置」(不用 {{.Info.ProductName}}: 那含 Windows 双版本
+             共存用的「开发版」字样, macOS 不需要). CFBundleName=菜单栏/关于, CFBundleDisplayName
+             =Finder/Dock; 两者一致, 且 DisplayName 必须有否则 Finder 回退显示文件名 wind_setting. -->
         <key>CFBundleName</key>
-        <string>{{.Info.ProductName}}</string>
+        <string>清风输入法设置</string>
+        <key>CFBundleDisplayName</key>
+        <string>清风输入法设置</string>
         <key>CFBundleExecutable</key>
         <string>{{.OutputFilename}}</string>
         <key>CFBundleIdentifier</key>

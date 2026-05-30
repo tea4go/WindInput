@@ -16,11 +16,14 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 
-APP_NAME="wind_setting"
+APP_NAME="wind_setting"                  # 源 .app 文件名 + 可执行名 (Wails outputfilename)
+DISPLAY_NAME="清风输入法设置"             # 安装后的 .app 文件名: Finder 显示用。实测 CFBundleDisplayName
+                                         # 对 .app 的 Finder 标签无效 (仍显示文件名), 只有改文件名才生效。
 BUNDLE_ID="com.wails.wind_setting"
 DEFAULT_APP="$REPO_DIR/wind_setting/build/bin/$APP_NAME.app"
 INSTALL_DIR="$HOME/Applications"
-INSTALL_APP="$INSTALL_DIR/$APP_NAME.app"
+INSTALL_APP="$INSTALL_DIR/$DISPLAY_NAME.app"
+LEGACY_APP="$INSTALL_DIR/$APP_NAME.app"  # 旧版按 wind_setting.app 装过的残留 (清理用)
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 DO_BUILD=0
@@ -50,13 +53,13 @@ fi
 if [[ $DO_UNINSTALL -eq 1 ]]; then
     bold "==> Uninstall $APP_NAME"
     info "kill $APP_NAME 进程"
-    pkill -f "$APP_NAME.app/Contents/MacOS/$APP_NAME" 2>/dev/null || true
-    if [[ -d "$INSTALL_APP" ]]; then
-        rm -rf "$INSTALL_APP"
-        info "removed $INSTALL_APP"
-    else
-        info "(no $INSTALL_APP)"
-    fi
+    pkill -f "Contents/MacOS/$APP_NAME" 2>/dev/null || true
+    for app in "$INSTALL_APP" "$LEGACY_APP"; do
+        if [[ -d "$app" ]]; then
+            rm -rf "$app"
+            info "removed $app"
+        fi
+    done
     # *绝不* 对已删路径跑 `lsregister -u` (见 install_app.sh 血泪教训: 会污染 LS DB,
     # 让系统设置 "添加输入法" picker 对所有用户报错). .app 删掉后残留索引下次扫描自然失效.
     info "(LS 残留索引留待系统下次扫描自然失效, 不跑 lsregister -u)"
@@ -77,15 +80,15 @@ fi
 bold "==> Install $SRC_APP -> $INSTALL_APP"
 
 # 1. 关掉旧实例 (避免 cp 被持锁)
-if pgrep -f "$APP_NAME.app/Contents/MacOS/$APP_NAME" >/dev/null 2>&1; then
+if pgrep -f "Contents/MacOS/$APP_NAME" >/dev/null 2>&1; then
     info "停止旧 $APP_NAME 进程"
-    pkill -f "$APP_NAME.app/Contents/MacOS/$APP_NAME" 2>/dev/null || true
+    pkill -f "Contents/MacOS/$APP_NAME" 2>/dev/null || true
     sleep 0.5
 fi
 
-# 2. 复制
+# 2. 复制 (装为中文名 .app; 同时清掉旧 wind_setting.app 残留)
 mkdir -p "$INSTALL_DIR"
-rm -rf "$INSTALL_APP"
+rm -rf "$INSTALL_APP" "$LEGACY_APP"
 cp -R "$SRC_APP" "$INSTALL_APP"
 info "已复制 $INSTALL_APP"
 
@@ -111,12 +114,12 @@ fi
 bold "==> Verify"
 if [[ -x "$LSREGISTER" ]]; then
     # 按 .app 路径数实际注册项 (grep bundleID 会把 identifier/CFBundleIdentifier 两行都算)
-    N=$("$LSREGISTER" -dump 2>/dev/null | grep "path:" | grep -ci "$APP_NAME.app" || true)
-    info "LS DB 内 $APP_NAME.app 注册路径数: ${N:-0} (期望 >=1; 含 deploy staging 副本属正常)"
+    N=$("$LSREGISTER" -dump 2>/dev/null | grep "path:" | grep -c "$DISPLAY_NAME.app" || true)
+    info "LS DB 内 $DISPLAY_NAME.app 注册路径数: ${N:-0} (期望 >=1; 含 deploy staging 副本属正常)"
 fi
 if open -gb "$BUNDLE_ID" 2>/dev/null; then
     info "✓ open -gb $BUNDLE_ID 成功 (LS 可定位)"
-    pkill -f "$APP_NAME.app/Contents/MacOS/$APP_NAME" 2>/dev/null || true
+    pkill -f "Contents/MacOS/$APP_NAME" 2>/dev/null || true
 else
     info "✗ open -gb 失败 (GUI 会话外属正常; 登录会话里 IME 菜单 '设置' 应可启动)"
 fi
