@@ -20,6 +20,11 @@ REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 
 LABEL="to.feng.windinput.service"
 INSTALL_ROOT="$HOME/Library/Application Support/WindInput/service"
+# 安装后的可执行名: macOS 登录项/后台列表 (BTM) 对无 Developer ID 签名的 LaunchAgent
+# 直接显示可执行文件名 (实测 AssociatedBundleIdentifiers 对 ad-hoc legacy agent 被忽略),
+# 故装为中文名让后台列表显示「清风输入法服务」而非裸 wind_input. 二进制改名不影响功能
+# (服务用 exeDir/data 定位词库、IME 走 socket 路径连接, 均与文件名无关).
+INSTALL_EXE="$INSTALL_ROOT/清风输入法服务"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$HOME/Library/Logs"
 OUT_LOG="$LOG_DIR/windinput.out.log"
@@ -93,23 +98,27 @@ fi
 # bootout 漏网的旧 wind_input 会继续占着 bridge socket, 导致新实例起来后抢不到
 # socket 立即退出 (表现为 launchd 每 10s 重启、新代码看似没生效). 按安装路径精确匹配,
 # 避免误杀同名的其它二进制.
-if pgrep -f "$INSTALL_ROOT/wind_input" >/dev/null 2>&1; then
-    info "清理残留的旧 wind_input 进程"
-    pkill -f "$INSTALL_ROOT/wind_input" 2>/dev/null || true
+# 按 service 目录匹配 (不写死文件名): 同时覆盖新中文名与旧 wind_input 残留, 且只命中
+# 本服务目录下的二进制, 不误杀同名其它进程.
+if pgrep -f "$INSTALL_ROOT/" >/dev/null 2>&1; then
+    info "清理残留的旧服务进程"
+    pkill -f "$INSTALL_ROOT/" 2>/dev/null || true
     sleep 1
 fi
+# 删旧文件名残留 (从 wind_input 升级到中文名时), 避免目录里两个二进制并存.
+rm -f "$INSTALL_ROOT/wind_input"
 
 # 2. 复制二进制 + 词库 (data/ 用 rsync --delete 保证与源一致, 删掉旧版残留词库).
 mkdir -p "$INSTALL_ROOT" "$LOG_DIR" "$HOME/Library/LaunchAgents"
-# 统一安装为 wind_input (即便 debug 源是 wind_input_debug), plist 路径稳定.
-cp -f "$SRC_EXE" "$INSTALL_ROOT/wind_input"
-chmod +x "$INSTALL_ROOT/wind_input"
+# 统一安装为「清风输入法服务」(即便 debug 源是 wind_input_debug), plist 路径稳定。
+cp -f "$SRC_EXE" "$INSTALL_EXE"
+chmod +x "$INSTALL_EXE"
 # VM 侧 ad-hoc 重签: 跨机部署到同一路径时, 内核 amfi 会缓存上一版二进制的 cdhash,
 # 新二进制 (cdhash 不同) 经 launchd 启动时缓存失配, 触发 OS_REASON_CODESIGNING 起不来.
 # 原地 --force 重签生成全新签名, 刷新校验. Go 二进制本就自带 ad-hoc 签名, 这里幂等.
 if command -v codesign >/dev/null; then
-    codesign --force -s - "$INSTALL_ROOT/wind_input" 2>/dev/null \
-        && info "ad-hoc 重签 wind_input" \
+    codesign --force -s - "$INSTALL_EXE" 2>/dev/null \
+        && info "ad-hoc 重签服务二进制" \
         || info "codesign 重签跳过 (非致命)"
 fi
 if command -v rsync >/dev/null; then
@@ -117,7 +126,7 @@ if command -v rsync >/dev/null; then
 else
     rm -rf "$INSTALL_ROOT/data"; cp -R "$SRC_DATA" "$INSTALL_ROOT/data"
 fi
-info "已复制 wind_input + data/ ($(find "$INSTALL_ROOT/data" -type f | wc -l | tr -d ' ') 个数据文件)"
+info "已复制 服务二进制 + data/ ($(find "$INSTALL_ROOT/data" -type f | wc -l | tr -d ' ') 个数据文件)"
 
 # 3. 写 LaunchAgent plist (RunAtLoad 开机自启 + KeepAlive 崩溃自拉起).
 cat > "$PLIST" <<PLIST_EOF
@@ -127,9 +136,14 @@ cat > "$PLIST" <<PLIST_EOF
 <dict>
     <key>Label</key>
     <string>$LABEL</string>
+    <!-- 关联到输入法 app (理论上让登录项列表归到该 app 名下). 实测: ad-hoc 无签名的
+         legacy agent 会忽略它, BTM 仍按可执行文件名显示 → 真正生效靠把二进制装为中文名
+         (见上 INSTALL_EXE). 此键保留, 将来有 Developer ID 签名后可正常归并. -->
+    <key>AssociatedBundleIdentifiers</key>
+    <string>to.feng.inputmethod.WindInput</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$INSTALL_ROOT/wind_input</string>
+        <string>$INSTALL_EXE</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
