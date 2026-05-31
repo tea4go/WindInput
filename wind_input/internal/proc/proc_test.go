@@ -1,6 +1,7 @@
 package proc
 
 import (
+	"errors"
 	"runtime"
 	"testing"
 )
@@ -45,20 +46,49 @@ func TestShell_EmptyCmdline(t *testing.T) {
 }
 
 func TestShell_HappyPath(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Shell only implemented on Windows")
-	}
-	if err := Shell("exit 0"); err != nil {
-		t.Errorf("Shell happy path: %v", err)
+	switch runtime.GOOS {
+	case "windows":
+		if err := Shell("exit 0"); err != nil {
+			t.Errorf("Shell happy path: %v", err)
+		}
+	case "darwin":
+		// macOS: Shell 走 `/bin/sh -c <cmdline>`。
+		if err := Shell("exit 0"); err != nil {
+			t.Errorf("Shell happy path (darwin): %v", err)
+		}
+	default:
+		t.Skip("Shell only implemented on Windows / macOS")
 	}
 }
 
 func TestRun_HappyPath(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Run happy path uses cmd.exe")
+	switch runtime.GOOS {
+	case "windows":
+		if err := Run("cmd", "/c", "exit 0"); err != nil {
+			t.Errorf("Run happy path: %v", err)
+		}
+	case "darwin":
+		// macOS: Run 直接 exec.Command, /bin/sh 必存在。
+		if err := Run("/bin/sh", "-c", "exit 0"); err != nil {
+			t.Errorf("Run happy path (darwin): %v", err)
+		}
+	default:
+		t.Skip("Run happy path needs a platform shell")
 	}
-	if err := Run("cmd", "/c", "exit 0"); err != nil {
-		t.Errorf("Run happy path: %v", err)
+}
+
+// TestShellEx_TermUnsupported_Darwin 验证 macOS 上 term flag 返回
+// unsupported 错误 (弹出可见终端窗口暂未实现), 而无 flag 时静默执行成功。
+func TestShellEx_TermUnsupported_Darwin(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin-specific term behaviour")
+	}
+	if err := ShellEx("exit 0", []string{"term"}); !errors.Is(err, ErrUnsupportedPlatform) {
+		t.Errorf("ShellEx term on darwin: want ErrUnsupportedPlatform, got %v", err)
+	}
+	// 空白 flag 应被跳过, 等同无 flag, 静默执行成功。
+	if err := ShellEx("exit 0", []string{"", "  "}); err != nil {
+		t.Errorf("ShellEx blank flags on darwin should succeed, got %v", err)
 	}
 }
 
