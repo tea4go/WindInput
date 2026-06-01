@@ -104,10 +104,25 @@ func (h *fakeHandler) HandleSelectionChanged(rune)              {}
 func (h *fakeHandler) HandleHostRenderReady()                   {}
 func (h *fakeHandler) HandleInputStats(int, int, int, int, int) {}
 
+// shortTempDir 返回 /tmp 下的短路径临时目录并登记清理。
+// 不用 t.TempDir(): macOS 上它落在 /var/folders/.../<长测试名>/001, 拼上 socket
+// 文件名后常超过 Unix domain socket 的 sun_path 104 字节硬上限, 使 bind/connect
+// 报 "invalid argument"(EINVAL); 路径长度随测试名与随机后缀浮动还会导致时过时不过。
+// /tmp 下的短目录(约 30 字节)可稳定避开该限制。
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "wb")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 // setupTestServer 用临时目录起一个 Server 用于测试。返回 server + cleanup。
 func setupTestServer(t *testing.T) (*Server, *fakeHandler, func()) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := shortTempDir(t)
 	t.Setenv("WIND_INPUT_RUNTIME_DIR", dir)
 	// 重新计算端点 (init 只在包加载时跑过, 测试需手动覆盖)
 	BridgePipeName = filepath.Join(dir, "bridge.sock")
@@ -331,7 +346,7 @@ func TestDarwinBridge_PushBroadcast(t *testing.T) {
 
 // TestDarwinBridge_StaleSocketCleanup 验证启动时清理残留 socket 文件。
 func TestDarwinBridge_StaleSocketCleanup(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortTempDir(t)
 	t.Setenv("WIND_INPUT_RUNTIME_DIR", dir)
 	BridgePipeName = filepath.Join(dir, "bridge.sock")
 	PushPipeName = filepath.Join(dir, "bridge_push.sock")
