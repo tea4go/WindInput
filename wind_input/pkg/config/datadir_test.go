@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -59,15 +60,23 @@ func TestWriteDataDirConf(t *testing.T) {
 }
 
 func TestValidateDataDirPath(t *testing.T) {
+	// 绝对路径与非法字符示例随平台不同：Windows 用盘符路径，类 Unix 用 / 起始路径，
+	// 否则 filepath.IsAbs 会把 Windows 路径在 macOS/Linux 上判为非绝对路径而误失败。
+	validAbs := "D:\\MyData\\WindInput"
+	illegalChars := "D:\\My*Data"
+	if runtime.GOOS != "windows" {
+		validAbs = "/tmp/MyData/WindInput"
+		illegalChars = "/tmp/My*Data"
+	}
 	tests := []struct {
 		name   string
 		path   string
 		wantOK bool
 	}{
 		{"empty", "", false},
-		{"valid abs", "D:\\MyData\\WindInput", true},
+		{"valid abs", validAbs, true},
 		{"relative", "relative/path", false},
-		{"illegal chars", "D:\\My*Data", false},
+		{"illegal chars", illegalChars, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -6,20 +6,24 @@ import (
 	"testing"
 )
 
-// setTestConfigDir 临时将 APPDATA 指向临时目录，使 GetConfigDir() 返回临时路径
-// 返回 restore 函数，defer 调用即可恢复
+// setTestConfigDir 临时把配置目录重定向到隔离的临时目录，返回 GetConfigDir() 解析出的真实路径。
+// os.UserConfigDir() 的来源因平台而异：Windows 读 %APPDATA%，macOS 读
+// $HOME/Library/Application Support，Linux 读 $XDG_CONFIG_HOME 或 $HOME/.config。
+// 因此一次性把这些环境变量都指向临时目录，保证测试在任意平台都落到隔离目录而非真实用户配置。
+// 返回值是真实解析出的配置目录（各平台不同），调用方需按它定位文件、勿自行拼接。
 func setTestConfigDir(t *testing.T) string {
 	t.Helper()
 	tmpDir := t.TempDir()
-	origApp := os.Getenv("APPDATA")
-	origLocal := os.Getenv("LOCALAPPDATA")
-	os.Setenv("APPDATA", tmpDir)
-	os.Setenv("LOCALAPPDATA", tmpDir)
-	t.Cleanup(func() {
-		os.Setenv("APPDATA", origApp)
-		os.Setenv("LOCALAPPDATA", origLocal)
-	})
-	return tmpDir
+	for _, k := range []string{"APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "HOME"} {
+		key, orig := k, os.Getenv(k)
+		os.Setenv(key, tmpDir)
+		t.Cleanup(func() { os.Setenv(key, orig) })
+	}
+	dir, err := GetConfigDir()
+	if err != nil {
+		t.Fatalf("解析配置目录失败: %v", err)
+	}
+	return dir
 }
 
 func TestSchemaOverrides_LoadEmpty(t *testing.T) {
@@ -158,16 +162,15 @@ func TestSchemaOverrides_Delete(t *testing.T) {
 }
 
 func TestSchemaOverrides_DeleteLastCleansFile(t *testing.T) {
-	tmpDir := setTestConfigDir(t)
+	configDir := setTestConfigDir(t)
 
 	// 先设置一个方案
 	if err := SetSchemaOverride("wubi86", map[string]any{"foo": "bar"}); err != nil {
 		t.Fatalf("SetSchemaOverride 失败: %v", err)
 	}
 
-	// 确认文件存在
-	appName := "WindInput"
-	overridesPath := filepath.Join(tmpDir, appName, SchemaOverridesFile)
+	// 确认文件存在（路径以包内逻辑解析出的配置目录为准，跨平台一致）
+	overridesPath := filepath.Join(configDir, SchemaOverridesFile)
 	if _, err := os.Stat(overridesPath); os.IsNotExist(err) {
 		t.Fatal("保存后文件应存在")
 	}
