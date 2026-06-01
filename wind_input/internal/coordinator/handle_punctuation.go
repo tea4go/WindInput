@@ -407,6 +407,59 @@ func (c *Coordinator) getAutoPairTracker() *transform.PairTracker {
 	return nil
 }
 
+// handleEnglishModeAutoPair 处理「IME 英文模式」下的成对标点 (仅 darwin 生效)。
+//
+// 背景: 英文模式按键在 handleKeyEvent 入口直接透传, 不进中文标点管线, 故中文模式的
+// handlePunctuation 自动配对对英文模式不起作用。Windows 英文模式配对由 C++ TSF 层做,
+// 而 macOS 无该层 → 需要 Go 自己接管 (englishModeAutoPairInGo 平台常量 gate)。
+//
+// ch 为英文模式下将输出的实际字符 (data.Key 的首 rune)。返回 nil 表示该字符不参与配对,
+// 调用方应维持原透传逻辑。逻辑与 handlePunctuation 的「无 buffer」配对分支保持一致:
+// 智能跳过 (输入右标点且栈顶匹配) + 自动插入配对并回退光标。
+func (c *Coordinator) handleEnglishModeAutoPair(ch rune) *bridge.KeyEventResult {
+	if !englishModeAutoPairInGo {
+		return nil // 非 darwin: 英文模式配对由 C++ 处理, Go 透传
+	}
+	if c.config == nil || !c.config.Input.AutoPair.English {
+		return nil
+	}
+	// 应用黑名单 (与 getAutoPairTracker 同语义)
+	if len(c.config.Input.AutoPair.Blacklist) > 0 && c.activeProcessName != "" {
+		for _, proc := range c.config.Input.AutoPair.Blacklist {
+			if strings.EqualFold(proc, c.activeProcessName) {
+				return nil
+			}
+		}
+	}
+	tracker := c.pairTrackerEn
+	if tracker == nil {
+		return nil
+	}
+
+	// 智能跳过: 输入右标点时栈顶匹配则跳过 (光标右移越过已自动补全的右标点)
+	if tracker.IsRight(ch) {
+		if entry, ok := tracker.Peek(); ok && entry.Right == ch {
+			tracker.Pop()
+			c.logger.Debug("Auto-pair(en): smart skip", "char", string(ch))
+			return &bridge.KeyEventResult{Type: bridge.ResponseTypeMoveCursorRight}
+		}
+		tracker.Clear() // 栈顶不匹配, 清空栈
+	}
+
+	// 自动配对: 输入左标点 → 插入配对并回退光标到中间
+	if right, ok := tracker.GetRight(ch); ok {
+		tracker.Push(ch, right)
+		c.pairInsertTime = time.Now()
+		c.logger.Debug("Auto-pair(en): insert pair", "left", string(ch))
+		return &bridge.KeyEventResult{
+			Type:         bridge.ResponseTypeInsertTextWithCursor,
+			Text:         string(ch) + string(right),
+			CursorOffset: 1,
+		}
+	}
+	return nil
+}
+
 // applyToggleFullWidth 执行全角切换的核心逻辑（需持锁调用）
 func (c *Coordinator) applyToggleFullWidth() {
 	c.fullWidth = !c.fullWidth

@@ -53,6 +53,23 @@ public class InputController: IMKInputController {
     public override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
 
+        // 智能配对的宿主光标移动: kit 层 router 把意图上抛, 这里用 CGEvent 合成方向键。
+        // 主线程 async 执行, 确保排在本轮 insertText (宿主已处理) 之后再发方向键。
+        // 需辅助功能授权 (同命令直通车按键合成); 未授权则静默不动 (降级为不回退光标)。
+        router.moveHostCursor = { move in
+            DispatchQueue.main.async {
+                let (key, count): (String, Int)
+                switch move {
+                case .left(let n): (key, count) = ("left", n)
+                case .right(let n): (key, count) = ("right", n)
+                }
+                let combo = KeyComboPayload(key: key, modifiers: [])
+                for _ in 0..<max(0, min(count, 64)) {
+                    KeySynthesizer.tap(combo)
+                }
+            }
+        }
+
         let path = BridgeEndpoints.requestSocket
         do {
             bridge = try BridgeClient(socketPath: path, ioTimeoutMs: Self.requestIOTimeoutMs)

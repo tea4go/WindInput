@@ -15,6 +15,19 @@ public final class BridgeResponseRouter {
     /// 当前 IME 端 composition 状态, applyXxx 内部维护.
     public private(set) var composition = CompositionState()
 
+    /// host 文本光标移动意图. 由 app 层用 CGEvent 合成方向键实现 —— 智能配对
+    /// (插入 `（）` 后回退到中间、输入右标点时跳过) 在 IMKit 无标准 API 移动宿主
+    /// 光标, 只能合成方向键。kit 不直接依赖 CGEvent/Accessibility (保持可在 swift
+    /// test 无 IMKit 环境驱动), 故以闭包把副作用上抛 app 层。nil 时静默降级 (不移动
+    /// 光标, 退化为旧行为)。
+    public enum CursorMove: Equatable {
+        case left(Int)
+        case right(Int)
+    }
+
+    /// app 层注入: 执行 host 光标移动。见 CursorMove。
+    public var moveHostCursor: ((CursorMove) -> Void)?
+
     public init() {}
 
     public func reset() {
@@ -64,11 +77,16 @@ public final class BridgeResponseRouter {
             return true
 
         case DownstreamCmd.moveCursor:
-            // M3 实装 (智能跳过); M2.2 仅丢弃但仍消费按键
+            // 智能跳过: 输入右标点时栈顶匹配 → 跳过已自动补全的右标点。direction=1 右移。
+            // 经合成方向键实现 (moveHostCursor); 未注入则降级为仅消费按键 (旧行为)。
+            if let p = try? BinaryCodec.decodeMoveCursorPayload(frame.payload), p.direction == 1 {
+                moveHostCursor?(.right(1))
+            }
             return true
 
         case DownstreamCmd.deletePair:
-            // M3 实装 (智能 backspace); M2.2 仅丢弃但仍消费按键
+            // 预留: coordinator 当前未生成此响应 (Windows/macOS 均未实装成对删除)。
+            // 收到则仅消费按键, 待将来需要时经 moveHostCursor + 删除键合成。
             return true
 
         default:
@@ -99,7 +117,12 @@ public final class BridgeResponseRouter {
         let notFound = NSRange(location: NSNotFound, length: NSNotFound)
         client?.insertText(p.text, replacementRange: notFound)
         composition.clear()
-        // cursorOffset 真实左移 M3 实装 (IMKit 没标准 API, 需 client.selectedRange).
+        // 自动配对插入 `（）` 后, cursorOffset 是从文本末尾向左偏移的字符数 (通常 1),
+        // 把光标退回到配对中间。IMKit 无移动宿主光标的标准 API → 经 moveHostCursor
+        // 合成左方向键; 未注入则降级为不回退 (光标停在配对右侧, 旧行为)。
+        if p.cursorOffset > 0 {
+            moveHostCursor?(.left(Int(p.cursorOffset)))
+        }
     }
 
     public func applyUpdateComposition(_ p: BinaryCodec.UpdateCompositionPayload,

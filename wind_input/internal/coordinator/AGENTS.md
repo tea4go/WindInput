@@ -21,7 +21,8 @@
 | `toolbar_visibility.go` | 工具栏位置计算 (`computeToolbarPositionLocked`) + ShellHook 全屏事件转发 (`OnShellFullscreenChange`)；显隐决策已迁出，本文件仅做位置算子与事件适配 |
 | `toolbar_reducer.go` | **工具栏显隐单点决策器**：`toolbarReducer` goroutine 接收 7 类事件（IME activate/deactivate、AllClientsDisconnected、user preference、fullscreen、config、caret、content refresh），50ms debounce 合并 burst，按公式 `imeActivated && userWantsVisible && !(fullscreen && hideInFullscreen)` 决策；`sendCritical` (阻塞 100ms) / `sendNonBlocking` (drop) 两种投递；状态机字段仅 reducer goroutine 访问；`snapshotToolbarShowParams` 在 Coordinator 上短临锁取位置 + ToolbarState |
 | `handle_mode.go` | 中英文模式切换、CapsLock 状态处理 |
-| `handle_punctuation.go` | 中英文标点转换处理 |
+| `handle_punctuation.go` | 中英文标点转换处理；自动配对 (`getAutoPairTracker` 中文模式 / `handleEnglishModeAutoPair` IME 英文模式) ——智能跳过 + 插入配对回退光标，英文模式配对受 `englishModeAutoPairInGo` 平台常量 gate |
+| `english_pair_darwin.go` / `english_pair_other.go` | 平台常量 `englishModeAutoPairInGo`：darwin=true（macOS 无 C++ TSF 层，IME 英文模式成对标点由 Go 的 `handleEnglishModeAutoPair` 接管），非 darwin=false（Windows 英文配对由 C++ 处理，Go 透传不重复）。配对的光标移动在 macOS 经 `MoveCursorRight`/`InsertTextWithCursor.CursorOffset` 下发，IMKit `.app` 用 CGEvent 合成方向键（需辅助功能授权） |
 | `handle_temp_english.go` | 临时英文模式：五笔输入态下按特定键（如 Z）触发，输入英文后恢复；维护临时英文缓冲区和上屏逻辑 |
 | `handle_temp_pinyin.go` | 临时拼音模式：五笔方案下临时切换到拼音输入；通过 `engine.Manager.ActivateTempPinyin`/`DeactivateTempPinyin` 管理拼音词库层的注入与退出 |
 | `handle_ui_callbacks.go` | UI 回调（工具栏按钮点击、候选窗口鼠标事件）；**R2**: `handleCandidateMove(index, delta, top)` 统一前移/后移/置顶，Pin/Delete/Reset 均传 `cand.ID`；旧短语辅助方法 `handlePhraseMoveUp/Down/ToTop/Reset` 已删除 |

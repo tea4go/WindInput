@@ -305,6 +305,27 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 
 	// English mode: pass through or full-width convert
 	if !c.chineseMode {
+		// IME 英文模式自动配对 (仅 darwin 生效; Windows 英文配对由 C++ TSF 层处理,
+		// englishModeAutoPairInGo=false 时 handleEnglishModeAutoPair 直接返回 nil)。
+		// 仅 !fullWidth、单字符标点才尝试; 非配对字符返回 nil → 维持下方透传。
+		// 放在 fullWidth 分支前: 全角模式标点走全角转换不配对, 故只在非全角时接管。
+		//
+		// 注意: 英文分支在通用 Shift 符号解析 (下方 ~L400 `shiftedKeyMap`) 之前就返回,
+		// 故这里必须自行应用 shiftedKeyMap —— 否则 Shift+9 拿到的是 "9" 而非 "(",
+		// 括号/花括号/尖括号等 Shift 类配对永远命中不了 (macOS keyCodeToKeyName 不含 Shift)。
+		if !c.fullWidth {
+			pairCh := key
+			if hasShift && len(pairCh) == 1 {
+				if shifted, ok := shiftedKeyMap[pairCh[0]]; ok {
+					pairCh = string(shifted)
+				}
+			}
+			if len(pairCh) == 1 && c.isPunctuation(rune(pairCh[0])) {
+				if res := c.handleEnglishModeAutoPair(rune(pairCh[0])); res != nil {
+					return res
+				}
+			}
+		}
 		if c.fullWidth {
 			// 全角模式下，拦截可打印字符并转为全角输出
 			// 空格键特殊处理（data.Key 为 "space" 而非 " "）
