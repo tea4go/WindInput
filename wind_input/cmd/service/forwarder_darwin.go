@@ -42,6 +42,11 @@ type darwinForwarder struct {
 	codec    *ipc.BinaryCodec
 	renderer *ui.Renderer
 
+	// 候选窗主字体族: 启动时解析的本机 CJK 字体 (PingFang SC 等)。用户配置的字号/
+	// 跟随主题/序号标签会下发到 renderer, 但字体族恒用此本机解析值 —— config.UI.FontFamily
+	// 可能是 Windows 字体名, 在 mac 不可解析, 套用会让汉字渲成方框。
+	fontFamily string
+
 	// 缓存当前候选, 供悬停重渲染 (hover 仅改高亮, 候选数据不变)。
 	lastPayload    uicmd.CandidatesShowPayload
 	lastCandidates []ui.Candidate
@@ -96,6 +101,7 @@ func (f *darwinForwarder) refreshThemeIfNeeded() {
 			if cfg, err := config.Load(); err == nil {
 				f.cfgTheme, f.cfgStyle, f.cfgSchema = cfg.UI.Theme, cfg.UI.ThemeStyle, cfg.Schema.Active
 				f.cfgStatus = cfg.UI.StatusIndicator
+				f.applyFontFromConfig(cfg)
 			}
 		}
 	}
@@ -103,6 +109,7 @@ func (f *darwinForwarder) refreshThemeIfNeeded() {
 		if cfg, err := config.Load(); err == nil {
 			f.cfgTheme, f.cfgStyle, f.cfgSchema = cfg.UI.Theme, cfg.UI.ThemeStyle, cfg.Schema.Active
 			f.cfgStatus = cfg.UI.StatusIndicator
+			f.applyFontFromConfig(cfg)
 		}
 		if f.cfgTheme == "" {
 			return
@@ -132,6 +139,16 @@ func (f *darwinForwarder) refreshThemeIfNeeded() {
 		f.renderer.SetTheme(f.themeMgr.GetResolvedV25())
 		f.logger.Info("darwin forwarder 主题已应用", "theme", f.lastTheme, "dark", dark)
 	}
+}
+
+// applyFontFromConfig 把用户的字号 / 字号跟随主题 / 候选序号标签覆盖应用到 renderer
+// (镜像 Win 端 ui.Manager.UpdateConfig + SetCandidateIndexLabels)。
+// 字体族恒用 f.fontFamily (启动解析的本机 CJK 族), 不套 config.UI.FontFamily —— 它可能是
+// Windows 字体名, 在 mac 不可解析。仅在 config mtime 变化时调用 (非每帧)。
+func (f *darwinForwarder) applyFontFromConfig(cfg *config.Config) {
+	f.renderer.SetFontFollowTheme(cfg.UI.FontSizeFollowTheme)
+	f.renderer.UpdateFont(cfg.UI.FontSize, f.fontFamily)
+	f.renderer.SetGlobalIndexLabels(cfg.UI.CandidateIndexLabels)
 }
 
 // startCandidateForwarder 启动 darwin 渲染转发 goroutine。
@@ -181,6 +198,7 @@ func startCandidateForwarder(srv *bridge.Server, mgr *ui.Manager,
 		renderer:   renderer,
 		hoverIndex: -1,
 		themeMgr:   theme.NewManager(logger),
+		fontFamily: fontFamily,
 	}
 	if p, err := config.GetConfigPath(); err == nil {
 		f.cfgPath = p
