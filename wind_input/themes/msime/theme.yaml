@@ -8,12 +8,18 @@ meta:
 layout: msime-tight
 palette: msime-classic
 
+# v2.6 行为配置（P6）：可被用户 ui.pager_display_mode 覆盖。
+# 不声明 font_size / vertical_max_width → 沿用引擎基线 + 用户全局配置。
+behavior:
+  always_show_pager: false   # 仅 1 页时不显示翻页区
+  show_page_number: true     # 多页时显示 "1/3" 页码文字
+
 # v2.6 盒模型 View 外观（P2 切片-2）：与 msime-tight/msime-classic 现状一致，仅显式字段覆盖
 # 合成桥基线。颜色用 ${语义} token 解析自 palette；字号沿用用户配置；序号走 text 模式（layout circle:false）。
 views:
   window:
     padding: {top: 6, right: 8, bottom: 6, left: 8}
-    border: {radius: 4, width: 1px, color: "${border}"}   # 1px 发丝线：边框不随 DPI 加粗（匹配旧渲染器）
+    border: {radius: 8, width: 1px, color: "${border}"}   # 1px 发丝线：边框不随 DPI 加粗（匹配旧渲染器）
     background: {color: "${background}"}
   preedit_bar:
     padding: {left: 8, right: 8}

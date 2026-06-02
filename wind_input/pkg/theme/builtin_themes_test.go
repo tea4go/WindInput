@@ -41,6 +41,13 @@ func TestBuiltinDefaultTheme(t *testing.T) {
 	if ColorToHexRGB(r.Palette.CandidateWindow.IndexBg) != "#4285F4" {
 		t.Errorf("default IndexBg want #4285F4, got %s", ColorToHexRGB(r.Palette.CandidateWindow.IndexBg))
 	}
+	// behavior 块显式声明：单页不显翻页区、多页显页码
+	if r.Behavior.AlwaysShowPager {
+		t.Errorf("default always_show_pager want false (单页不显翻页区)")
+	}
+	if !r.Behavior.ShowPageNumber {
+		t.Errorf("default show_page_number want true")
+	}
 }
 
 // TestBuiltinMsimeTheme 加载实际 msime 主题，确认数字 index 模板 + accent 蓝
@@ -69,6 +76,13 @@ func TestBuiltinMsimeTheme(t *testing.T) {
 	}
 	if ColorToHexRGB(r.Palette.CandidateWindow.AccentBar) != "#0078D4" {
 		t.Errorf("msime AccentBar want #0078D4, got %s", ColorToHexRGB(r.Palette.CandidateWindow.AccentBar))
+	}
+	// behavior 块显式声明：单页不显翻页区、多页显页码
+	if r.Behavior.AlwaysShowPager {
+		t.Errorf("msime always_show_pager want false (单页不显翻页区)")
+	}
+	if !r.Behavior.ShowPageNumber {
+		t.Errorf("msime show_page_number want true")
 	}
 }
 
