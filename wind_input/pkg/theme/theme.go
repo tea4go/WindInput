@@ -27,6 +27,11 @@ type Theme struct {
 	Views     *Views     `yaml:"views,omitempty" json:"views,omitempty"`       // 盒模型 View 外观（v2.6 P2）
 	Behavior  *Behavior  `yaml:"behavior,omitempty" json:"behavior,omitempty"` // 行为配置（v2.6 P6，可被用户覆盖）
 	Overrides *Overrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
+
+	// Resources 顶层图片资源注册表（v2.6 P7-C，D5；P7-E 起值支持 {light,dark} 双变体）：
+	// 名→ResourceRef（单图 path/data URI，或 {light,dark}）。views 里的 ViewImage.ref 优先查此表，
+	// 否则按字面 path/data URI 解析。相对路径相对 theme.yaml。ResolveV25 按 isDark 选变体填 ResolvedV25.Resources。
+	Resources map[string]ResourceRef `yaml:"resources,omitempty" json:"resources,omitempty"`
 }
 
 // Overrides 用于外链形态对引用的 layout/palette 做就地微调。

@@ -33,9 +33,9 @@ func TestBuiltinDefaultTheme(t *testing.T) {
 	if r == nil {
 		t.Fatal("resolved nil")
 	}
-	// 默认主题用 circle index style
-	if !r.Layout.CandidateWindow.CandidateList.Index.Circle {
-		t.Errorf("default index want circle")
+	// 默认主题用 circle 序号背景（P7-5：归口 views.index.background.shape）
+	if r.Views.Index.Background.Shape != "circle" {
+		t.Errorf("default index want circle bg, got %q", r.Views.Index.Background.Shape)
 	}
 	// primary #4285F4 应反映在 IndexBg
 	if ColorToHexRGB(r.Palette.CandidateWindow.IndexBg) != "#4285F4" {
@@ -52,19 +52,20 @@ func TestBuiltinMsimeTheme(t *testing.T) {
 		t.Fatalf("LoadTheme msime: %v", err)
 	}
 	r := m.GetResolvedV25()
-	idx := r.Layout.CandidateWindow.CandidateList.Index
-	if idx.Circle {
-		t.Errorf("msime index want text (circle off)")
+	// P7-5：序号样式/标签/强调条开关归口 views。
+	vi := r.Views.Index
+	if vi.Background.Shape == "circle" {
+		t.Errorf("msime index want none (circle off)")
 	}
-	if got := BuildIndexLabelsFromSlots(idx.Labels); got != "1/2/3/4/5/6/7/8/9/0" {
+	if got := BuildIndexLabelsFromSlots(vi.Labels); got != "1/2/3/4/5/6/7/8/9/0" {
 		t.Errorf("msime IndexLabels want digit template, got %q", got)
 	}
 	if ColorToHexRGB(r.Palette.CandidateWindow.IndexBg) != "#0078D4" {
 		t.Errorf("msime IndexBg want #0078D4, got %s", ColorToHexRGB(r.Palette.CandidateWindow.IndexBg))
 	}
 	// msime 应启用 accent bar（选中项左侧蓝色条）
-	if !r.Layout.CandidateWindow.CandidateList.AccentBar.Enabled {
-		t.Errorf("msime AccentBar.Enabled want true")
+	if m := r.Views.Metrics; m == nil || m.AccentBar == nil || m.AccentBar.Enabled == nil || !*m.AccentBar.Enabled {
+		t.Errorf("msime metrics.accent_bar.enabled want true")
 	}
 	if ColorToHexRGB(r.Palette.CandidateWindow.AccentBar) != "#0078D4" {
 		t.Errorf("msime AccentBar want #0078D4, got %s", ColorToHexRGB(r.Palette.CandidateWindow.AccentBar))

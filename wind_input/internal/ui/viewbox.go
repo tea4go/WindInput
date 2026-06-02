@@ -97,6 +97,7 @@ type TextStyle struct {
 	FontSize   float64
 	LineHeight float64     // 0 = 等于 FontSize
 	Weight     int         // 0 = 继承全局；>=600 视为粗体
+	Family     string      // 平台字体族名；空=继承全局。未知名由平台文本引擎回退（P7-B）
 	Color      color.Color // nil = 不绘制
 	Align      Align       // AlignStart=左对齐(默认), AlignCenter=水平居中(如圆内序号)
 }
@@ -143,6 +144,22 @@ type TextMeasurer interface {
 	MeasureString(text string, fontSize float64) float64
 }
 
+// fontMeasurer 是 TextMeasurer 的可选扩展：支持按字体族名度量（P7-B 逐元素字体）。
+// 生产 TextDrawer 实现它；不关心字体的测试桩可只实现 TextMeasurer，measure 自动回退。
+type fontMeasurer interface {
+	MeasureStringFont(text string, fontSize float64, family string) float64
+}
+
+// measureText 按元素字体族度量文本宽：元素指定了 family 且测量器支持则按 family 量，否则走全局字体。
+func measureText(m TextMeasurer, text string, fontSize float64, family string) float64 {
+	if family != "" {
+		if fm, ok := m.(fontMeasurer); ok {
+			return fm.MeasureStringFont(text, fontSize, family)
+		}
+	}
+	return m.MeasureString(text, fontSize)
+}
+
 // Layout 对根 View 执行量算 + 排布，根的边框盒左上角定位到 (x, y)。
 func Layout(root *View, x, y int, m TextMeasurer) {
 	root.measure(m)
@@ -158,7 +175,7 @@ func (v *View) measure(m TextMeasurer) (w, h int) {
 
 	if v.Text != "" {
 		fs := v.TextStyle.FontSize
-		contentW = ceil(m.MeasureString(v.Text, fs))
+		contentW = ceil(measureText(m, v.Text, fs, v.TextStyle.Family))
 		lh := v.TextStyle.LineHeight
 		if lh == 0 {
 			lh = fs

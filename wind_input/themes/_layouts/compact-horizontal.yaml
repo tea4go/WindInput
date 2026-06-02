@@ -5,40 +5,8 @@ meta:
 density: compact
 scale: 1.0
 
-candidate_window:
-  window_padding: {top: 6, right: 8, bottom: 6, left: 8}
-  band_gap: 2
-  border_width: 1
-  border_radius: 8
-
-  preedit_bar:
-    visible: true
-    padding: {top: 4, right: 8, bottom: 2, left: 8}
-    font_size: 14
-
-  candidate_list:
-    item_padding: {top: 4, right: 10, bottom: 4, left: 8}
-    item_gap: 2
-    item_height: 0
-    item_radius: 4
-    index:
-      labels: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
-      circle: true
-      gap: 4
-      min_width: 18
-      font_size: 12
-    text:
-      font_size: 14
-    comment:
-      visible: true
-      font_size: 12
-      gap: 6
-      placement: inline
-
-  footer_bar:
-    visible: true
-    padding: {top: 2, right: 8, bottom: 4, left: 8}
-    font_size: 11
+# P7-5：候选窗几何/序号/强调条/行高已迁主题 views/behavior，layout 不再承载候选窗。
+# 此文件仅描述其它窗口（toolbar/status/tooltip/popup_menu/toast）的尺寸。
 
 toolbar:
   height: 28

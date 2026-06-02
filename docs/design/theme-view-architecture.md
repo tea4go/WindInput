@@ -49,7 +49,7 @@ ColorToken   string   # "#RRGGBB[AA]" | "${semantic}" | "transparent"
 
 Image {                # 唯一通用图片对象（D5）
   ref      : string    # → resources[ref]；否则按字面 path / data: URI 解析
-  mode     : nine_slice | stretch | tile | center | fit
+  mode     : nine_slice | stretch | tile | center   # 注：fit 未实现，v2.6 不含
   slice    : Edges     # 仅 nine_slice
   opacity  : *float64  # nil=1.0
   z        : int       # 仅 layers[] 用；内容基准=0，<0 在下、>0 在上
@@ -188,8 +188,10 @@ window (View)
 
 - ❌ 主题自定义任意结构的视图树、data-binding DSL、通用 flexbox（D1）。
 - ❌ 跨 surface 的全局 z 排序（z 仅在单个 surface 内、相对其内容）。
-- ⏸ 渐变（Border/Fill 预留字段，P4 才消费）。
-- ⏸ 图片方向变体（D7，Image 留扩展位）。
+- ⏸ 渐变（`ViewFill.Gradient` 字段形状已于 P7-E 冻结：`{type,angle,stops:[{color,pos}]}`，渲染 later）。
+- ⏸ 阴影 blur/spread（`ViewMetrics.Shadow` 结构已于 P7-E 冻结：`{offset_x,offset_y,blur,spread,color}`，仅 offset+color 已实现，blur/spread later）。
+- ⏸ 图片方向变体（**D7 冻结声明**：横/竖排共用一套 views；日后为 `Views` 或 `ViewImage` 增加 `vertical` 覆盖块属**非破坏性扩展**——v2.6 不含该字段，编辑器与解析器不得写死"仅横排/仅竖排"假设，遇未知 `vertical` 键应容忍）。
+- ✅ 暗色位图（P7-E 已实现）：`resources` 值支持 `{light,dark}`，按 palette 变体（isDark）选路径；与 palette light/dark 对称。
 - ⏸ 工具栏/弹出菜单/Tooltip/状态条/Toast 的 View 化（P4）。
 
 ## 九、风险与待解决

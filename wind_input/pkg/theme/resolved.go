@@ -10,30 +10,23 @@ type ResolvedV25 struct {
 	Palette  ResolvedPalette
 	Views    *Views           // 盒模型 View 外观（v2.6 P2）；nil=主题未提供 views，渲染器用合成桥
 	Behavior ResolvedBehavior // 行为配置（v2.6 P6）：defaultBehavior ⊕ 主题 behavior（用户 override 在 ui/config 层）
+
+	// Resources 图片资源注册表（v2.6 P7-C）：名→绝对路径 / data: URI（相对路径已按 theme 目录解析）。
+	// 渲染器据此把 ViewImage.ref 解码为位图（一次性缓存，非每帧）。
+	Resources map[string]string
 }
 
-// ResolvedLayout layout 的解析形态（与 LayoutSchema 同形，标量类型不变）
+// ResolvedLayout layout 的解析形态（与 LayoutSchema 同形，标量类型不变）。
+// P7-5：候选窗几何/序号/强调条/行高已全部归口 views/behavior，layout 不再承载候选窗，仅剩其它窗口。
 type ResolvedLayout struct {
 	Density string
 	Scale   float64
 
-	CandidateWindow ResolvedCandidateWindowLayout
-	Toolbar         ToolbarLayout
-	Status          StatusLayout
-	Tooltip         TooltipLayout
-	PopupMenu       PopupMenuLayout
-	Toast           ToastLayout
-}
-
-// ResolvedCandidateWindowLayout 解析后的候选窗布局
-type ResolvedCandidateWindowLayout struct {
-	WindowPadding Padding
-	BandGap       int
-	BorderWidth   int
-	BorderRadius  int
-	PreeditBar    BandLayout
-	CandidateList CandidateListLayout
-	FooterBar     BandLayout
+	Toolbar   ToolbarLayout
+	Status    StatusLayout
+	Tooltip   TooltipLayout
+	PopupMenu PopupMenuLayout
+	Toast     ToastLayout
 }
 
 // ResolvedPalette palette 的解析形态，所有颜色已 ParseColor 完成
@@ -58,8 +51,6 @@ type ResolvedPalette struct {
 	Tooltip         ResolvedTooltipPalette
 	Status          ResolvedStatusPalette
 	Toast           ResolvedToastPalette
-
-	Background *ResolvedBackground // nil 表示无背景图
 }
 
 type ResolvedCandidateWindowPalette struct {
@@ -117,12 +108,4 @@ type ResolvedStatusPalette struct {
 type ResolvedToastPalette struct {
 	Background color.Color
 	Text       color.Color
-}
-
-// ResolvedBackground 背景图解析后
-type ResolvedBackground struct {
-	ImagePath string // 绝对路径或 data: URI
-	Mode      string // nine_slice | stretch | tile | center
-	Slice     Padding
-	Opacity   float64
 }

@@ -26,7 +26,7 @@ views:
     selected: {background: {color: "${selected_bg}"}}
     hover: {background: {color: "${hover_bg}"}}
   index:
-    background: {color: "${index_bg}"}
+    background: {color: "${index_bg}", shape: circle}
     color: "${index_text}"
   text:
     margin: {left: 4}

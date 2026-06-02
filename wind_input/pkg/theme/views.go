@@ -21,9 +21,54 @@ type ViewEdges struct {
 	Left   *int `yaml:"left,omitempty"`
 }
 
-// ViewFill 背景填充。本切片仅 Color；Image/Gradient 留后续切片。
+// ViewImagePoint 覆盖图偏移（逻辑像素）。
+type ViewImagePoint struct {
+	X int `yaml:"x,omitempty"`
+	Y int `yaml:"y,omitempty"`
+}
+
+// ViewImageSize 覆盖图尺寸（逻辑像素）；0=原图尺寸。
+type ViewImageSize struct {
+	W int `yaml:"w,omitempty"`
+	H int `yaml:"h,omitempty"`
+}
+
+// ViewImage 通用图片对象（P0 D5）。背景填充图与 layers[] 覆盖图共用此唯一类型。
+// ref 优先查顶层 resources[ref]，否则按字面 path / data: URI 解析；
+// 引擎当前支持 mode: nine_slice | stretch | tile | center（其它值回退 stretch）。
+// z/anchor/offset/size 仅 layers[] 覆盖图消费；背景填充用 ViewFill.Image 时忽略它们。
+type ViewImage struct {
+	Ref     string         `yaml:"ref,omitempty"`     // resources 键，或字面 path / data: URI
+	Mode    string         `yaml:"mode,omitempty"`    // nine_slice | stretch | tile | center；空=stretch
+	Slice   ViewEdges      `yaml:"slice,omitempty"`   // 仅 nine_slice：源图四边切片像素
+	Opacity *float64       `yaml:"opacity,omitempty"` // nil=1.0
+	Z       int            `yaml:"z,omitempty"`       // 仅 layers[]：内容基准 0，<0 在内容下、>0 在上
+	Anchor  string         `yaml:"anchor,omitempty"`  // 仅覆盖图：top-left|top|...|center|...|bottom-right
+	Offset  ViewImagePoint `yaml:"offset,omitempty"`  // 仅覆盖图
+	Size    ViewImageSize  `yaml:"size,omitempty"`    // 仅覆盖图：0=原尺寸
+}
+
+// ViewFill 背景填充。Color 底色 + 可选 Image（画在底色之上、裁剪到圆角内）。
+// Gradient 为 P7-E 预留字段（schema 冻结，渲染 later）；与 Color 概念互斥（同时存在时 render later 决定优先级）。
 type ViewFill struct {
-	Color string `yaml:"color,omitempty"` // ColorToken: "#RRGGBB[AA]" | "${semantic}" | "transparent"
+	Color    string        `yaml:"color,omitempty"`    // ColorToken: "#RRGGBB[AA]" | "${semantic}" | "transparent"
+	Shape    string        `yaml:"shape,omitempty"`    // 背景形状: "circle" | "none"（空=none）。当前仅 views.index 消费（序号项圆形/无背景）
+	Image    *ViewImage    `yaml:"image,omitempty"`    // 背景填充图（P7-C，D5）；nil=无图
+	Gradient *ViewGradient `yaml:"gradient,omitempty"` // 渐变填充（P7-E 预留：schema 冻结，渲染 later）；nil=无渐变
+}
+
+// ViewGradient 渐变填充（P7-E 预留字段形状）。当前仅定义 schema、不参与渲染（RVNode 不消费）。
+// 设计为 CSS 风格：linear（默认）按 Angle 方向，多色停 Stops 任意位置。
+type ViewGradient struct {
+	Type  string             `yaml:"type,omitempty"`  // "linear"（默认）| "radial"（预留）
+	Angle float64            `yaml:"angle,omitempty"` // linear 角度（度）：0=左→右、90=上→下
+	Stops []ViewGradientStop `yaml:"stops,omitempty"` // 色停列表（≥2）
+}
+
+// ViewGradientStop 渐变色停。
+type ViewGradientStop struct {
+	Color string  `yaml:"color"`         // ColorToken
+	Pos   float64 `yaml:"pos,omitempty"` // 0..1（沿渐变轴的位置）
 }
 
 // ViewBorder 边框。
@@ -35,17 +80,19 @@ type ViewBorder struct {
 
 // ViewNode 一个具名 View 的外观属性（盒模型 + Text 属性）。
 type ViewNode struct {
-	Margin     ViewEdges  `yaml:"margin,omitempty"`
-	Padding    ViewEdges  `yaml:"padding,omitempty"`
-	Background ViewFill   `yaml:"background,omitempty"`
-	Border     ViewBorder `yaml:"border,omitempty"`
-	FontFamily string     `yaml:"font_family,omitempty"`
-	FontSize   *int       `yaml:"font_size,omitempty"`
-	FontWeight *int       `yaml:"font_weight,omitempty"`
-	Color      string     `yaml:"color,omitempty"`  // 文本色 token
-	Labels     []string   `yaml:"labels,omitempty"` // 仅 index：序号槽位字符（≤10）
-	Selected   *ViewNode  `yaml:"selected,omitempty"`
-	Hover      *ViewNode  `yaml:"hover,omitempty"`
+	Margin     ViewEdges   `yaml:"margin,omitempty"`
+	Padding    ViewEdges   `yaml:"padding,omitempty"`
+	Background ViewFill    `yaml:"background,omitempty"`
+	Border     ViewBorder  `yaml:"border,omitempty"`
+	FontFamily string      `yaml:"font_family,omitempty"`
+	FontSize   *int        `yaml:"font_size,omitempty"`
+	FontWeight *int        `yaml:"font_weight,omitempty"`
+	Color      string      `yaml:"color,omitempty"`  // 文本色 token
+	Labels     []string    `yaml:"labels,omitempty"` // 仅 index：序号槽位字符（≤10）
+	Layers     []ViewImage `yaml:"layers,omitempty"` // z 层级覆盖图（P7-C，D4）：z<0 在内容下、z>0 在上
+	Selected   *ViewNode   `yaml:"selected,omitempty"`
+	Hover      *ViewNode   `yaml:"hover,omitempty"`
+	Disabled   *ViewNode   `yaml:"disabled,omitempty"` // P7-D：禁用态 patch（候选项暂无运行时触发器，schema 预留）
 }
 
 // Views 具名 View 集合（固定骨架，设计文档 D3）。
@@ -70,22 +117,59 @@ type Views struct {
 type ViewMetrics struct {
 	ItemSpacing  *int              `yaml:"item_spacing,omitempty"`  // 横排候选框间距基数（旧 hardcode 12/16）
 	BandGap      *int              `yaml:"band_gap,omitempty"`      // band 间距（旧 WindowGap）
-	ShadowOffset *int              `yaml:"shadow_offset,omitempty"` // 窗口投影偏移
+	ShadowOffset *int              `yaml:"shadow_offset,omitempty"` // 窗口投影偏移（标量，legacy；新主题用 shadow）
+	Shadow       *ViewShadowSpec   `yaml:"shadow,omitempty"`        // 结构化投影（P7-E）：offset_x/y/color 已实现，blur/spread 预留
 	AccentBar    *AccentBarMetrics `yaml:"accent_bar,omitempty"`    // 强调条尺寸
 }
 
-// AccentBarMetrics 强调条尺寸（P6）。
+// ViewShadowSpec 结构化窗口投影（P7-E）。offset_x/offset_y/color 已实现；blur/spread 为预留字段（渲染 later）。
+// 优先级：Shadow 非 nil 时其 offset/color 覆盖 legacy shadow_offset + palette.Shadow；未给的子字段回退。
+type ViewShadowSpec struct {
+	OffsetX *int   `yaml:"offset_x,omitempty"` // 水平偏移（逻辑像素）
+	OffsetY *int   `yaml:"offset_y,omitempty"` // 垂直偏移
+	Blur    *int   `yaml:"blur,omitempty"`     // 模糊半径（P7-E 预留，渲染 later）
+	Spread  *int   `yaml:"spread,omitempty"`   // 扩散（P7-E 预留，渲染 later）
+	Color   string `yaml:"color,omitempty"`    // ColorToken；空=palette.Shadow
+}
+
+// AccentBarMetrics 强调条尺寸（P6）+ 开关（P7-5：HasAccentBar 归口此处，原 layout.accent_bar.enabled 退役）。
 type AccentBarMetrics struct {
+	Enabled     *bool    `yaml:"enabled,omitempty"`      // 是否绘制选中候选左侧强调条；nil/false=不绘制
 	Width       *int     `yaml:"width,omitempty"`        // 条宽
 	Offset      *int     `yaml:"offset,omitempty"`       // 左缘偏移
 	HeightRatio *float64 `yaml:"height_ratio,omitempty"` // 条高 = ItemHeight × 此比例
 }
 
+// RVImage 渲染消费形态的图片 spec（plain 值；不含解码后的位图——位图由 ui 侧按 Ref 一次性解码缓存）。
+// P7-C：ResolveCandidateViews 每帧从 ViewImage 廉价转换填入；ui build 时 Ref→缓存位图→Fill/ImageLayer。
+type RVImage struct {
+	Ref     string  // resources 键或字面 path/data URI
+	Mode    string  // nine_slice|stretch|tile|center；空=stretch
+	Slice   Padding // 仅 nine_slice
+	Opacity float64 // 已解析（nil→1.0）
+	Z       int     // 仅 layers：内容基准 0
+	Anchor  string  // 仅覆盖图
+	OffsetX int     // 仅覆盖图
+	OffsetY int     // 仅覆盖图
+	W       int     // 仅覆盖图：0=原尺寸
+	H       int     // 仅覆盖图：0=原尺寸
+}
+
+// RVState 渲染消费形态的状态 patch（P7-D）：selected/hover/disabled 对基态的覆盖。
+// 各字段零值/nil = 该属性不覆盖、沿用基态。BgImage 非空 = 该态铺高亮位图（搜狗/极点选中态核心）。
+// 文字色/字重作用于整行（候选文字 + 序号 + 注释）。
+type RVState struct {
+	BgColor     color.Color // nil=沿用基态底色
+	BgImage     *RVImage    // 非空=该态铺高亮位图（优先于 BgColor）
+	TextColor   color.Color // nil=沿用基态文字色（整行统一）
+	BorderColor color.Color // nil=沿用基态边框色
+	BorderWidth *int        // nil=沿用基态边框宽（含显式 0）
+	FontWeight  int         // 0=沿用基态字重
+}
+
 // RVNode 渲染消费形态的单个 View 外观（plain 逻辑像素 + 颜色）。
 // 各字段为该 View 实际用到的子集；零值表示「用渲染器内置默认」。
-// 切片-0 只填几何字段（margin/padding/border 尺寸 + FontSize/FontWeight）；
-// 颜色字段（BgColor/BorderColor/TextColor/SelectedBg/HoverBg）留颜色迁移切片，
-// 本切片颜色仍由渲染器从 RenderConfig 读（颜色不影响几何对齐）。
+// 状态 patch（Selected/Hover/Disabled，P7-D）仅 Item 节点填充；nil=该态无覆盖。
 type RVNode struct {
 	MarginTop, MarginRight, MarginBottom, MarginLeft int
 	PadTop, PadRight, PadBottom, PadLeft             int
@@ -95,9 +179,13 @@ type RVNode struct {
 	BgColor                                          color.Color
 	FontSize                                         float64
 	FontWeight                                       int
+	FontFamily                                       string // 平台字体族名（空=继承全局）；未知名由平台文本引擎回退
 	TextColor                                        color.Color
-	SelectedBg                                       color.Color
-	HoverBg                                          color.Color
+	Selected                                         *RVState  // P7-D：选中态 patch（仅 Item）
+	Hover                                            *RVState  // P7-D：悬停态 patch（仅 Item）
+	Disabled                                         *RVState  // P7-D：禁用态 patch（schema 预留，暂无渲染触发器）
+	BgImage                                          *RVImage  // 背景填充图（P7-C）；nil=无
+	Layers                                           []RVImage // z 层级覆盖图（P7-C）
 }
 
 // ResolvedViews 候选窗各具名 View 的解析后外观（plain 逻辑像素，渲染器直接读）。
@@ -116,7 +204,9 @@ type ResolvedViews struct {
 
 	// 几何杂项（逻辑像素 / 倍率）
 	WindowGap        int         // window 列间距（band 之间）
-	ShadowOffset     int         // 窗口投影偏移
+	ShadowOffset     int         // 窗口投影偏移（标量，legacy；= ShadowOffsetX/Y 的同值兜底）
+	ShadowOffsetX    int         // 窗口投影水平偏移（P7-E：来自 metrics.shadow.offset_x，未配=ShadowOffset）
+	ShadowOffsetY    int         // 窗口投影垂直偏移（P7-E：来自 metrics.shadow.offset_y，未配=ShadowOffset）
 	ItemHeight       float64     // 行高（rowH = round(ItemHeight)）
 	ItemSpacing      int         // 横排候选框间距基数（已按 isTextIndex 选定 12/16）
 	AccentBarWidth   int         // 强调条宽
@@ -216,12 +306,12 @@ func edgeOr(p *int, def int) int {
 // 故基线不含颜色。主题 views 块以此为基线覆盖。
 func defaultViews() Views {
 	return Views{
-		Window:     ViewNode{Padding: ViewEdges{Top: intp(8), Right: intp(8), Bottom: intp(8), Left: intp(8)}, Border: ViewBorder{Radius: intp(8)}},
+		Window:     ViewNode{Padding: ViewEdges{Top: intp(8), Right: intp(8), Bottom: intp(8), Left: intp(8)}, Border: ViewBorder{Width: intp(1), Radius: intp(8)}},
 		PreeditBar: ViewNode{Padding: ViewEdges{Right: intp(8), Left: intp(8)}, Border: ViewBorder{Radius: intp(4)}},
 		Item:       ViewNode{Padding: ViewEdges{Right: intp(8), Left: intp(8)}, Border: ViewBorder{Radius: intp(4)}},
-		Index:      ViewNode{},
-		Text:       ViewNode{Margin: ViewEdges{Left: intp(4)}}, // index→text 间距
-		Comment:    ViewNode{Margin: ViewEdges{Left: intp(8)}}, // text→comment 间距
+		Index:      ViewNode{Labels: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}}, // 序号默认槽位（无圆背景）；主题可覆盖 labels / background.shape
+		Text:       ViewNode{Margin: ViewEdges{Left: intp(4)}},                                   // index→text 间距
+		Comment:    ViewNode{Margin: ViewEdges{Left: intp(8)}},                                   // text→comment 间距
 		AccentBar:  ViewNode{},
 		FooterBar:  ViewNode{},
 		Metrics: &ViewMetrics{
@@ -260,6 +350,15 @@ func mergeViewNode(base, ov ViewNode) ViewNode {
 	if ov.Background.Color != "" {
 		out.Background.Color = ov.Background.Color
 	}
+	if ov.Background.Shape != "" {
+		out.Background.Shape = ov.Background.Shape
+	}
+	if ov.Background.Image != nil {
+		out.Background.Image = ov.Background.Image
+	}
+	if ov.Background.Gradient != nil {
+		out.Background.Gradient = ov.Background.Gradient // 整体替换（P7-E 预留）
+	}
 	if ov.Border.Width != nil {
 		out.Border.Width = ov.Border.Width
 	}
@@ -284,6 +383,9 @@ func mergeViewNode(base, ov ViewNode) ViewNode {
 	if ov.Labels != nil {
 		out.Labels = ov.Labels
 	}
+	if ov.Layers != nil {
+		out.Layers = ov.Layers // 整组替换，不做逐层 deep-merge
+	}
 	if ov.Selected != nil {
 		var baseSel ViewNode
 		if base.Selected != nil {
@@ -299,6 +401,14 @@ func mergeViewNode(base, ov ViewNode) ViewNode {
 		}
 		merged := mergeViewNode(baseHover, *ov.Hover)
 		out.Hover = &merged
+	}
+	if ov.Disabled != nil {
+		var baseDis ViewNode
+		if base.Disabled != nil {
+			baseDis = *base.Disabled
+		}
+		merged := mergeViewNode(baseDis, *ov.Disabled)
+		out.Disabled = &merged
 	}
 	return out
 }
@@ -356,6 +466,9 @@ func mergeMetrics(base, ov *ViewMetrics) *ViewMetrics {
 	if ov.ShadowOffset != nil {
 		out.ShadowOffset = ov.ShadowOffset
 	}
+	if ov.Shadow != nil {
+		out.Shadow = mergeShadowSpec(out.Shadow, ov.Shadow)
+	}
 	if ov.AccentBar != nil {
 		out.AccentBar = mergeAccentBarMetrics(out.AccentBar, ov.AccentBar)
 	}
@@ -371,6 +484,9 @@ func mergeAccentBarMetrics(base, ov *AccentBarMetrics) *AccentBarMetrics {
 		return ov
 	}
 	out := *base
+	if ov.Enabled != nil {
+		out.Enabled = ov.Enabled
+	}
 	if ov.Width != nil {
 		out.Width = ov.Width
 	}
@@ -379,6 +495,33 @@ func mergeAccentBarMetrics(base, ov *AccentBarMetrics) *AccentBarMetrics {
 	}
 	if ov.HeightRatio != nil {
 		out.HeightRatio = ov.HeightRatio
+	}
+	return &out
+}
+
+// mergeShadowSpec 逐字段覆盖（P7-E）：指针非 nil / string 非空 才覆盖。
+func mergeShadowSpec(base, ov *ViewShadowSpec) *ViewShadowSpec {
+	if ov == nil {
+		return base
+	}
+	if base == nil {
+		return ov
+	}
+	out := *base
+	if ov.OffsetX != nil {
+		out.OffsetX = ov.OffsetX
+	}
+	if ov.OffsetY != nil {
+		out.OffsetY = ov.OffsetY
+	}
+	if ov.Blur != nil {
+		out.Blur = ov.Blur
+	}
+	if ov.Spread != nil {
+		out.Spread = ov.Spread
+	}
+	if ov.Color != "" {
+		out.Color = ov.Color
 	}
 	return &out
 }

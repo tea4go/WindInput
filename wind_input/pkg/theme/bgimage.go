@@ -8,8 +8,11 @@ import (
 	"image/draw"
 	_ "image/jpeg"
 	_ "image/png"
+	"math"
 	"os"
 	"strings"
+
+	xdraw "golang.org/x/image/draw"
 )
 
 // LoadBackgroundImage 从文件路径或 data: URI 加载图片为 *image.RGBA。
@@ -68,7 +71,11 @@ func toRGBA(img image.Image) *image.RGBA {
 // mode: nine_slice | stretch | tile | center
 // slice: 仅 nine_slice 用，描述源图四边边距像素值
 // opacity: 0..1，作为整体 alpha 倍率应用到 src
-func DrawBackground(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, mode string, slice Padding, opacity float64) {
+// radius: 圆角半径（逻辑像素）。>0 时把 src 按 rect 的圆角矩形覆盖度遮罩——半径外的四角不绘制，
+//
+//	露出底层（如窗口背景）形成圆角。窗口靠外侧 alpha=0 也能裁角，但**内部元素**（如选中候选项，
+//	四周已被窗口底色填成不透明）只能靠此遮罩裁圆角。radius=0 走快路径（整矩形，零回归）。
+func DrawBackground(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, mode string, slice Padding, opacity float64, radius int) {
 	if src == nil || rect.Empty() {
 		return
 	}
@@ -78,27 +85,28 @@ func DrawBackground(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, mode
 	if opacity > 1 {
 		opacity = 1
 	}
+	rad := float64(radius)
 
 	switch mode {
 	case "nine_slice":
-		drawNineSlice(dst, rect, src, slice, opacity)
+		drawNineSlice(dst, rect, src, slice, opacity, rad)
 	case "tile":
-		drawTile(dst, rect, src, opacity)
+		drawTile(dst, rect, src, opacity, rad)
 	case "center":
-		drawCenter(dst, rect, src, opacity)
+		drawCenter(dst, rect, src, opacity, rad)
 	case "stretch":
 		fallthrough
 	default:
-		drawStretch(dst, rect, src, opacity)
+		drawStretch(dst, rect, src, opacity, rad)
 	}
 }
 
-func drawStretch(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, opacity float64) {
+func drawStretch(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, opacity, rad float64) {
 	scaled := scaleImage(src, rect.Dx(), rect.Dy())
-	blendOver(dst, rect.Min, scaled, scaled.Bounds(), opacity)
+	blendOver(dst, rect.Min, scaled, scaled.Bounds(), opacity, rect, rad)
 }
 
-func drawCenter(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, opacity float64) {
+func drawCenter(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, opacity, rad float64) {
 	sb := src.Bounds()
 	w, h := sb.Dx(), sb.Dy()
 	x := rect.Min.X + (rect.Dx()-w)/2
@@ -115,10 +123,10 @@ func drawCenter(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, opacity 
 		sb.Min.X+(dstClip.Max.X-x),
 		sb.Min.Y+(dstClip.Max.Y-y),
 	)
-	blendOver(dst, dstClip.Min, src, srcClip, opacity)
+	blendOver(dst, dstClip.Min, src, srcClip, opacity, rect, rad)
 }
 
-func drawTile(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, opacity float64) {
+func drawTile(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, opacity, rad float64) {
 	sb := src.Bounds()
 	tw, th := sb.Dx(), sb.Dy()
 	if tw == 0 || th == 0 {
@@ -136,13 +144,13 @@ func drawTile(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, opacity fl
 				sb.Min.X+tile.Dx(),
 				sb.Min.Y+tile.Dy(),
 			)
-			blendOver(dst, tile.Min, src, srcClip, opacity)
+			blendOver(dst, tile.Min, src, srcClip, opacity, rect, rad)
 		}
 	}
 }
 
 // drawNineSlice 把 src 按 slice 划分为 9 块：四角原样、四边在主轴方向拉伸、中心双轴拉伸
-func drawNineSlice(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, slice Padding, opacity float64) {
+func drawNineSlice(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, slice Padding, opacity, rad float64) {
 	sb := src.Bounds()
 	sw, sh := sb.Dx(), sb.Dy()
 
@@ -207,57 +215,51 @@ func drawNineSlice(dst *image.RGBA, rect image.Rectangle, src *image.RGBA, slice
 		}
 		// 角块尺寸相同直接 copy；否则缩放
 		if s.src.Dx() == s.dst.Dx() && s.src.Dy() == s.dst.Dy() {
-			blendOver(dst, s.dst.Min, src, s.src, opacity)
+			blendOver(dst, s.dst.Min, src, s.src, opacity, rect, rad)
 		} else {
 			scaled := scaleImageRect(src, s.src, s.dst.Dx(), s.dst.Dy())
-			blendOver(dst, s.dst.Min, scaled, scaled.Bounds(), opacity)
+			blendOver(dst, s.dst.Min, scaled, scaled.Bounds(), opacity, rect, rad)
 		}
 	}
 }
 
-// scaleImage 使用最近邻把 src 缩放到 (w, h)
+// scaleImage 把 src 缩放到 (w, h)
 func scaleImage(src *image.RGBA, w, h int) *image.RGBA {
 	return scaleImageRect(src, src.Bounds(), w, h)
 }
 
-// scaleImageRect 把 src 中的 srcRect 缩放到 (w, h)，最近邻；直接读 src.Pix 避免 At() 开销
+// scaleImageRect 把 src 中的 srcRect 缩放到 (w, h)。
+// 使用 golang.org/x/image/draw 的双线性插值（gg 等高质量绘图库的同款缩放器）：
+//   - 在预乘 alpha 空间正确采样，半透明边缘不会因最近邻离散采样而毛糙；
+//   - 无 CatmullRom 那样的过冲振铃，避免在硬透明/不透明边界引入光晕。
+//
+// 输出仍为预乘 alpha 的 *image.RGBA，交给 blendOver 在预乘空间合成。
 func scaleImageRect(src *image.RGBA, srcRect image.Rectangle, w, h int) *image.RGBA {
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	sw, sh := srcRect.Dx(), srcRect.Dy()
-	if sw == 0 || sh == 0 || w == 0 || h == 0 {
+	if srcRect.Dx() == 0 || srcRect.Dy() == 0 || w == 0 || h == 0 {
 		return dst
 	}
-	sb := src.Bounds()
-	for dy := 0; dy < h; dy++ {
-		sy := srcRect.Min.Y + dy*sh/h
-		if sy >= srcRect.Max.Y {
-			sy = srcRect.Max.Y - 1
-		}
-		for dx := 0; dx < w; dx++ {
-			sx := srcRect.Min.X + dx*sw/w
-			if sx >= srcRect.Max.X {
-				sx = srcRect.Max.X - 1
-			}
-			sOff := (sy-sb.Min.Y)*src.Stride + (sx-sb.Min.X)*4
-			dOff := dy*dst.Stride + dx*4
-			dst.Pix[dOff] = src.Pix[sOff]
-			dst.Pix[dOff+1] = src.Pix[sOff+1]
-			dst.Pix[dOff+2] = src.Pix[sOff+2]
-			dst.Pix[dOff+3] = src.Pix[sOff+3]
-		}
-	}
+	xdraw.BiLinear.Scale(dst, dst.Bounds(), src, srcRect, xdraw.Src, nil)
 	return dst
 }
 
 // blendOver 以 opacity 倍率把 src 的 srcRect 区域 over-blend 到 dst 的 dstMin 起点。
 //
-// 圆角保护：仅当 dst 当前像素 alpha > 0 时绘制（候选窗在画 bg 图前已 Fill 圆角背景色，
-// 圆角外区域 alpha=0 或来自 shadow 的低 alpha，按 dst alpha 比例减弱避免污染）。
+// **预乘 alpha 合成**：src/dst 均为 Go 标准 *image.RGBA，其 Pix 是预乘（premultiplied）的
+// （toRGBA 经 draw.Draw 转换时已预乘，x/image 缩放输出亦为预乘）。因此用预乘 over operator：
 //
-// over operator 近似：out_rgb = src_rgb*src_a + dst_rgb*(1-src_a)，
-// 假定 src/dst 均为 straight (non-premultiplied) alpha；对单次叠绘视觉接近正确，
-// 多次叠绘会有色偏（本场景每帧只画一次）。
-func blendOver(dst *image.RGBA, dstMin image.Point, src *image.RGBA, srcRect image.Rectangle, opacity float64) {
+//	out = src + dst*(1-src_a)
+//
+// 早期代码误把预乘 RGB 当作 straight，再乘一次 src_a，导致半透明边缘被二次衰减发暗
+// （实心内部不受影响 → 视觉上多出一圈暗边）。改为预乘合成后边缘正确羽化、无暗环。
+//
+// 圆角裁剪（两道，互补）：
+//   - **dst alpha 遮罩**：dst alpha=0 跳过、其余按 dA/255 缩放 src 贡献。这裁掉窗口**外侧**
+//     （alpha=0）的四角，对最外层窗口够用。
+//   - **clipRad 圆角覆盖遮罩**：clipRect+clipRad>0 时，按圆角矩形覆盖度再缩放 src 贡献。这是
+//     **内部元素**（如选中候选项，四周已被窗口底色填成 alpha=255，dst 遮罩失效）裁圆角的唯一手段：
+//     半径外四角 coverage=0 → 不画 → 露出底层窗口背景。clipRad<=0 时整矩形绘制（零回归）。
+func blendOver(dst *image.RGBA, dstMin image.Point, src *image.RGBA, srcRect image.Rectangle, opacity float64, clipRect image.Rectangle, clipRad float64) {
 	if opacity <= 0 {
 		return
 	}
@@ -294,30 +296,61 @@ func blendOver(dst *image.RGBA, dstMin image.Point, src *image.RGBA, srcRect ima
 			if dA == 0 {
 				continue
 			}
+			// 圆角覆盖遮罩（内部元素裁角）：clipRad<=0 时 covM=255（整矩形，零回归）
+			covM := uint32(255)
+			if clipRad > 0 {
+				cov := roundedCoverage(dx, dy, clipRect, clipRad)
+				if cov <= 0 {
+					continue
+				}
+				covM = uint32(cov*255 + 0.5)
+			}
 
 			sOff := (sy-srcBounds.Min.Y)*src.Stride + (sx-srcBounds.Min.X)*4
-			sR := uint32(src.Pix[sOff])
-			sG := uint32(src.Pix[sOff+1])
-			sB := uint32(src.Pix[sOff+2])
-			sA := uint32(src.Pix[sOff+3]) * alphaMul / 255
-			// 用 dst 当前 alpha 限制 src alpha，避免圆角抗锯齿边缘被覆盖为不透明
-			if sA > dA {
-				sA = dA
-			}
+			// 预乘 src × 整体 opacity，再用 dst 覆盖度 + 圆角覆盖度遮罩
+			sR := uint32(src.Pix[sOff]) * alphaMul / 255 * dA / 255 * covM / 255
+			sG := uint32(src.Pix[sOff+1]) * alphaMul / 255 * dA / 255 * covM / 255
+			sB := uint32(src.Pix[sOff+2]) * alphaMul / 255 * dA / 255 * covM / 255
+			sA := uint32(src.Pix[sOff+3]) * alphaMul / 255 * dA / 255 * covM / 255
 
 			dR := uint32(dst.Pix[dOff])
 			dG := uint32(dst.Pix[dOff+1])
 			dB := uint32(dst.Pix[dOff+2])
 
 			inv := 255 - sA
-			outR := (sR*sA + dR*inv) / 255
-			outG := (sG*sA + dG*inv) / 255
-			outB := (sB*sA + dB*inv) / 255
-			outA := sA + dA*inv/255
-			dst.Pix[dOff] = uint8(outR)
-			dst.Pix[dOff+1] = uint8(outG)
-			dst.Pix[dOff+2] = uint8(outB)
-			dst.Pix[dOff+3] = uint8(outA)
+			dst.Pix[dOff] = uint8(sR + dR*inv/255)
+			dst.Pix[dOff+1] = uint8(sG + dG*inv/255)
+			dst.Pix[dOff+2] = uint8(sB + dB*inv/255)
+			dst.Pix[dOff+3] = uint8(sA + dA*inv/255)
 		}
 	}
+}
+
+// roundedCoverage 返回像素 (px,py) 相对 rect 圆角矩形的覆盖度 [0,1]：
+// 圆角弧内=1、弧外=0、弧边 1px 线性抗锯齿；非角区恒 1。rad<=0 由调用方短路（不进此函数）。
+func roundedCoverage(px, py int, rect image.Rectangle, rad float64) float64 {
+	fx, fy := float64(px)+0.5, float64(py)+0.5
+	minX, minY := float64(rect.Min.X), float64(rect.Min.Y)
+	maxX, maxY := float64(rect.Max.X), float64(rect.Max.Y)
+	var cx, cy float64 // 当前像素所属角的圆心
+	switch {
+	case fx < minX+rad && fy < minY+rad:
+		cx, cy = minX+rad, minY+rad // 左上
+	case fx > maxX-rad && fy < minY+rad:
+		cx, cy = maxX-rad, minY+rad // 右上
+	case fx < minX+rad && fy > maxY-rad:
+		cx, cy = minX+rad, maxY-rad // 左下
+	case fx > maxX-rad && fy > maxY-rad:
+		cx, cy = maxX-rad, maxY-rad // 右下
+	default:
+		return 1 // 非角区：整覆盖
+	}
+	d := math.Hypot(fx-cx, fy-cy)
+	if d <= rad-0.5 {
+		return 1
+	}
+	if d >= rad+0.5 {
+		return 0
+	}
+	return rad + 0.5 - d // 1px 线性抗锯齿带
 }

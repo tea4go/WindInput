@@ -84,7 +84,7 @@ func TestDrawBackground_Stretch(t *testing.T) {
 	src := makeTestImage(2, 2, color.RGBA{255, 0, 0, 255})
 	dst := image.NewRGBA(image.Rect(0, 0, 10, 10))
 	fillAlpha(dst)
-	DrawBackground(dst, dst.Bounds(), src, "stretch", Padding{}, 1.0)
+	DrawBackground(dst, dst.Bounds(), src, "stretch", Padding{}, 1.0, 0)
 	r, _, _, a := dst.At(5, 5).RGBA()
 	if r>>8 != 255 || a>>8 != 255 {
 		t.Errorf("stretch center should be opaque red, got rgba=%d,%d", r>>8, a>>8)
@@ -95,7 +95,7 @@ func TestDrawBackground_Tile(t *testing.T) {
 	src := makeTestImage(3, 3, color.RGBA{0, 0, 255, 255})
 	dst := image.NewRGBA(image.Rect(0, 0, 10, 10))
 	fillAlpha(dst)
-	DrawBackground(dst, dst.Bounds(), src, "tile", Padding{}, 1.0)
+	DrawBackground(dst, dst.Bounds(), src, "tile", Padding{}, 1.0, 0)
 	_, _, b, _ := dst.At(9, 9).RGBA()
 	if b>>8 != 255 {
 		t.Errorf("tile bottom-right should be blue")
@@ -111,7 +111,7 @@ func TestDrawBackground_Center(t *testing.T) {
 			dst.Set(x, y, color.RGBA{255, 255, 255, 255})
 		}
 	}
-	DrawBackground(dst, dst.Bounds(), src, "center", Padding{}, 1.0)
+	DrawBackground(dst, dst.Bounds(), src, "center", Padding{}, 1.0, 0)
 	// 中心 (4,4) 或 (5,5) 应是灰色
 	r, _, _, _ := dst.At(4, 4).RGBA()
 	if r>>8 != 128 {
@@ -138,7 +138,7 @@ func TestDrawBackground_NineSlice(t *testing.T) {
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, 20, 20))
 	fillAlpha(dst)
-	DrawBackground(dst, dst.Bounds(), src, "nine_slice", Padding{Top: 2, Right: 2, Bottom: 2, Left: 2}, 1.0)
+	DrawBackground(dst, dst.Bounds(), src, "nine_slice", Padding{Top: 2, Right: 2, Bottom: 2, Left: 2}, 1.0, 0)
 	// 四角应为红色（原样复制）
 	r, _, _, _ := dst.At(0, 0).RGBA()
 	if r>>8 != 255 {
@@ -151,6 +151,60 @@ func TestDrawBackground_NineSlice(t *testing.T) {
 	}
 }
 
+// TestDrawBackground_SemiTransparentEdge 守护预乘 alpha 合成修复：
+// 半透明像素叠到不透明底色上必须按预乘 over 正确羽化，而不是被 src_a 二次衰减发暗。
+// 早期 blendOver 误把预乘 RGB 当 straight、再乘一次 alpha，使水印半透明边缘出现暗环
+// （视觉上像多了一圈边框）。50% 橙 (242,140,40) 叠白底：正确结果 R≈248，旧误算 R≈187。
+func TestDrawBackground_SemiTransparentEdge(t *testing.T) {
+	// 直 alpha 橙色 @ 50%，经 toRGBA 预乘——复刻真实加载管线（NRGBA→RGBA 预乘）
+	n := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	for i := 0; i < len(n.Pix); i += 4 {
+		n.Pix[i], n.Pix[i+1], n.Pix[i+2], n.Pix[i+3] = 242, 140, 40, 128
+	}
+	src := toRGBA(n)
+
+	dst := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	fillAlpha(dst) // 不透明白底
+
+	DrawBackground(dst, dst.Bounds(), src, "stretch", Padding{}, 1.0, 0)
+
+	r, _, _, a := dst.At(0, 0).RGBA()
+	r8, a8 := r>>8, a>>8
+	// 旧 straight 误算 R≈187（明显偏暗）；预乘正确 R≈248。断言 R>=230 区分二者。
+	if r8 < 230 {
+		t.Errorf("半透明边缘叠白后 R 应≈248（预乘合成），得 %d——疑似回退 straight 二次衰减发暗", r8)
+	}
+	if a8 != 255 {
+		t.Errorf("叠到不透明底色后 alpha 应为 255，得 %d", a8)
+	}
+}
+
+// TestDrawBackground_RoundedCornerClip 守护 P7-D 圆角裁剪：内部元素（四周已被不透明底色填满，
+// alpha-gate 失效）传 radius>0 时，半径外的四角不被位图覆盖、露出底色；中心正常绘制。
+func TestDrawBackground_RoundedCornerClip(t *testing.T) {
+	// 不透明红底，模拟选中候选项四周的窗口底色
+	dst := image.NewRGBA(image.Rect(0, 0, 20, 20))
+	for i := 0; i < len(dst.Pix); i += 4 {
+		dst.Pix[i], dst.Pix[i+1], dst.Pix[i+2], dst.Pix[i+3] = 255, 0, 0, 255
+	}
+	src := makeTestImage(4, 4, color.RGBA{0, 0, 255, 255}) // 纯蓝高亮
+	DrawBackground(dst, dst.Bounds(), src, "stretch", Padding{}, 1.0, 6)
+
+	// 角 (0,0)：在 radius=6 圆弧外 → 被裁，保留红底
+	r, _, b, _ := dst.At(0, 0).RGBA()
+	if b>>8 > 64 {
+		t.Errorf("圆角外 (0,0) 不应被高亮图覆盖, got b=%d", b>>8)
+	}
+	if r>>8 < 200 {
+		t.Errorf("圆角外 (0,0) 应保留底色红, got r=%d", r>>8)
+	}
+	// 中心 (10,10)：圆角内 → 蓝色高亮
+	_, _, bc, _ := dst.At(10, 10).RGBA()
+	if bc>>8 < 200 {
+		t.Errorf("中心应被高亮图覆盖, got b=%d", bc>>8)
+	}
+}
+
 func TestDrawBackground_OpacityZero(t *testing.T) {
 	src := makeTestImage(4, 4, color.RGBA{255, 0, 0, 255})
 	dst := image.NewRGBA(image.Rect(0, 0, 4, 4))
@@ -159,7 +213,7 @@ func TestDrawBackground_OpacityZero(t *testing.T) {
 			dst.Set(x, y, color.RGBA{0, 0, 0, 255})
 		}
 	}
-	DrawBackground(dst, dst.Bounds(), src, "stretch", Padding{}, 0.0)
+	DrawBackground(dst, dst.Bounds(), src, "stretch", Padding{}, 0.0, 0)
 	r, _, _, _ := dst.At(2, 2).RGBA()
 	if r>>8 != 0 {
 		t.Errorf("opacity=0 should not draw, dst remains black, got r=%d", r>>8)

@@ -66,6 +66,14 @@ func TestDefaultViews_Baseline(t *testing.T) {
 	if got := edgeOr(v.Window.Border.Radius, -1); got != 8 {
 		t.Errorf("window border radius 基线应为 8, got %d", got)
 	}
+	// P7-6：窗口边框宽基线必须为 1，否则 windowBorder 读 BorderWidth 后边框会消失（零回归守护）
+	if got := edgeOr(v.Window.Border.Width, -1); got != 1 {
+		t.Errorf("window border width 基线应为 1, got %d", got)
+	}
+	// P7-5：序号默认标签基线（无点数字 1..9,0），供无 views 块的主题/旧路径回退
+	if got := BuildIndexLabelsFromSlots(v.Index.Labels); got != "1/2/3/4/5/6/7/8/9/0" {
+		t.Errorf("index 默认 labels 基线应为 1/2/.../0, got %q", got)
+	}
 	if got := edgeOr(v.Item.Border.Radius, -1); got != 4 {
 		t.Errorf("item border radius 基线应为 4, got %d", got)
 	}

@@ -40,7 +40,7 @@ func (r *Renderer) buildPager(
 			Glyph: glyph, GlyphColor: clr, GlyphSize: arrowSz, GlyphLineWidth: lineW,
 		}
 		if hovered && enabled {
-			b.Background = Fill{Color: r.resolvedViews.Item.HoverBg}
+			b.Background = Fill{Color: stateBg(r.resolvedViews.Item.Hover)}
 			b.Border = Border{Radius: sc(4 * scale)}
 		}
 		return b
@@ -99,7 +99,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 		maxLabelW := 0.0
 		for _, cand := range candidates {
 			if cand.Index >= 0 {
-				lw := r.textDrawer.MeasureString(indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel), rv.Index.FontSize)
+				lw := measureText(r.textDrawer, indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel), rv.Index.FontSize, rv.Index.FontFamily)
 				if lw > maxLabelW {
 					maxLabelW = lw
 				}
@@ -111,8 +111,10 @@ func (r *Renderer) buildVerticalCandidateTree(
 	if isTextIndex {
 		commentSize = rv.Index.FontSize + 2*scale
 	}
+	if rv.Comment.FontSize > 0 { // P7-B：views.comment.font_size 显式则绝对覆盖派生值
+		commentSize = rv.Comment.FontSize
+	}
 	rowH := int(rv.ItemHeight + 0.5)
-	commentColor := r.resolvedViews.Comment.TextColor
 
 	// 强调条占位 rail 宽度（逻辑像素）：与横排一致取 item 左内边距为左留白，承载强调条；
 	// 不足以容纳强调条（offset+width）时取下限。无强调条时 railFixedW=0（不占位）。
@@ -135,9 +137,9 @@ func (r *Renderer) buildVerticalCandidateTree(
 		if cand.Index >= 0 {
 			lo = float64(railFixedW) + float64(indexAreaW) + indexMarginRight
 		}
-		tw := r.textDrawer.MeasureString(candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize)
+		tw := measureText(r.textDrawer, candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize, rv.Text.FontFamily)
 		if cand.Comment != "" {
-			commentWidths[i] = r.textDrawer.MeasureString(cand.Comment, commentSize)
+			commentWidths[i] = measureText(r.textDrawer, cand.Comment, commentSize, rv.Comment.FontFamily)
 		}
 		nat := lo + tw + itemPadR
 		if commentWidths[i] > 0 {
@@ -157,13 +159,28 @@ func (r *Renderer) buildVerticalCandidateTree(
 	for i, cand := range candidates {
 		children := make([]*View, 0, 3)
 
+		// P7-D：候选文字用 item 选中态着色/加粗；序号、注释各自独立支持选中态（与横排一致）。
+		sel, hov := i == selectedIndex, i == hoverIndex
+		st := itemStateFor(rv.Item, sel, hov)
+		textColor, textWeight := rv.Text.TextColor, rv.Text.FontWeight
+		if st != nil {
+			if st.TextColor != nil {
+				textColor = st.TextColor
+			}
+			if st.FontWeight != 0 {
+				textWeight = st.FontWeight
+			}
+		}
+		idxColor, idxWeight := elementTextState(rv.Index, sel, hov)
+		cmtColor, cmtWeight := elementTextState(rv.Comment, sel, hov)
+
 		if cand.Index >= 0 {
 			label := indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel)
 			if isTextIndex {
 				children = append(children, &View{
 					FixedW:    indexAreaW,
 					Text:      label,
-					TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: rv.Index.FontWeight, Color: r.resolvedViews.Index.TextColor},
+					TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: idxWeight, Family: rv.Index.FontFamily, Color: idxColor},
 				})
 			} else {
 				d := int(2*indexRadius + 0.5)
@@ -176,14 +193,14 @@ func (r *Renderer) buildVerticalCandidateTree(
 					FixedW:     d,
 					FixedH:     d,
 					Margin:     Edges{Left: leftM, Right: rightM},
-					Background: Fill{Color: r.resolvedViews.Index.BgColor},
+					Background: r.elementFill(rv.Index, sel, hov), // P7-C/D：序号背景可带图、可随选中态变
 					Border:     Border{Radius: d / 2},
 					Layout:     LayoutStack,
 					Children: []*View{{
 						FixedW:    d,
 						FixedH:    d,
 						Text:      label,
-						TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: rv.Index.FontWeight, Color: r.resolvedViews.Index.TextColor, Align: AlignCenter},
+						TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: idxWeight, Family: rv.Index.FontFamily, Color: idxColor, Align: AlignCenter},
 					}},
 				})
 			}
@@ -198,8 +215,8 @@ func (r *Renderer) buildVerticalCandidateTree(
 			availText -= commentMarginLeft + commentWidths[i]
 		}
 		textChild := &View{
-			Text:      r.truncateToWidth(candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize, availText),
-			TextStyle: TextStyle{FontSize: rv.Text.FontSize, Color: r.resolvedViews.Text.TextColor},
+			Text:      r.truncateToWidth(candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize, availText, rv.Text.FontFamily),
+			TextStyle: TextStyle{FontSize: rv.Text.FontSize, Weight: textWeight, Family: rv.Text.FontFamily, Color: textColor},
 		}
 		if len(children) > 0 {
 			textChild.Margin = Edges{Left: sc(indexMarginRight)}
@@ -211,7 +228,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 		if cand.Comment != "" {
 			children = append(children, &View{
 				Text:      cand.Comment,
-				TextStyle: TextStyle{FontSize: commentSize, Color: commentColor},
+				TextStyle: TextStyle{FontSize: commentSize, Weight: cmtWeight, Family: rv.Comment.FontFamily, Color: cmtColor},
 				Margin:    Edges{Left: sc(commentMarginLeft)},
 			})
 		}
@@ -230,11 +247,8 @@ func (r *Renderer) buildVerticalCandidateTree(
 			Padding:    Edges{Right: sc(itemPadR)},
 			Children:   itemChildren,
 		}
-		if i == selectedIndex {
-			item.Background = Fill{Color: r.resolvedViews.Item.SelectedBg}
-		} else if i == hoverIndex {
-			item.Background = Fill{Color: r.resolvedViews.Item.HoverBg}
-		}
+		r.applyItemState(item, st, sc)                // P7-D：选中/悬停态背景（高亮位图/底色）+ 边框
+		r.appendThemeLayers(item, rv.Item.Layers, sc) // P7-C：候选项装饰层
 		items = append(items, item)
 	}
 	list := &View{Layout: LayoutColumn, Stretch: true, Children: items}
@@ -262,10 +276,11 @@ func (r *Renderer) buildVerticalCandidateTree(
 		CrossAlign: AlignCenter, // 让底部翻页行水平居中
 		Gap:        sc(float64(rv.WindowGap)),
 		Padding:    Edges{Top: sc(padY), Right: sc(padX), Bottom: sc(padY), Left: sc(padX)},
-		Background: Fill{Color: r.resolvedViews.Window.BgColor, Image: cfg.BackgroundImage, Mode: cfg.BackgroundMode, Slice: cfg.BackgroundSlice, Opacity: cfg.BackgroundOpacity},
+		Background: r.fillFor(r.resolvedViews.Window.BgColor, r.resolvedViews.Window.BgImage), // P7-C：背景图来自 views.window.background.image
 		Border:     r.windowBorder(sc(float64(rv.Window.BorderRadius)), sc, scale),
-		Shadow:     &ViewShadow{OffsetX: sc(float64(rv.ShadowOffset)), OffsetY: sc(float64(rv.ShadowOffset)), Color: r.resolvedViews.ShadowColor},
+		Shadow:     &ViewShadow{OffsetX: sc(float64(rv.ShadowOffsetX)), OffsetY: sc(float64(rv.ShadowOffsetY)), Color: r.resolvedViews.ShadowColor},
 		Children:   bands,
 	}
+	r.appendThemeLayers(window, rv.Window.Layers, sc) // P7-C：窗口装饰层（水印等）
 	return &candWindowTree{root: window, items: items, pagerUp: pagerUp, pagerDown: pagerDown}
 }

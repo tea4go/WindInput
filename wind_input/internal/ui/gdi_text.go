@@ -84,7 +84,8 @@ func containsSymbolChars(text string) bool {
 type gdiFontKey struct {
 	size   int
 	bold   bool
-	symbol bool // true = use Segoe UI Symbol instead of primary font
+	symbol bool   // true = use Segoe UI Symbol instead of primary font
+	family string // 空=主字体 tr.fontName；非空=逐元素字体族名（P7-B）
 }
 
 // TextRenderer provides text drawing and measurement using Windows GDI.
@@ -173,18 +174,25 @@ const symbolFontName = "Segoe UI Symbol"
 
 // getFont returns a cached HFONT for the given size (caller must hold fontMu or be in single-threaded context)
 func (tr *TextRenderer) getFont(size int, bold bool) uintptr {
-	return tr.getFontInternal(size, bold, false)
+	return tr.getFontInternal(size, bold, false, "")
 }
 
 // getSymbolFont returns a cached HFONT using Segoe UI Symbol for symbol characters
 func (tr *TextRenderer) getSymbolFont(size int) uintptr {
-	return tr.getFontInternal(size, false, true)
+	return tr.getFontInternal(size, false, true, "")
+}
+
+// getFontFamily returns a cached HFONT for an explicit platform font family (P7-B 逐元素字体)。
+// family 为空时等价主字体；未知族名由 GDI 自行替换为默认字体。
+func (tr *TextRenderer) getFontFamily(size int, bold bool, family string) uintptr {
+	return tr.getFontInternal(size, bold, false, family)
 }
 
 // getFontInternal creates or returns a cached HFONT.
 // When symbol=true, uses Segoe UI Symbol instead of the primary font.
-func (tr *TextRenderer) getFontInternal(size int, bold bool, symbol bool) uintptr {
-	key := gdiFontKey{size: size, bold: bold, symbol: symbol}
+// family 非空时用该族名（经 FontSpecToName 归一），优先级低于 symbol、独立于主字体缓存。
+func (tr *TextRenderer) getFontInternal(size int, bold bool, symbol bool, family string) uintptr {
+	key := gdiFontKey{size: size, bold: bold, symbol: symbol, family: family}
 	if hFont, ok := tr.fonts[key]; ok {
 		return hFont
 	}
@@ -201,8 +209,11 @@ func (tr *TextRenderer) getFontInternal(size int, bold bool, symbol bool) uintpt
 		weight = uintptr(fwBold)
 	}
 
-	// Choose font family
+	// Choose font family：symbol > 逐元素 family > 主字体。
 	name := tr.fontName
+	if family != "" {
+		name = FontSpecToName(family)
+	}
 	if symbol {
 		name = symbolFontName
 	}
@@ -227,9 +238,10 @@ func (tr *TextRenderer) getFontInternal(size int, bold bool, symbol bool) uintpt
 	return hFont
 }
 
-// getMetrics returns cached text metrics for the given font size
-func (tr *TextRenderer) getMetrics(hdc uintptr, size int, bold bool) *TEXTMETRICW {
-	key := gdiFontKey{size: size, bold: bold}
+// getMetrics returns cached text metrics for the given font size + family。
+// 调用方须先把对应字体 select 进 hdc；family 仅用于缓存键避免跨族名碰撞。
+func (tr *TextRenderer) getMetrics(hdc uintptr, size int, bold bool, family string) *TEXTMETRICW {
+	key := gdiFontKey{size: size, bold: bold, family: family}
 	if tm, ok := tr.metrics[key]; ok {
 		return tm
 	}
@@ -402,7 +414,7 @@ func (tr *TextRenderer) DrawString(text string, x, y float64, fontSize float64, 
 	procSetTextColor.Call(tr.drawDC, uintptr(colorRef))
 
 	// Convert baseline Y to top-left Y for GDI
-	tm := tr.getMetrics(tr.drawDC, size, false)
+	tm := tr.getMetrics(tr.drawDC, size, false, "")
 	drawX := int(math.Round(x))
 	drawY := int(math.Round(y)) - int(tm.TmAscent)
 
@@ -435,7 +447,79 @@ func (tr *TextRenderer) DrawStringWithWeight(text string, x, y float64, fontSize
 	colorRef := uint32(byte(cr>>8)) | uint32(byte(cg>>8))<<8 | uint32(byte(cb>>8))<<16
 	procSetTextColor.Call(tr.drawDC, uintptr(colorRef))
 
-	tm := tr.getMetrics(tr.drawDC, size, bold)
+	tm := tr.getMetrics(tr.drawDC, size, bold, "")
+	drawX := int(math.Round(x))
+	drawY := int(math.Round(y)) - int(tm.TmAscent)
+
+	textW, _ := syscall.UTF16FromString(text)
+	procTextOutW.Call(
+		tr.drawDC,
+		uintptr(drawX),
+		uintptr(drawY),
+		uintptr(unsafe.Pointer(&textW[0])),
+		uintptr(len(textW)-1),
+	)
+}
+
+// MeasureStringFont measures text width using an explicit platform font family (P7-B)。
+// family 为空回退主字体度量；非空时按该族名 select 字体后量算（不走 symbol 特判）。
+func (tr *TextRenderer) MeasureStringFont(text string, fontSize float64, family string) float64 {
+	if family == "" {
+		return tr.MeasureString(text, fontSize)
+	}
+	if text == "" {
+		return 0
+	}
+	size := int(math.Round(fontSize))
+	if tr.inDraw && tr.drawDC != 0 {
+		if hFont := tr.getFontFamily(size, false, family); hFont != 0 {
+			procSelectObject.Call(tr.drawDC, hFont)
+		}
+		return tr.measureOnDC(tr.drawDC, text)
+	}
+	hdcScreen, _, _ := procGetDC.Call(0)
+	if hdcScreen == 0 {
+		return 0
+	}
+	defer procReleaseDC.Call(0, hdcScreen)
+	hdc, _, _ := procCreateCompatibleDC.Call(hdcScreen)
+	if hdc == 0 {
+		return 0
+	}
+	defer procDeleteDC.Call(hdc)
+	if hFont := tr.getFontFamily(size, false, family); hFont != 0 {
+		procSelectObject.Call(hdc, hFont)
+	}
+	return tr.measureOnDC(hdc, text)
+}
+
+// DrawStringFull draws text with explicit weight + platform font family (P7-B)。
+// family 为空回退按字重绘制（DrawStringWithWeight/DrawString）；非空时按族名 select 字体绘制。
+func (tr *TextRenderer) DrawStringFull(text string, x, y float64, fontSize float64, clr color.Color, weight int, family string) {
+	if family == "" {
+		if weight > 0 {
+			tr.DrawStringWithWeight(text, x, y, fontSize, clr, weight)
+		} else {
+			tr.DrawString(text, x, y, fontSize, clr)
+		}
+		return
+	}
+	if !tr.inDraw || text == "" {
+		return
+	}
+	size := int(math.Round(fontSize))
+	bold := weight >= 600
+	hFont := tr.getFontFamily(size, bold, family)
+	if hFont == 0 {
+		return
+	}
+	procSelectObject.Call(tr.drawDC, hFont)
+
+	cr, cg, cb, _ := clr.RGBA()
+	colorRef := uint32(byte(cr>>8)) | uint32(byte(cg>>8))<<8 | uint32(byte(cb>>8))<<16
+	procSetTextColor.Call(tr.drawDC, uintptr(colorRef))
+
+	tm := tr.getMetrics(tr.drawDC, size, bold, family)
 	drawX := int(math.Round(x))
 	drawY := int(math.Round(y)) - int(tm.TmAscent)
 

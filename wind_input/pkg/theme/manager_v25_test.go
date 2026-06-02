@@ -36,13 +36,13 @@ palette: test-palette
 	if rv == nil {
 		t.Fatal("resolved nil")
 	}
-	idx := rv.Layout.CandidateWindow.CandidateList.Index
-	// index 模板生效（来自 layout test-layout 的 index.style="1."）
-	if idx.Circle {
-		t.Errorf("IndexStyle want text (circle off)")
+	// P7-5：序号样式/标签归口 views。该主题无 views 块 → 走 defaultViews 基线（无圆背景 + 默认数字标签）。
+	vi := rv.Views.Index
+	if vi.Background.Shape == "circle" {
+		t.Errorf("IndexStyle want none (no circle bg)")
 	}
-	if got := BuildIndexLabelsFromSlots(idx.Labels); got != "1./2./3./4./5./6./7./8./9./0." {
-		t.Errorf("IndexLabels want slash-template, got %q", got)
+	if got := BuildIndexLabelsFromSlots(vi.Labels); got != "1/2/3/4/5/6/7/8/9/0" {
+		t.Errorf("IndexLabels want default digits, got %q", got)
 	}
 	// palette 解析（来自 test-palette 的 #4285F4 primary）
 	if ColorToHexRGB(rv.Palette.CandidateWindow.SelectedBg) != "#4285F4" {

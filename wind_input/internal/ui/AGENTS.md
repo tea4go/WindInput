@@ -78,6 +78,9 @@
 | `monitor.go` | 多显示器支持：获取目标显示器工作区，用于窗口位置计算 |
 | `dpi.go` | Win DPI 检测 (`GetEffectiveDPI`/WM_DPICHANGED)；`init()` 注入 `dpiScaleProvider` 给跨平台 `dpi_neutral.go` |
 | `gdi_text.go` | GDI 文字渲染实现 (`TextRenderer` + `containsSymbolChars`)；`FontSpecToName` 已移至跨平台 `fontspec.go` |
+| `font_config.go` | `FontConfig`：字体路径/大小/样式配置 |
+| `text_drawer.go` | `TextDrawer` 接口（跨平台）：统一 GDI/DirectWrite/freeType 绘制 API；**P7-B** 增 `MeasureStringFont`/`DrawStringFull`（按平台字体族名度量/绘制，空 family 回退全局，未知名由平台引擎替换；freeType 路径加载无法按名切换故忽略 family）。`TextStyle.Family` 经 `paintText` 透传，`measure` 经可选 `fontMeasurer` 接口按 family 度量。freeType 实现留此，GDI/DirectWrite 实现移至 `text_drawer_windows.go` |
+| `protocol.go` | UI 内部消息类型（`UICommand`、`Candidate`、`ToolbarState`） |
 | `uicmd_post.go` | `postCmd` 投递 helper + `snapshotCandidatesMarkers/Config/PinState` 全量快照构造器 (供 setter 末尾投递 snapshot 命令到 cmdCh) |
 | `uicmd_events.go` | 反向事件通道: `Events() <-chan uicmd.Event` + `wrapCandidateCallbacks/wrapToolbarCallbacks/wrapHotkeyCallback` 双流并行包装 (原 callback + 推一份 uicmd.Event) |
 | `uicmd_post_test.go` | snapshot helper + wrap callback 双流行为 + 背压测试 |

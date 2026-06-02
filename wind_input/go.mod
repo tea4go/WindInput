@@ -9,6 +9,7 @@ require (
 	github.com/gogpu/gg v0.48.3
 	github.com/google/uuid v1.6.0
 	go.etcd.io/bbolt v1.4.3
+	golang.org/x/image v0.40.0
 	golang.org/x/sys v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -17,6 +18,5 @@ require (
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/gogpu/gpucontext v0.19.0 // indirect
 	github.com/gogpu/gputypes v0.5.0 // indirect
-	golang.org/x/image v0.40.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 )

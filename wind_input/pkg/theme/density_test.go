@@ -2,6 +2,9 @@ package theme
 
 import "testing"
 
+// P7-5：候选窗几何已迁 views/behavior，density 仅服务其它窗口（toolbar/status/tooltip/popup_menu/toast）。
+// 本文件断言均针对这些保留窗口。
+
 func TestDensityBaselines(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -20,11 +23,11 @@ func TestDensityBaselines(t *testing.T) {
 			if b.Density != tc.expect {
 				t.Errorf("Density=%q want %q", b.Density, tc.expect)
 			}
-			if b.CandidateWindow.WindowPadding.Top == 0 {
-				t.Errorf("baseline WindowPadding.Top should be non-zero")
+			if b.Toolbar.Padding.Top == 0 {
+				t.Errorf("baseline Toolbar.Padding.Top should be non-zero")
 			}
-			if len(b.CandidateWindow.CandidateList.Index.Labels) != 10 {
-				t.Errorf("baseline index.labels should have 10 slots, got %d", len(b.CandidateWindow.CandidateList.Index.Labels))
+			if b.Tooltip.MaxWidth == 0 {
+				t.Errorf("baseline Tooltip.MaxWidth should be non-zero")
 			}
 		})
 	}
@@ -35,54 +38,43 @@ func TestDensityCozyIsBiggerThanCompact(t *testing.T) {
 	z := densityBaseline("cozy")
 	cm := densityBaseline("comfortable")
 
-	if z.CandidateWindow.WindowPadding.Top <= c.CandidateWindow.WindowPadding.Top {
-		t.Errorf("cozy WindowPadding.Top %d should > compact %d",
-			z.CandidateWindow.WindowPadding.Top, c.CandidateWindow.WindowPadding.Top)
+	if z.Tooltip.Padding.Top <= c.Tooltip.Padding.Top {
+		t.Errorf("cozy Tooltip.Padding.Top %d should > compact %d",
+			z.Tooltip.Padding.Top, c.Tooltip.Padding.Top)
 	}
-	if cm.CandidateWindow.WindowPadding.Top <= z.CandidateWindow.WindowPadding.Top {
-		t.Errorf("comfortable WindowPadding.Top %d should > cozy %d",
-			cm.CandidateWindow.WindowPadding.Top, z.CandidateWindow.WindowPadding.Top)
+	if cm.Tooltip.Padding.Top <= z.Tooltip.Padding.Top {
+		t.Errorf("comfortable Tooltip.Padding.Top %d should > cozy %d",
+			cm.Tooltip.Padding.Top, z.Tooltip.Padding.Top)
 	}
-	if z.CandidateWindow.CandidateList.Text.FontSize <= c.CandidateWindow.CandidateList.Text.FontSize {
-		t.Errorf("cozy text font_size should > compact")
+	if z.Tooltip.FontSize <= c.Tooltip.FontSize {
+		t.Errorf("cozy tooltip font_size should > compact")
 	}
 }
 
 func TestMergeWithDensityBaseline_PreservesUserFields(t *testing.T) {
 	user := LayoutSchema{
 		Density: "compact",
-		CandidateWindow: RawCandidateWindowLayout{
-			BandGap: intPtr(99), // 用户覆盖
-			CandidateList: RawCandidateListLayout{
-				ItemGap: intPtr(7), // 用户覆盖
-				Index: RawIndexLayout{
-					Labels: []string{"①", "②", "③"}, // 用户整体替换 labels
-					Circle: true,                    // 用户开启圆圈
-				},
-			},
+		Toolbar: RawToolbarLayout{
+			ItemGap: intPtr(7), // 用户覆盖
+		},
+		Tooltip: RawTooltipLayout{
+			MaxWidth: 999, // 用户覆盖（plain int，非零即覆盖）
 		},
 	}
 	merged := mergeWithDensityBaseline(user)
 
-	if merged.CandidateWindow.BandGap != 99 {
-		t.Errorf("BandGap want 99, got %d", merged.CandidateWindow.BandGap)
+	if merged.Toolbar.ItemGap != 7 {
+		t.Errorf("Toolbar.ItemGap want 7, got %d", merged.Toolbar.ItemGap)
 	}
-	if merged.CandidateWindow.CandidateList.ItemGap != 7 {
-		t.Errorf("ItemGap want 7, got %d", merged.CandidateWindow.CandidateList.ItemGap)
-	}
-	gotLabels := merged.CandidateWindow.CandidateList.Index.Labels
-	if len(gotLabels) != 3 || gotLabels[0] != "①" || gotLabels[2] != "③" {
-		t.Errorf("Index.Labels want [①②③], got %v", gotLabels)
-	}
-	if !merged.CandidateWindow.CandidateList.Index.Circle {
-		t.Errorf("Index.Circle want true (user override)")
+	if merged.Tooltip.MaxWidth != 999 {
+		t.Errorf("Tooltip.MaxWidth want 999, got %d", merged.Tooltip.MaxWidth)
 	}
 	// 未覆盖字段应保留基线值
-	if merged.CandidateWindow.WindowPadding.Top == 0 {
-		t.Errorf("WindowPadding.Top should retain baseline")
+	if merged.Toolbar.Padding.Top == 0 {
+		t.Errorf("Toolbar.Padding.Top should retain baseline")
 	}
-	if merged.CandidateWindow.CandidateList.Index.MinWidth == 0 {
-		t.Errorf("Index.MinWidth should retain baseline")
+	if merged.Tooltip.FontSize == 0 {
+		t.Errorf("Tooltip.FontSize should retain baseline")
 	}
 }
 
@@ -93,39 +85,41 @@ func TestMergeWithDensityBaseline_DefaultDensityIsCompact(t *testing.T) {
 		t.Errorf("default density want compact, got %q", merged.Density)
 	}
 	c := compactBaseline()
-	if merged.CandidateWindow.WindowPadding != c.CandidateWindow.WindowPadding {
+	if merged.Toolbar.Padding != c.Toolbar.Padding {
 		t.Errorf("empty user should equal compact baseline")
 	}
 }
 
 func TestMergeWithDensityBaseline_ExplicitZero(t *testing.T) {
-	// 显式写 0 的距离/圆角字段应被保留，而非回退基线
+	// 显式写 0 的指针型字段（*int）应被保留，而非回退基线
 	user := LayoutSchema{
 		Density: "compact",
-		CandidateWindow: RawCandidateWindowLayout{
-			BorderRadius:  intPtr(0),
-			WindowPadding: RawPadding{Top: intPtr(0)},
+		Tooltip: RawTooltipLayout{
+			BorderRadius: intPtr(0),
+		},
+		Status: RawStatusLayout{
+			Padding: RawPadding{Top: intPtr(0)},
 		},
 	}
 	merged := mergeWithDensityBaseline(user)
-	if merged.CandidateWindow.BorderRadius != 0 {
-		t.Errorf("explicit BorderRadius=0 should be preserved, got %d", merged.CandidateWindow.BorderRadius)
+	if merged.Tooltip.BorderRadius != 0 {
+		t.Errorf("explicit Tooltip.BorderRadius=0 should be preserved, got %d", merged.Tooltip.BorderRadius)
 	}
-	if merged.CandidateWindow.WindowPadding.Top != 0 {
-		t.Errorf("explicit WindowPadding.Top=0 should be preserved, got %d", merged.CandidateWindow.WindowPadding.Top)
+	if merged.Status.Padding.Top != 0 {
+		t.Errorf("explicit Status.Padding.Top=0 should be preserved, got %d", merged.Status.Padding.Top)
 	}
 	// 未写的边（nil）应回退基线非零值
-	if merged.CandidateWindow.WindowPadding.Left == 0 {
-		t.Errorf("unset WindowPadding.Left should retain baseline (non-zero)")
+	if merged.Status.Padding.Left == 0 {
+		t.Errorf("unset Status.Padding.Left should retain baseline (non-zero)")
 	}
 
 	// nil 字段应回退到基线非零值
 	userNil := LayoutSchema{Density: "compact"}
 	mergedNil := mergeWithDensityBaseline(userNil)
-	if mergedNil.CandidateWindow.BorderRadius == 0 {
-		t.Errorf("nil BorderRadius should fall back to non-zero baseline")
+	if mergedNil.Tooltip.BorderRadius == 0 {
+		t.Errorf("nil Tooltip.BorderRadius should fall back to non-zero baseline")
 	}
-	if mergedNil.CandidateWindow.WindowPadding.Top == 0 {
-		t.Errorf("nil WindowPadding.Top should fall back to non-zero baseline")
+	if mergedNil.Tooltip.Padding.Top == 0 {
+		t.Errorf("nil Tooltip.Padding.Top should fall back to non-zero baseline")
 	}
 }

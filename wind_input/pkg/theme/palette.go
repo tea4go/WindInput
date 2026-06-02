@@ -9,8 +9,6 @@ type PaletteSchema struct {
 
 	Light PaletteVariant `yaml:"light" json:"light"`
 	Dark  PaletteVariant `yaml:"dark" json:"dark"`
-
-	Background *PaletteBackground `yaml:"background,omitempty" json:"background,omitempty"`
 }
 
 // PaletteMeta 标识一个共享 palette 零件
@@ -110,12 +108,5 @@ type ToastPalette struct {
 	Text       string `yaml:"text" json:"text"`
 }
 
-// PaletteBackground 背景图配置
-// Opacity 使用 *float64 以区分"未设置"（nil，回退默认 1.0）与"显式 0"（全透明）。
-type PaletteBackground struct {
-	Image     string   `yaml:"image" json:"image"` // 文件路径或 data: URI
-	Mode      string   `yaml:"mode" json:"mode"`   // nine_slice | stretch | tile | center
-	Slice     Padding  `yaml:"slice" json:"slice"` // 仅 nine_slice 用
-	Opacity   *float64 `yaml:"opacity,omitempty" json:"opacity,omitempty"`
-	DarkImage string   `yaml:"dark_image" json:"dark_image"` // 暗色专用，可选
-}
+// 注：palette 级背景图（PaletteBackground）已于 P7-F 移除——背景图统一走
+// views.window.background.image + 顶层 resources（含 {light,dark} 暗色变体，P7-C/E）。

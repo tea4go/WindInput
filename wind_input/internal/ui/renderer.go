@@ -183,6 +183,9 @@ type Renderer struct {
 	resolvedV25   *theme.ResolvedV25
 	resolvedViews theme.ResolvedViews // 候选窗盒模型外观：每帧由 refreshResolvedViews 经 theme.ResolveCandidateViews 重建（几何+颜色）+ 运行时字号回填
 	themeViews    *theme.Views        // 主题盒模型 views（已 merge defaultViews 基线）；来自 rv.Views
+	// imageCache 按 ViewImage.ref 缓存解码后的位图（P7-C）：一次性解码、跨帧复用，SetTheme 换主题时清空。
+	// 值为 nil 表示该 ref 解析/解码失败（已尝试过，不再重试）。
+	imageCache map[string]*image.RGBA
 	TextBackendManager
 
 	// Base (unscaled) values for DPI recalculation
@@ -190,7 +193,6 @@ type Renderer struct {
 	userFontSize    float64 // 用户全局字号（config.UI.FontSize），自定义模式下生效
 	themeFontSize   float64 // 主题 behavior.font_size（来自 SetTheme），跟随模式下生效
 	fontFollowTheme bool    // true=候选字号跟随主题 behavior.font_size；false=用 userFontSize
-	themeRowHeight  float64 // unscaled row height from theme; 0 = auto-compute from font size
 	lastDPI         int     // Last DPI used for scaling; 0 means not yet set
 
 	// 候选框绘制缓冲. 跨帧复用以避免 gg.NewPixmap + dc.Image() 的双倍分配
@@ -238,7 +240,8 @@ func (r *Renderer) GetTextRenderMode() TextRenderMode {
 }
 
 // applyFontDerivation 用当前 baseFontSize + DPI scale 重算字号派生：
-// 主文本=base、序号=base-4、行高=themeRowHeight 或 max(32, base*1.8)，均 ×scale。
+// 主文本=base、序号=base-4、行高=max(32, base*1.8)，均 ×scale。
+// P7-5：候选窗行高恒由字号派生（不再支持主题级固定行高 themeRowHeight），自然高度=文字+item 内边距由盒模型决定。
 func (r *Renderer) applyFontDerivation() {
 	scale := GetDPIScale()
 	base := r.baseFontSize
@@ -247,11 +250,7 @@ func (r *Renderer) applyFontDerivation() {
 	}
 	r.config.FontSize = base * scale
 	r.config.IndexFontSize = (base - 4) * scale
-	if r.themeRowHeight > 0 {
-		r.config.ItemHeight = r.themeRowHeight * scale
-	} else {
-		r.config.ItemHeight = math.Max(32, base*1.8) * scale
-	}
+	r.config.ItemHeight = math.Max(32, base*1.8) * scale
 }
 
 // recomputeBaseFont 依「跟随主题/自定义」选定有效基准字号，再重算派生。
@@ -352,35 +351,102 @@ func (r *Renderer) SetTheme(rv *theme.ResolvedV25) {
 	r.resolvedV25 = rv
 	r.themeViews = rv.Views // 主题盒模型 views（已 merge defaultViews 基线）
 	// 候选窗颜色/几何已由 theme.ResolveCandidateViews 经 r.resolvedViews 承载（P6 阶段2e 删合成桥）；
-	// 此处只搬运渲染运行时仍需的 RenderConfig 字段：IndexStyle / HasAccentBar / page 策略 /
-	// 行高（字号派生）/ 序号标签。颜色与几何 padding 不再经 RenderConfig 中转。
-	lay := rv.Layout.CandidateWindow
-	idx := lay.CandidateList.Index
-	if idx.Circle {
-		r.config.IndexStyle = "circle"
-	} else {
-		r.config.IndexStyle = "text"
+	// 此处只搬运渲染运行时仍需的 RenderConfig 字段：IndexStyle / HasAccentBar / page 策略 / 序号标签。
+	// P7-5：这些已归口 views（序号样式=views.index.background.shape、强调条开关=views.metrics.accent_bar.enabled、
+	// 标签=views.index.labels），不再来自 layout；行高恒由有效字号派生（themeRowHeight 退役）。
+	// rv.Views 生产路径恒非 nil（resolver 保证）；此处 nil 防御供仅构造 Behavior/Palette 的单元测试。
+	r.config.IndexStyle = "text"
+	r.config.HasAccentBar = false
+	var indexLabels []string
+	if v := rv.Views; v != nil {
+		if v.Index.Background.Shape == "circle" {
+			r.config.IndexStyle = "circle"
+		}
+		if m := v.Metrics; m != nil && m.AccentBar != nil && m.AccentBar.Enabled != nil {
+			r.config.HasAccentBar = *m.AccentBar.Enabled
+		}
+		indexLabels = v.Index.Labels
 	}
-	r.config.HasAccentBar = lay.CandidateList.AccentBar.Enabled
 	// page 策略默认来自主题 behavior（P6 阶段2d）；用户 PagerDisplayMode 覆盖在
 	// applyPagerOverride 注入（Default=跟随主题，即保留此处写入的 behavior 值）。
 	r.config.AlwaysShowPager = rv.Behavior.AlwaysShowPager
 	r.config.ShowPageNumber = rv.Behavior.ShowPageNumber
-	// 行高来源：主题 layout 指定则用之，否则由有效字号派生（recomputeBaseFont→applyFontDerivation 内处理）。
-	if rh := float64(lay.CandidateList.ItemHeight); rh > 0 {
-		r.themeRowHeight = rh
-	} else {
-		r.themeRowHeight = 0
-	}
 	// 字号跟随：记录主题 behavior.font_size，按「跟随/自定义」重算有效基准字号 + 派生（含行高）。
 	r.themeFontSize = float64(rv.Behavior.FontSize)
 	r.recomputeBaseFont()
-	r.config.IndexLabels = theme.BuildIndexLabelsFromSlots(idx.Labels)
+	// 序号标签：nil（无 views）回退默认数字 1..9,0（与旧 layout 路径一致）。
+	r.config.IndexLabels = theme.BuildIndexLabelsFromSlots(indexLabels)
 
-	// 候选窗背景图：ResolvedV25 不支持解码后的背景图（种子主题无图），直接清空（零回归）
-	r.config.BackgroundImage = nil
-	r.config.BackgroundMode = ""
-	r.config.BackgroundOpacity = 0
+	// 候选窗背景图/层级覆盖图（P7-C）：来源已归口 views（window.background.image / 各 View 的 layers），
+	// 经 r.resolvedViews 的 BgImage/Layers spec 承载，build 时按 ref 经 imageForRef 取缓存位图。
+	// 换主题清空位图缓存（ref 解码结果按主题失效）。
+	r.imageCache = nil
+}
+
+// imageForRef 把 ViewImage.ref 解码为位图：先查缓存，未命中则解析 ref（resources 表 → 字面 path/data URI）
+// 并一次性解码后缓存（含失败的 nil，避免每帧重试）。仅在 build 路径调用（单线程）。
+func (r *Renderer) imageForRef(ref string) *image.RGBA {
+	if ref == "" {
+		return nil
+	}
+	if r.imageCache == nil {
+		r.imageCache = make(map[string]*image.RGBA)
+	}
+	if img, ok := r.imageCache[ref]; ok {
+		return img
+	}
+	path := ref
+	if r.resolvedV25 != nil && r.resolvedV25.Resources != nil {
+		if p, ok := r.resolvedV25.Resources[ref]; ok {
+			path = p
+		}
+	}
+	img, err := theme.LoadBackgroundImage(path)
+	if err != nil {
+		img = nil // 缓存失败结果，不再重试（不打断渲染）
+	}
+	r.imageCache[ref] = img
+	return img
+}
+
+// fillFor 构建 View 背景填充：底色 + 可选背景图（按 RVImage spec 经 imageForRef 取缓存位图）。
+// bg 为 nil 或图解码失败时退化为纯底色（零回归）。
+func (r *Renderer) fillFor(col color.Color, bg *theme.RVImage) Fill {
+	f := Fill{Color: col}
+	if bg != nil {
+		if img := r.imageForRef(bg.Ref); img != nil {
+			f.Image = img
+			f.Mode = bg.Mode
+			f.Slice = bg.Slice
+			f.Opacity = bg.Opacity
+		}
+	}
+	return f
+}
+
+// appendThemeLayers 把主题 RVImage 层级覆盖图（spec）解码后追加到 View.Layers（P7-C，D4）。
+// 与引擎内置层（accent rail / 光标）共存；offset/size 为逻辑像素经 sc 缩放，W/H=0 保持原图尺寸。
+// 解码失败的层静默跳过（不打断渲染）。
+func (r *Renderer) appendThemeLayers(v *View, layers []theme.RVImage, sc func(float64) int) {
+	for i := range layers {
+		L := &layers[i]
+		img := r.imageForRef(L.Ref)
+		if img == nil {
+			continue
+		}
+		v.Layers = append(v.Layers, ImageLayer{
+			Img:     img,
+			Mode:    L.Mode,
+			Slice:   L.Slice,
+			Opacity: L.Opacity,
+			Z:       L.Z,
+			Anchor:  L.Anchor,
+			OffsetX: sc(float64(L.OffsetX)),
+			OffsetY: sc(float64(L.OffsetY)),
+			W:       sc(float64(L.W)),
+			H:       sc(float64(L.H)),
+		})
+	}
 }
 
 // getCommentColor returns the comment color from theme or default

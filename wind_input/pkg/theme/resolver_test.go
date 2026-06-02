@@ -10,15 +10,15 @@ import (
 )
 
 // 完整 layout/palette yaml 文本 — 内联与外链测试共用
+// P7-5：候选窗已不在 layout，fixture 改用其它窗口字段（toolbar/tooltip）验证 layout 合并。
 const sampleLayoutYAML = `
 meta: {name: "test-layout", version: "1.0"}
 density: compact
 scale: 1.0
-candidate_window:
-  band_gap: 3
-  candidate_list:
-    item_gap: 5
-    index: {labels: ["1.","2.","3.","4.","5.","6.","7.","8.","9.","0."], min_width: 20}
+toolbar:
+  item_gap: 3
+tooltip:
+  max_width: 500
 `
 
 const samplePaletteYAML = `
@@ -83,15 +83,15 @@ func TestResolveV25_External(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveV25 external: %v", err)
 	}
-	if r.Layout.CandidateWindow.BandGap != 3 {
-		t.Errorf("band_gap want 3, got %d", r.Layout.CandidateWindow.BandGap)
+	if r.Layout.Toolbar.ItemGap != 3 {
+		t.Errorf("toolbar.item_gap want 3, got %d", r.Layout.Toolbar.ItemGap)
 	}
-	if r.Layout.CandidateWindow.CandidateList.ItemGap != 5 {
-		t.Errorf("item_gap want 5, got %d", r.Layout.CandidateWindow.CandidateList.ItemGap)
+	if r.Layout.Tooltip.MaxWidth != 500 {
+		t.Errorf("tooltip.max_width want 500, got %d", r.Layout.Tooltip.MaxWidth)
 	}
 	// density 基线填充
-	if r.Layout.CandidateWindow.WindowPadding.Top == 0 {
-		t.Errorf("window_padding should be baseline-filled")
+	if r.Layout.Toolbar.Padding.Top == 0 {
+		t.Errorf("toolbar padding should be baseline-filled")
 	}
 	// palette 解析 + ${} 展开
 	if ColorToHexRGB(r.Palette.CandidateWindow.SelectedBg) != "#4285F4" {
@@ -124,8 +124,8 @@ func TestResolveV25_Inline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveV25 inline: %v", err)
 	}
-	if r.Layout.CandidateWindow.BandGap != 3 {
-		t.Errorf("inline band_gap want 3, got %d", r.Layout.CandidateWindow.BandGap)
+	if r.Layout.Toolbar.ItemGap != 3 {
+		t.Errorf("inline toolbar.item_gap want 3, got %d", r.Layout.Toolbar.ItemGap)
 	}
 	if ColorToHexRGB(r.Palette.CandidateWindow.SelectedBg) != "#4285F4" {
 		t.Errorf("inline selected_bg want #4285F4, got %s", ColorToHexRGB(r.Palette.CandidateWindow.SelectedBg))
@@ -188,8 +188,8 @@ func TestResolveV25_Overrides(t *testing.T) {
 		Palette: "test-palette",
 		Overrides: &Overrides{
 			Layout: map[string]any{
-				"candidate_window": map[string]any{
-					"band_gap": 99,
+				"toolbar": map[string]any{
+					"item_gap": 99,
 				},
 			},
 			Palette: map[string]any{
@@ -205,8 +205,8 @@ func TestResolveV25_Overrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Layout.CandidateWindow.BandGap != 99 {
-		t.Errorf("overrides band_gap want 99, got %d", r.Layout.CandidateWindow.BandGap)
+	if r.Layout.Toolbar.ItemGap != 99 {
+		t.Errorf("overrides toolbar.item_gap want 99, got %d", r.Layout.Toolbar.ItemGap)
 	}
 	if ColorToHexRGB(r.Palette.CandidateWindow.SelectedBg) != "#FF0000" {
 		t.Errorf("overrides selected_bg want #FF0000, got %s", ColorToHexRGB(r.Palette.CandidateWindow.SelectedBg))

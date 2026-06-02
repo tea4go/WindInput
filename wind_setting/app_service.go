@@ -285,10 +285,14 @@ func (a *App) GetThemePreview(themeName string, themeStyle string) (map[string]i
 	// 把 color.Color 转为 #RRGGBBAA 字符串供前端消费（P5：直接读 ResolvedV25.Palette/Layout）
 	cwc := rv.Palette.CandidateWindow
 	tbc := rv.Palette.Toolbar
-	idx := rv.Layout.CandidateWindow.CandidateList.Index
+	// 序号样式/标签 P7-5 起归口 views.index（背景形状 circle|none + labels）；rv.Views 生产路径恒非 nil。
 	indexStyle := "text"
-	if idx.Circle {
-		indexStyle = "circle"
+	var indexLabels []string
+	if v := rv.Views; v != nil {
+		if v.Index.Background.Shape == "circle" {
+			indexStyle = "circle"
+		}
+		indexLabels = v.Index.Labels
 	}
 
 	preview := map[string]interface{}{
@@ -326,21 +330,15 @@ func (a *App) GetThemePreview(themeName string, themeStyle string) (map[string]i
 		},
 		"style": map[string]interface{}{
 			"index_style":  indexStyle,
-			"index_labels": theme.BuildIndexLabelsFromSlots(idx.Labels),
+			"index_labels": theme.BuildIndexLabelsFromSlots(indexLabels),
 			"is_v25":       t.HasV25Schema(),
 		},
 		"is_dark": map[string]bool{
 			"active": isDark,
 		},
 	}
-	// v2.5 背景图（仅暴露 mode / opacity / 是否有图，不暴露内部指针）
-	if rv.Palette.Background != nil {
-		preview["background"] = map[string]interface{}{
-			"mode":      rv.Palette.Background.Mode,
-			"opacity":   rv.Palette.Background.Opacity,
-			"has_image": rv.Palette.Background.ImagePath != "",
-		}
-	}
+	// 注：palette 级背景图预览已于 P7-F 移除——背景图统一走 views.window.background.image + resources，
+	// 旧 palette.Background 机制已删。后续主题编辑（P3）按 views 重新设计预览。
 
 	return preview, nil
 }

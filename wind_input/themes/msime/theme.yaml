@@ -34,6 +34,10 @@ views:
     color: "${comment}"
   accent_bar:
     background: {color: "${accent}"}
+  metrics:
+    accent_bar:
+      enabled: true
+      width: 3
   status:
     background: {color: "${background}"}
     color: "${text}"

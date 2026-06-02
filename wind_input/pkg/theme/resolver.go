@@ -22,7 +22,7 @@ func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*Resol
 	if layout == nil {
 		return nil, fmt.Errorf("layout 解析返回空指针")
 	}
-	palette, paletteFileDir, err := m.resolvePaletteField(t.Palette, themeFileDir)
+	palette, _, err := m.resolvePaletteField(t.Palette, themeFileDir)
 	if err != nil {
 		return nil, fmt.Errorf("palette 解析失败: %w", err)
 	}
@@ -48,7 +48,7 @@ func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*Resol
 	fullLayout := mergeWithDensityBaseline(*layout)
 
 	// 4. palette 派生并展开引用
-	fullPalette, err := finalizePalette(palette, isDark, paletteFileDir)
+	fullPalette, err := finalizePalette(palette, isDark)
 	if err != nil {
 		return nil, fmt.Errorf("palette 派生失败: %w", err)
 	}
@@ -75,6 +75,17 @@ func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*Resol
 	// 6. behavior（v2.6 P6）：defaultBehavior 基线 ⊕ 主题 behavior（非 nil 字段覆盖）。
 	// 用户 override 不在此处——它在 ui/config 层注入（nil=跟随主题）。
 	rv.Behavior = mergeBehavior(defaultBehavior(), t.Behavior)
+
+	// 7. resources（v2.6 P7-C，D5）：名→绝对路径/data URI；相对路径相对 theme.yaml 目录解析。
+	// 渲染器据此把 ViewImage.ref 解码为位图（一次性缓存）。
+	if len(t.Resources) > 0 {
+		res := make(map[string]string, len(t.Resources))
+		for name, ref := range t.Resources {
+			// P7-E：按 isDark 选 light/dark 变体路径（单图写法两侧相同）。
+			res[name] = resolveImagePath(ref.PathFor(isDark), themeFileDir)
+		}
+		rv.Resources = res
+	}
 	return rv, nil
 }
 
@@ -196,8 +207,8 @@ func deepMergeMaps(dst, src map[string]any) map[string]any {
 	return out
 }
 
-// finalizePalette 派生缺省语义色 → 展开 ${} 引用 → 解析背景图路径
-func finalizePalette(p *PaletteSchema, isDark bool, paletteFileDir string) (ResolvedPalette, error) {
+// finalizePalette 派生缺省语义色 → 展开 ${} 引用
+func finalizePalette(p *PaletteSchema, isDark bool) (ResolvedPalette, error) {
 	var variant *PaletteVariant
 	if isDark {
 		variant = &p.Dark
@@ -233,15 +244,17 @@ func finalizePalette(p *PaletteSchema, isDark bool, paletteFileDir string) (Reso
 	out.Shadow = parseColorOrTransparent(variant.Shadow)
 
 	out.CandidateWindow = ResolvedCandidateWindowPalette{
-		Background:   resolveColorWithFallback(variant.CandidateWindow.Background, out.Bg),
-		Border:       resolveColorWithFallback(variant.CandidateWindow.Border, out.Border),
-		Text:         resolveColorWithFallback(variant.CandidateWindow.Text, out.Text),
-		Comment:      resolveColorWithFallback(variant.CandidateWindow.Comment, out.TextHint),
-		IndexBg:      resolveColorWithFallback(variant.CandidateWindow.IndexBg, out.Accent),
-		IndexText:    resolveColorWithFallback(variant.CandidateWindow.IndexText, out.OnAccent),
-		HoverBg:      resolveColorWithFallback(variant.CandidateWindow.HoverBg, out.Surface),
-		SelectedBg:   resolveColorWithFallback(variant.CandidateWindow.SelectedBg, out.Accent),
-		SelectedText: resolveColorWithFallback(variant.CandidateWindow.SelectedText, out.OnAccent),
+		Background: resolveColorWithFallback(variant.CandidateWindow.Background, out.Bg),
+		Border:     resolveColorWithFallback(variant.CandidateWindow.Border, out.Border),
+		Text:       resolveColorWithFallback(variant.CandidateWindow.Text, out.Text),
+		Comment:    resolveColorWithFallback(variant.CandidateWindow.Comment, out.TextHint),
+		IndexBg:    resolveColorWithFallback(variant.CandidateWindow.IndexBg, out.Accent),
+		IndexText:  resolveColorWithFallback(variant.CandidateWindow.IndexText, out.OnAccent),
+		HoverBg:    resolveColorWithFallback(variant.CandidateWindow.HoverBg, out.Surface),
+		SelectedBg: resolveColorWithFallback(variant.CandidateWindow.SelectedBg, out.Accent),
+		// 未配置时回退到普通文字色（而非 OnAccent）：P7-D 起选中文字会按 SelectedText 着色，
+		// 回退普通色＝复刻"选中字与普通字一致"的历史外观（零回归）；要白字反差须显式配 selected_text。
+		SelectedText: resolveColorWithFallback(variant.CandidateWindow.SelectedText, out.Text),
 		PreeditBg:    resolveColorWithFallback(variant.CandidateWindow.PreeditBg, out.Surface),
 		PreeditText:  resolveColorWithFallback(variant.CandidateWindow.PreeditText, out.TextDim),
 		AccentBar:    resolveColorWithFallback(variant.CandidateWindow.AccentBar, out.Accent),
@@ -282,28 +295,6 @@ func finalizePalette(p *PaletteSchema, isDark bool, paletteFileDir string) (Reso
 	out.Toast = ResolvedToastPalette{
 		Background: resolveColorWithFallback(variant.Toast.Background, out.Surface),
 		Text:       resolveColorWithFallback(variant.Toast.Text, out.Text),
-	}
-
-	// 背景图：相对路径转绝对
-	if p.Background != nil && p.Background.Image != "" {
-		bg := &ResolvedBackground{
-			Mode:  p.Background.Mode,
-			Slice: p.Background.Slice,
-		}
-		if bg.Mode == "" {
-			bg.Mode = "stretch"
-		}
-		if p.Background.Opacity != nil {
-			bg.Opacity = *p.Background.Opacity
-		} else {
-			bg.Opacity = 1.0
-		}
-		img := p.Background.Image
-		if isDark && p.Background.DarkImage != "" {
-			img = p.Background.DarkImage
-		}
-		bg.ImagePath = resolveImagePath(img, paletteFileDir)
-		out.Background = bg
 	}
 
 	return out, nil

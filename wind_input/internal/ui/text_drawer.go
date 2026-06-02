@@ -38,6 +38,12 @@ type TextDrawer interface {
 	// DrawStringWithWeight draws text with a specific font weight (100-900).
 	// If weight <= 0, behaves like DrawString with global weight.
 	DrawStringWithWeight(text string, x, y float64, fontSize float64, clr color.Color, weight int)
+	// MeasureStringFont measures text width using a specific platform font family (P7-B 逐元素字体)。
+	// 空 family 回退全局字体；未知 family 由平台文本引擎自行替换。
+	MeasureStringFont(text string, fontSize float64, family string) float64
+	// DrawStringFull draws text with explicit weight + platform font family (P7-B)。
+	// 空 family 回退全局字体；weight<=0 用全局字重；未知 family 由平台引擎替换。
+	DrawStringFull(text string, x, y float64, fontSize float64, clr color.Color, weight int, family string)
 	// EndDraw finalizes text drawing and flushes results to the image.
 	EndDraw()
 	// Close releases all resources held by this drawer.
@@ -270,6 +276,16 @@ func faceHasColorGlyphs(face ggtext.Face) bool {
 
 func (d *freeTypeDrawer) DrawStringWithWeight(text string, x, y float64, fontSize float64, clr color.Color, weight int) {
 	// FreeType doesn't support per-draw weight, fall back to regular DrawString
+	d.DrawString(text, x, y, fontSize, clr)
+}
+
+// MeasureStringFont：freeType 按文件路径加载字体，不支持按族名切换；忽略 family，用全局/fallback 度量。
+func (d *freeTypeDrawer) MeasureStringFont(text string, fontSize float64, family string) float64 {
+	return d.MeasureString(text, fontSize)
+}
+
+// DrawStringFull：freeType 无 per-draw 字重/族名能力，回退全局字体绘制。
+func (d *freeTypeDrawer) DrawStringFull(text string, x, y float64, fontSize float64, clr color.Color, weight int, family string) {
 	d.DrawString(text, x, y, fontSize, clr)
 }
 

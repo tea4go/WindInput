@@ -46,9 +46,10 @@ func (v *View) paintShapes(dc *gg.Context, img *image.RGBA) {
 		dc.Fill()
 	}
 
-	// 背景图（裁剪到圆角内：theme.DrawBackground 的 alpha-gate 依赖底色已填的非零 alpha）
+	// 背景图：传 Border.Radius 让 DrawBackground 按圆角矩形覆盖度裁角——内部元素（如选中候选项）
+	// 四周已被窗口底色填满，无法靠 alpha-gate 裁角，必须靠 radius 遮罩。
 	if v.Background.Image != nil {
-		theme.DrawBackground(img, r, v.Background.Image, modeOrStretch(v.Background.Mode), v.Background.Slice, opacityOr1(v.Background.Opacity))
+		theme.DrawBackground(img, r, v.Background.Image, modeOrStretch(v.Background.Mode), v.Background.Slice, opacityOr1(v.Background.Opacity), v.Border.Radius)
 	}
 
 	// 覆盖图层 z<0
@@ -87,16 +88,13 @@ func (v *View) paintText(td TextDrawer) {
 			fs := v.TextStyle.FontSize
 			tx := float64(r.Min.X + v.Padding.Left)
 			if v.TextStyle.Align == AlignCenter {
-				tw := td.MeasureString(v.Text, fs)
+				tw := td.MeasureStringFont(v.Text, fs, v.TextStyle.Family)
 				tx = float64(r.Min.X) + float64(r.Dx())/2 - tw/2
 			}
 			// 垂直基线：内容盒竖直中心 + fs/3（与旧渲染器 candY+fontSize/3 一致）
 			baselineY := float64(r.Min.Y) + float64(r.Dy())/2 + fs/3
-			if v.TextStyle.Weight > 0 {
-				td.DrawStringWithWeight(v.Text, tx, baselineY, fs, v.TextStyle.Color, v.TextStyle.Weight)
-			} else {
-				td.DrawString(v.Text, tx, baselineY, fs, v.TextStyle.Color)
-			}
+			// P7-B：统一走 DrawStringFull——family 空时内部回退按字重/全局字体绘制（零回归）。
+			td.DrawStringFull(v.Text, tx, baselineY, fs, v.TextStyle.Color, v.TextStyle.Weight, v.TextStyle.Family)
 		}
 		return
 	}
@@ -137,7 +135,8 @@ func drawLayer(dc *gg.Context, img *image.RGBA, host image.Rectangle, l *ImageLa
 	x += l.OffsetX
 	y += l.OffsetY
 	if l.Img != nil {
-		theme.DrawBackground(img, image.Rect(x, y, x+w, y+h), l.Img, modeOrStretch(l.Mode), l.Slice, opacityOr1(l.Opacity))
+		// 覆盖层（水印等装饰图）不按 host 圆角裁剪（radius=0）；其自身形状由素材 alpha 决定。
+		theme.DrawBackground(img, image.Rect(x, y, x+w, y+h), l.Img, modeOrStretch(l.Mode), l.Slice, opacityOr1(l.Opacity), 0)
 		return
 	}
 	dc.SetColor(l.Color)

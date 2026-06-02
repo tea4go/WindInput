@@ -181,9 +181,11 @@ type StatusIndicatorConfig struct {
 type UIConfig struct {
 	FontSize float64 `yaml:"font_size" json:"font_size"`
 	// FontSizeFollowTheme=true 时候选字号跟随主题 behavior.font_size，忽略 FontSize；
-	// false=用 FontSize 自定义。omitempty + 探针迁移：老配置（无此字段）视为自定义（零回归），
-	// 新装 DefaultConfig 设 true（跟随主题）。见 LoadFrom 迁移与 renderer.recomputeBaseFont。
-	FontSizeFollowTheme     bool             `yaml:"font_size_follow_theme,omitempty" json:"font_size_follow_theme"`
+	// false=用 FontSize 自定义。默认 true（新装跟随主题）。
+	// 注意：**不可加 omitempty**——默认值为 true 时，omitempty 会把"显式 false"与"未设置"
+	// 在 YAML 中混为一谈，破坏 diff-save/merge-on-default 的闭环（false 写不出、回读成默认 true）。
+	// 走通用「缺失=继承默认」机制，无特例探针。见 renderer.recomputeBaseFont。
+	FontSizeFollowTheme     bool             `yaml:"font_size_follow_theme" json:"font_size_follow_theme"`
 	CandidatesPerPage       int              `yaml:"candidates_per_page" json:"candidates_per_page"`
 	FontFamily              string           `yaml:"font_family" json:"font_family"`
 	FontPath                string           `yaml:"font_path" json:"font_path"`
@@ -581,19 +583,6 @@ func LoadFrom(path string) (*Config, error) {
 
 	if err := yaml.Unmarshal(userData, cfg); err != nil {
 		return DefaultConfig(), fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	// 迁移：老用户配置（存在但未写 font_size_follow_theme）视为「自定义字号」——
-	// 三层 merge-on-default 会让缺失字段继承 DefaultConfig 的 true，故用探针检测用户文件
-	// 是否显式写过该字段；未写则置 false 保留现有字号（零回归）。新装无用户文件，
-	// 在上面 os.IsNotExist 分支已提前返回 DefaultConfig（跟随主题），不经过此处。
-	var probe struct {
-		UI struct {
-			FontSizeFollowTheme *bool `yaml:"font_size_follow_theme"`
-		} `yaml:"ui"`
-	}
-	if yaml.Unmarshal(userData, &probe) == nil && probe.UI.FontSizeFollowTheme == nil {
-		cfg.UI.FontSizeFollowTheme = false
 	}
 
 	// 兜底校验

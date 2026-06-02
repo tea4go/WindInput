@@ -14,6 +14,7 @@ import (
 	"image/color"
 
 	"github.com/huanfeng/wind_input/pkg/config"
+	"github.com/huanfeng/wind_input/pkg/theme"
 )
 
 // buildEmbeddedPreedit 构建内嵌预编辑（PreeditEmbedded 模式）：编码 + ModeLabel 内嵌到候选行首，
@@ -23,9 +24,10 @@ func (r *Renderer) buildEmbeddedPreedit(input string, cursorPos, rowH int, scale
 	if input == "" && cfg.ModeLabel == "" {
 		return nil
 	}
+	pbFS := r.resolvedViews.PreeditBar.FontSize // P7-B：预编辑字号（views 显式或运行时回填）
 	children := make([]*View, 0, 2)
 	if input != "" {
-		children = append(children, &View{Text: input, TextStyle: TextStyle{FontSize: cfg.FontSize, Color: r.resolvedViews.PreeditBar.TextColor}})
+		children = append(children, &View{Text: input, TextStyle: TextStyle{FontSize: pbFS, Weight: r.resolvedViews.PreeditBar.FontWeight, Family: r.resolvedViews.PreeditBar.FontFamily, Color: r.resolvedViews.PreeditBar.TextColor}})
 	}
 	if cfg.ModeLabel != "" {
 		ml := &View{Text: cfg.ModeLabel, TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Color: r.getCommentColor()}}
@@ -40,7 +42,7 @@ func (r *Renderer) buildEmbeddedPreedit(input string, cursorPos, rowH int, scale
 		Children: children,
 	}
 	if input != "" && cursorPos >= 0 && cursorPos <= len(input) {
-		cw := r.textDrawer.MeasureString(input[:cursorPos], cfg.FontSize)
+		cw := measureText(r.textDrawer, input[:cursorPos], pbFS, r.resolvedViews.PreeditBar.FontFamily)
 		inline.Layers = append(inline.Layers, ImageLayer{
 			Color: r.resolvedViews.PreeditBar.TextColor, Z: 1, Anchor: "left",
 			OffsetX: int(cw + 0.5), W: maxInt(1, sc(1.5*scale)), H: int(float64(rowH) * 0.7),
@@ -57,9 +59,11 @@ func (r *Renderer) buildPreeditBand(input string, cursorPos, inputH int, scale f
 	if cfg.ModeAccentColor != nil {
 		bgColor = blendColor(r.resolvedViews.PreeditBar.BgColor, cfg.ModeAccentColor, 35) // 临时拼音等模式：input 区半透 accent 叠加
 	}
+	pb := &r.resolvedViews.PreeditBar
+	pbFS := pb.FontSize // P7-B：预编辑字号（views 显式或运行时回填）
 	children := []*View{{
 		Text:      input,
-		TextStyle: TextStyle{FontSize: cfg.FontSize, Color: r.resolvedViews.PreeditBar.TextColor},
+		TextStyle: TextStyle{FontSize: pbFS, Weight: pb.FontWeight, Family: pb.FontFamily, Color: pb.TextColor},
 	}}
 	if cfg.ModeLabel != "" {
 		children = append(children,
@@ -67,19 +71,19 @@ func (r *Renderer) buildPreeditBand(input string, cursorPos, inputH int, scale f
 			&View{Text: cfg.ModeLabel, TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Color: r.getCommentColor()}},
 		)
 	}
-	pb := &r.resolvedViews.PreeditBar
 	band := &View{
 		Layout: LayoutRow, CrossAlign: AlignCenter, Stretch: true, FixedH: inputH,
 		Padding:    Edges{Left: sc(float64(pb.PadLeft)), Right: sc(float64(pb.PadRight))},
-		Background: Fill{Color: bgColor},
+		Background: r.fillFor(bgColor, pb.BgImage), // P7-C：preedit 背景可带图
 		Border:     Border{Radius: sc(float64(pb.BorderRadius))},
 		Children:   children,
 	}
+	r.appendThemeLayers(band, pb.Layers, sc)
 	if input != "" && cursorPos >= 0 && cursorPos <= len(input) {
-		cw := r.textDrawer.MeasureString(input[:cursorPos], cfg.FontSize)
+		cw := measureText(r.textDrawer, input[:cursorPos], pbFS, pb.FontFamily)
 		band.Layers = append(band.Layers, ImageLayer{
-			Color: r.resolvedViews.PreeditBar.TextColor, Z: 1, Anchor: "left",
-			OffsetX: sc(float64(pb.PadLeft)) + int(cw+0.5), W: maxInt(1, sc(1.5*scale)), H: int(cfg.FontSize + 0.5),
+			Color: pb.TextColor, Z: 1, Anchor: "left",
+			OffsetX: sc(float64(pb.PadLeft)) + int(cw+0.5), W: maxInt(1, sc(1.5*scale)), H: int(pbFS + 0.5),
 		})
 	}
 	return band
@@ -91,20 +95,22 @@ func (r *Renderer) windowBorder(radius int, sc func(float64) int, scale float64)
 	if cfg.ModeAccentColor != nil {
 		return Border{Width: maxInt(1, sc(2.5*scale)), Color: cfg.ModeAccentColor, Radius: radius}
 	}
-	return Border{Width: 1, Color: r.resolvedViews.Window.BorderColor, Radius: radius}
+	// 非 accent：边框宽来自 views.window.border.width（逻辑像素，经 sc 缩放）；0=无边框。
+	return Border{Width: sc(float64(r.resolvedViews.Window.BorderWidth)), Color: r.resolvedViews.Window.BorderColor, Radius: radius}
 }
 
 // truncateToWidth 把 text 截断到不超过 avail 像素宽，超出时尾部加省略号。
-func (r *Renderer) truncateToWidth(text string, fontSize, avail float64) string {
-	if avail <= 0 || r.textDrawer.MeasureString(text, fontSize) <= avail {
+// family 用于按元素字体度量（P7-B），空=全局字体。
+func (r *Renderer) truncateToWidth(text string, fontSize, avail float64, family string) string {
+	if avail <= 0 || measureText(r.textDrawer, text, fontSize, family) <= avail {
 		return text
 	}
 	const ell = "…"
-	ellW := r.textDrawer.MeasureString(ell, fontSize)
+	ellW := measureText(r.textDrawer, ell, fontSize, family)
 	runes := []rune(text)
 	for len(runes) > 0 {
 		runes = runes[:len(runes)-1]
-		if r.textDrawer.MeasureString(string(runes), fontSize)+ellW <= avail {
+		if measureText(r.textDrawer, string(runes), fontSize, family)+ellW <= avail {
 			return string(runes) + ell
 		}
 	}
@@ -127,6 +133,70 @@ func blendColor(base, over color.Color, overAlpha uint32) color.Color {
 	inv := 255 - overAlpha
 	mix := func(b, o uint32) uint8 { return uint8(((o>>8)*overAlpha + (b>>8)*inv) / 255) }
 	return color.RGBA{mix(br, or), mix(bg, og), mix(bb, ob), 255}
+}
+
+// itemStateFor 选取候选项当前要应用的状态 patch（P7-D）：selected 优先于 hover；
+// 均不命中返回 nil（沿用基态）。disabled 候选项暂无运行时触发器，不在此选取（schema 预留）。
+func itemStateFor(item theme.RVNode, selected, hover bool) *theme.RVState {
+	if selected {
+		return item.Selected
+	}
+	if hover {
+		return item.Hover
+	}
+	return nil
+}
+
+// stateBg 取状态 patch 的底色（nil-safe）；用于不需要位图/边框的轻量场景（如翻页按钮 hover）。
+func stateBg(st *theme.RVState) color.Color {
+	if st != nil {
+		return st.BgColor
+	}
+	return nil
+}
+
+// elementTextState 取元素在当前选中/悬停下的有效文字色与字重（P7-D）：
+// 元素自身 selected/hover patch 提供则覆盖，否则用基态（默认与普通态一致）。
+func elementTextState(n theme.RVNode, selected, hover bool) (color.Color, int) {
+	c, w := n.TextColor, n.FontWeight
+	if st := itemStateFor(n, selected, hover); st != nil {
+		if st.TextColor != nil {
+			c = st.TextColor
+		}
+		if st.FontWeight != 0 {
+			w = st.FontWeight
+		}
+	}
+	return c, w
+}
+
+// elementFill 取元素在当前选中/悬停下的有效背景填充（P7-D）：state 的底色/位图覆盖基态。
+func (r *Renderer) elementFill(n theme.RVNode, selected, hover bool) Fill {
+	bg, img := n.BgColor, n.BgImage
+	if st := itemStateFor(n, selected, hover); st != nil {
+		if st.BgColor != nil {
+			bg = st.BgColor
+		}
+		if st.BgImage != nil {
+			img = st.BgImage
+		}
+	}
+	return r.fillFor(bg, img)
+}
+
+// applyItemState 把状态 patch 应用到候选项 View：背景（高亮位图优先于底色）+ 边框覆盖（P7-D）。
+// 文字色/字重在行内构建文本 cell 时单独应用（整行统一），不在此处理。
+func (r *Renderer) applyItemState(item *View, st *theme.RVState, sc func(float64) int) {
+	if st == nil {
+		return
+	}
+	item.Background = r.fillFor(st.BgColor, st.BgImage) // 高亮位图（Fill.Image）优先于底色
+	if st.BorderColor != nil {
+		item.Border.Color = st.BorderColor
+	}
+	if st.BorderWidth != nil {
+		item.Border.Width = sc(float64(*st.BorderWidth))
+	}
 }
 
 // buildAccentRail 构建强调条占位元素：作为候选项行的前导 View，FixedW=railW 在**所有行**
@@ -191,35 +261,54 @@ func (r *Renderer) buildHorizontalCandidateTree(
 	if isTextIndex {
 		commentSize = rv.Index.FontSize + 2*scale
 	}
+	if rv.Comment.FontSize > 0 { // P7-B：views.comment.font_size 显式则绝对覆盖派生值
+		commentSize = rv.Comment.FontSize
+	}
 	indexSize := maxF(18*scale, rv.Index.FontSize+4*scale)
 	rowH := int(rv.ItemHeight + 0.5)
-	commentColor := rv.Comment.TextColor
 
 	// ---- 候选项 ----
 	items := make([]*View, 0, len(candidates))
 	for i, cand := range candidates {
 		children := make([]*View, 0, 3)
 
+		// P7-D：选中/悬停态只重着色/加粗**候选文字**；序号、注释各用自身配色（独立，避免误伤蓝圆白数字序号）。
+		st := itemStateFor(rv.Item, i == selectedIndex, i == hoverIndex)
+		textColor, textWeight := rv.Text.TextColor, rv.Text.FontWeight
+		if st != nil {
+			if st.TextColor != nil {
+				textColor = st.TextColor
+			}
+			if st.FontWeight != 0 {
+				textWeight = st.FontWeight
+			}
+		}
+
+		// 序号/注释各自的选中态（独立于候选文字；未配置=与普通态一致）
+		sel, hov := i == selectedIndex, i == hoverIndex
+		idxColor, idxWeight := elementTextState(rv.Index, sel, hov)
+		cmtColor, cmtWeight := elementTextState(rv.Comment, sel, hov)
+
 		if cand.Index >= 0 {
 			label := indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel)
 			if isTextIndex {
 				children = append(children, &View{
 					Text:      label,
-					TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: rv.Index.FontWeight, Color: rv.Index.TextColor},
+					TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: idxWeight, Family: rv.Index.FontFamily, Color: idxColor},
 				})
 			} else {
 				d := int(indexSize + 0.5)
 				children = append(children, &View{
 					FixedW:     d,
 					FixedH:     d,
-					Background: Fill{Color: rv.Index.BgColor},
+					Background: r.elementFill(rv.Index, sel, hov), // P7-C/D：序号背景可带图、可随选中态变
 					Border:     Border{Radius: d / 2},
 					Layout:     LayoutStack,
 					Children: []*View{{
 						FixedW:    d,
 						FixedH:    d,
 						Text:      label,
-						TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: rv.Index.FontWeight, Color: rv.Index.TextColor, Align: AlignCenter},
+						TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: idxWeight, Family: rv.Index.FontFamily, Color: idxColor, Align: AlignCenter},
 					}},
 				})
 			}
@@ -228,7 +317,7 @@ func (r *Renderer) buildHorizontalCandidateTree(
 		// 候选文字
 		textChild := &View{
 			Text:      candidateDisplayText(cand, cfg.CmdbarPrefix),
-			TextStyle: TextStyle{FontSize: rv.Text.FontSize, Color: rv.Text.TextColor},
+			TextStyle: TextStyle{FontSize: rv.Text.FontSize, Weight: textWeight, Family: rv.Text.FontFamily, Color: textColor},
 		}
 		if len(children) > 0 {
 			textChild.Margin = Edges{Left: sc(indexMarginRight)}
@@ -239,7 +328,7 @@ func (r *Renderer) buildHorizontalCandidateTree(
 		if cand.Comment != "" {
 			children = append(children, &View{
 				Text:      cand.Comment,
-				TextStyle: TextStyle{FontSize: commentSize, Color: commentColor},
+				TextStyle: TextStyle{FontSize: commentSize, Weight: cmtWeight, Family: rv.Comment.FontFamily, Color: cmtColor},
 				Margin:    Edges{Left: sc(commentMarginLeft)},
 			})
 		}
@@ -260,11 +349,8 @@ func (r *Renderer) buildHorizontalCandidateTree(
 			Border:     Border{Radius: sc(float64(rv.Item.BorderRadius))},
 			Children:   itemChildren,
 		}
-		if i == selectedIndex {
-			item.Background = Fill{Color: rv.Item.SelectedBg}
-		} else if i == hoverIndex {
-			item.Background = Fill{Color: rv.Item.HoverBg}
-		}
+		r.applyItemState(item, st, sc)                // P7-D：选中/悬停态背景（高亮位图/底色）+ 边框
+		r.appendThemeLayers(item, rv.Item.Layers, sc) // P7-C：候选项装饰层（per-item 覆盖图）
 		items = append(items, item)
 	}
 
@@ -304,11 +390,12 @@ func (r *Renderer) buildHorizontalCandidateTree(
 		Layout:     LayoutColumn,
 		Gap:        sc(float64(rv.WindowGap)),
 		Padding:    Edges{Top: sc(padY), Right: sc(padX), Bottom: sc(padY), Left: sc(padX)},
-		Background: Fill{Color: rv.Window.BgColor, Image: cfg.BackgroundImage, Mode: cfg.BackgroundMode, Slice: cfg.BackgroundSlice, Opacity: cfg.BackgroundOpacity},
+		Background: r.fillFor(rv.Window.BgColor, rv.Window.BgImage), // P7-C：背景图来自 views.window.background.image
 		Border:     r.windowBorder(sc(float64(rv.Window.BorderRadius)), sc, scale),
-		Shadow:     &ViewShadow{OffsetX: sc(float64(rv.ShadowOffset)), OffsetY: sc(float64(rv.ShadowOffset)), Color: rv.ShadowColor},
+		Shadow:     &ViewShadow{OffsetX: sc(float64(rv.ShadowOffsetX)), OffsetY: sc(float64(rv.ShadowOffsetY)), Color: rv.ShadowColor},
 		Children:   bands,
 	}
+	r.appendThemeLayers(window, rv.Window.Layers, sc) // P7-C：窗口装饰层（水印等）
 	return &candWindowTree{root: window, items: items, pagerUp: pagerUp, pagerDown: pagerDown}
 }
 

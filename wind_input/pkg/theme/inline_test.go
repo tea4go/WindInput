@@ -57,8 +57,8 @@ func TestInlineTheme_AppliesOverrides(t *testing.T) {
 		Palette: "test-palette",
 		Overrides: &Overrides{
 			Layout: map[string]any{
-				"candidate_window": map[string]any{
-					"band_gap": 88,
+				"toolbar": map[string]any{
+					"item_gap": 88,
 				},
 			},
 		},
@@ -74,8 +74,8 @@ func TestInlineTheme_AppliesOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Layout.CandidateWindow.BandGap != 88 {
-		t.Errorf("overrides 未合并到内联，band_gap=%d", r.Layout.CandidateWindow.BandGap)
+	if r.Layout.Toolbar.ItemGap != 88 {
+		t.Errorf("overrides 未合并到内联，toolbar.item_gap=%d", r.Layout.Toolbar.ItemGap)
 	}
 }
 

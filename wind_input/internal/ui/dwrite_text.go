@@ -1158,7 +1158,7 @@ func (r *DWriteRenderer) DrawString(text string, x, y float64, fontSize float64,
 	if !r.inDraw || r.target == nil {
 		return
 	}
-	r.drawStringLocked(text, x, y, fontSize, clr, r.fontWeight)
+	r.drawStringLocked(text, x, y, fontSize, clr, r.fontWeight, "")
 }
 
 // DrawStringWithWeight draws text with a specific font weight (100–900).
@@ -1172,12 +1172,76 @@ func (r *DWriteRenderer) DrawStringWithWeight(text string, x, y float64, fontSiz
 	if !r.inDraw || r.target == nil {
 		return
 	}
-	r.drawStringLocked(text, x, y, fontSize, clr, weight)
+	r.drawStringLocked(text, x, y, fontSize, clr, weight, "")
 }
 
-func (r *DWriteRenderer) drawStringLocked(text string, x, y float64, fontSize float64, clr color.Color, weight int) {
+// MeasureStringFont measures text width using an explicit platform font family (P7-B)。
+// family 为空回退主字体度量；非空时按该族名度量（未知名由 DirectWrite 自行替换）。
+func (r *DWriteRenderer) MeasureStringFont(text string, fontSize float64, family string) float64 {
+	if family == "" {
+		return r.MeasureString(text, fontSize)
+	}
+	if text == "" {
+		return 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.ensureInitLocked() {
+		return 0
+	}
 	scaledSize := r.scaledFontSize(fontSize)
-	family := r.fontName
+	fam := FontSpecToName(family)
+	if containsSymbolChars(text) {
+		fam = dwriteSymbolFont
+	}
+	format := r.getFormatLocked(fam, r.fontWeight, scaledSize)
+	if format == nil {
+		return 0
+	}
+	layout, err := dwCreateTextLayout(dwriteSharedFactory, format, text)
+	if err != nil || layout == nil {
+		return 0
+	}
+	defer dwComRelease(layout)
+	dwApplyFontFallback(layout, r.effectiveFallback())
+	metrics, err := dwGetTextMetrics(layout)
+	if err != nil {
+		return 0
+	}
+	return float64(metrics.WidthIncludingTrailingWhitespace)
+}
+
+// DrawStringFull draws text with explicit weight + platform font family (P7-B)。
+// family 为空回退按字重绘制；非空时按该族名绘制（经 FontSpecToName 归一，未知名由 DirectWrite 替换）。
+func (r *DWriteRenderer) DrawStringFull(text string, x, y float64, fontSize float64, clr color.Color, weight int, family string) {
+	if family == "" {
+		if weight > 0 {
+			r.DrawStringWithWeight(text, x, y, fontSize, clr, weight)
+		} else {
+			r.DrawString(text, x, y, fontSize, clr)
+		}
+		return
+	}
+	if text == "" {
+		return
+	}
+	if weight <= 0 {
+		weight = r.fontWeight
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.inDraw || r.target == nil {
+		return
+	}
+	r.drawStringLocked(text, x, y, fontSize, clr, weight, FontSpecToName(family))
+}
+
+func (r *DWriteRenderer) drawStringLocked(text string, x, y float64, fontSize float64, clr color.Color, weight int, baseFamily string) {
+	scaledSize := r.scaledFontSize(fontSize)
+	family := baseFamily // P7-B：逐元素字体族；空=主字体
+	if family == "" {
+		family = r.fontName
+	}
 	if containsSymbolChars(text) {
 		family = dwriteSymbolFont
 	}

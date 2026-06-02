@@ -40,6 +40,14 @@ func (d *gdiDrawer) DrawStringWithWeight(text string, x, y float64, fontSize flo
 	d.tr.DrawStringWithWeight(text, x, y, fontSize, clr, weight)
 }
 
+func (d *gdiDrawer) MeasureStringFont(text string, fontSize float64, family string) float64 {
+	return d.tr.MeasureStringFont(text, fontSize, family)
+}
+
+func (d *gdiDrawer) DrawStringFull(text string, x, y float64, fontSize float64, clr color.Color, weight int, family string) {
+	d.tr.DrawStringFull(text, x, y, fontSize, clr, weight, family)
+}
+
 func (d *gdiDrawer) EndDraw() {
 	d.tr.EndDraw()
 }
@@ -77,6 +85,14 @@ func (d *directWriteDrawer) DrawString(text string, x, y float64, fontSize float
 
 func (d *directWriteDrawer) DrawStringWithWeight(text string, x, y float64, fontSize float64, clr color.Color, weight int) {
 	d.tr.DrawStringWithWeight(text, x, y, fontSize, clr, weight)
+}
+
+func (d *directWriteDrawer) MeasureStringFont(text string, fontSize float64, family string) float64 {
+	return d.tr.MeasureStringFont(text, fontSize, family)
+}
+
+func (d *directWriteDrawer) DrawStringFull(text string, x, y float64, fontSize float64, clr color.Color, weight int, family string) {
+	d.tr.DrawStringFull(text, x, y, fontSize, clr, weight, family)
 }
 
 func (d *directWriteDrawer) EndDraw() {
