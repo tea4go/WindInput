@@ -107,11 +107,12 @@ type Views struct {
 	Comment       ViewNode      `yaml:"comment,omitempty"`
 	AccentBar     ViewNode      `yaml:"accent_bar,omitempty"`
 	FooterBar     ViewNode      `yaml:"footer_bar,omitempty"`
-	Status        *ViewNode     `yaml:"status,omitempty"`  // P4-A 状态泡（独立窗口，单节点）
-	Tooltip       *ViewNode     `yaml:"tooltip,omitempty"` // P4-B Tooltip（独立窗口，单节点）
-	Toolbar       *ToolbarViews `yaml:"toolbar,omitempty"` // P4-C 工具栏
-	Menu          *MenuViews    `yaml:"menu,omitempty"`    // P4-D 弹出菜单
-	Metrics       *ViewMetrics  `yaml:"metrics,omitempty"` // P6 候选窗列表级几何
+	ModeLabel     ViewNode      `yaml:"mode_label,omitempty"` // 临时拼音等模式徽标（预编辑栏内）：font_size 相对偏移 + color
+	Status        *ViewNode     `yaml:"status,omitempty"`     // P4-A 状态泡（独立窗口，单节点）
+	Tooltip       *ViewNode     `yaml:"tooltip,omitempty"`    // P4-B Tooltip（独立窗口，单节点）
+	Toolbar       *ToolbarViews `yaml:"toolbar,omitempty"`    // P4-C 工具栏
+	Menu          *MenuViews    `yaml:"menu,omitempty"`       // P4-D 弹出菜单
+	Metrics       *ViewMetrics  `yaml:"metrics,omitempty"`    // P6 候选窗列表级几何
 }
 
 // ViewMetrics 候选窗"列表级"几何（P6）：不便归入单个 ViewNode 的尺寸。全部可空指针，nil=走 defaultViews 基线。
@@ -202,6 +203,7 @@ type ResolvedViews struct {
 	Comment       RVNode
 	AccentBar     RVNode
 	FooterBar     RVNode
+	ModeLabel     RVNode // 临时拼音等模式徽标（预编辑栏内）
 
 	// 几何杂项（Dimension 带 px/dp 单位 / 倍率）
 	WindowGap        Dimension   // window 列间距（band 之间）
@@ -326,6 +328,7 @@ func defaultViews() Views {
 		Comment:    ViewNode{FontSize: intp(-4), Margin: ViewEdges{Left: dimp(8)}},                                   // 注释字号默认 base-4；text→comment 间距
 		AccentBar:  ViewNode{},
 		FooterBar:  ViewNode{FontSize: intp(-4)}, // 翻页/页码字号默认 base-4
+		ModeLabel:  ViewNode{FontSize: intp(-4)}, // 模式徽标字号默认 base-4；颜色默认 ${comment}
 		Metrics: &ViewMetrics{
 			ItemSpacing:  dimp(12),
 			BandGap:      dimp(2),
@@ -437,6 +440,7 @@ func mergeViews(base, ov Views) Views {
 		Comment:       mergeViewNode(base.Comment, ov.Comment),
 		AccentBar:     mergeViewNode(base.AccentBar, ov.AccentBar),
 		FooterBar:     mergeViewNode(base.FooterBar, ov.FooterBar),
+		ModeLabel:     mergeViewNode(base.ModeLabel, ov.ModeLabel),
 		Metrics:       mergeMetrics(base.Metrics, ov.Metrics),
 	}
 	// 独立窗口 views（Status/Tooltip/Toolbar/Menu）整体透传：ov 非 nil 取 ov，否则 base 兜底。

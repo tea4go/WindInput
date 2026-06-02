@@ -71,9 +71,9 @@ func ResolveCandidateViews(views Views, pal ResolvedPalette) ResolvedViews {
 			BgColor:      defBg,
 			BorderColor:  defBorder,
 			TextColor:    defText,
-			// P7-B：逐元素字体——字号为「逻辑像素绝对值」（0=未写，由 ui 回填运行时派生值），
-			// 字重 0=继承全局；字体族名空=继承全局（未知名由平台文本引擎回退）；
-			// ui 侧（refreshResolvedViews）对显式字号 ×DPI scale。
+			// 逐元素字体：FontSize 此处存「相对主候选字体的有符号偏移」（0/未写=同主字体），
+			// 由 ui 侧 refreshResolvedViews 换算为 base+offset×scale；
+			// 字重 0=继承全局；字体族名空=继承全局（未知名由平台文本引擎回退）。
 			FontSize:   float64(edgeOr(n.FontSize, 0)),
 			FontWeight: edgeOr(n.FontWeight, 0),
 			FontFamily: n.FontFamily,
@@ -111,7 +111,9 @@ func ResolveCandidateViews(views Views, pal ResolvedPalette) ResolvedViews {
 		Comment:       build(views.Comment, nil, nil, cw.Comment),
 		AccentBar:     build(views.AccentBar, cw.AccentBar, nil, nil),
 		FooterBar:     build(views.FooterBar, nil, nil, nil),
-		ShadowColor:   pal.Shadow,
+		ModeLabel:     build(views.ModeLabel, nil, nil, cw.Comment), // 模式徽标默认文字色 = 候选注释色
+
+		ShadowColor: pal.Shadow,
 	}
 	// P7-D：item 三态解析为完整 patch。selected 默认 palette SelectedBg/SelectedText，
 	// hover 默认 HoverBg（文字沿用基态），disabled 无 palette 默认（schema 预留）。

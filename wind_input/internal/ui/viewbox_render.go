@@ -31,6 +31,7 @@ func (r *Renderer) refreshResolvedViews() {
 	r.resolvedViews.Index.FontSize = base + r.resolvedViews.Index.FontSize*scale
 	r.resolvedViews.Comment.FontSize = base + r.resolvedViews.Comment.FontSize*scale
 	r.resolvedViews.FooterBar.FontSize = base + r.resolvedViews.FooterBar.FontSize*scale
+	r.resolvedViews.ModeLabel.FontSize = base + r.resolvedViews.ModeLabel.FontSize*scale
 	r.resolvedViews.ItemHeight = r.config.ItemHeight
 	// 竖排最大宽：用户运行时覆盖优先（cfg，目前仅测试设置），否则跟随主题 behavior.vertical_max_width。
 	r.resolvedViews.VerticalMaxWidth = pickF(r.config.VerticalMaxWidth, float64(r.resolvedV25.Behavior.VerticalMaxWidth))

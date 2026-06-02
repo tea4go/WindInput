@@ -30,7 +30,8 @@ func (r *Renderer) buildEmbeddedPreedit(input string, cursorPos, rowH int, scale
 		children = append(children, &View{Text: input, TextStyle: TextStyle{FontSize: pbFS, Weight: r.resolvedViews.PreeditBar.FontWeight, Family: r.resolvedViews.PreeditBar.FontFamily, Color: r.resolvedViews.PreeditBar.TextColor}})
 	}
 	if cfg.ModeLabel != "" {
-		ml := &View{Text: cfg.ModeLabel, TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Color: r.getCommentColor()}}
+		mlv := &r.resolvedViews.ModeLabel
+		ml := &View{Text: cfg.ModeLabel, TextStyle: TextStyle{FontSize: mlv.FontSize, Weight: mlv.FontWeight, Family: mlv.FontFamily, Color: mlv.TextColor}}
 		if len(children) > 0 {
 			ml.Margin = Edges{Left: sc(4 * scale)}
 		}
@@ -68,7 +69,7 @@ func (r *Renderer) buildPreeditBand(input string, cursorPos, inputH int, scale f
 	if cfg.ModeLabel != "" {
 		children = append(children,
 			&View{Grow: true}, // 弹性占位把标签推到右侧
-			&View{Text: cfg.ModeLabel, TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Color: r.getCommentColor()}},
+			&View{Text: cfg.ModeLabel, TextStyle: TextStyle{FontSize: r.resolvedViews.ModeLabel.FontSize, Weight: r.resolvedViews.ModeLabel.FontWeight, Family: r.resolvedViews.ModeLabel.FontFamily, Color: r.resolvedViews.ModeLabel.TextColor}},
 		)
 	}
 	band := &View{

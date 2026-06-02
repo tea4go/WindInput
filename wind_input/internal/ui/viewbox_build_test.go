@@ -17,7 +17,6 @@ func TestBuildHorizontalCandidateTree_DumpPNG(t *testing.T) {
 	cfg := RenderConfig{
 		TextRenderMode: TextRenderModeFreetype,
 		FontSize:       18,
-		IndexFontSize:  14,
 		ItemHeight:     32,
 		IndexStyle:     "circle",
 		HasAccentBar:   true,

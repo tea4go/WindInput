@@ -19,8 +19,7 @@ import (
 // 字体文件选择与 fallback 细节由 FontConfig 接管。
 type RenderConfig struct {
 	FontPath          string
-	FontSize          float64                // 候选主文本字号（已乘 DPI scale）；回填进 resolvedViews
-	IndexFontSize     float64                // 序号字号（= FontSize-4，已乘 scale）；回填进 resolvedViews
+	FontSize          float64                // 候选主文本字号（base，已乘 DPI scale）；其余元素字号 = base + 主题相对偏移
 	ItemHeight        float64                // 行高（已乘 scale）；回填进 resolvedViews
 	Layout            config.CandidateLayout // "horizontal" or "vertical"
 	HidePreedit       bool                   // Hide preedit area when inline_preedit is enabled
@@ -52,7 +51,6 @@ func DefaultRenderConfig() RenderConfig {
 	return RenderConfig{
 		FontPath:       "", // Will use system font
 		FontSize:       18 * scale,
-		IndexFontSize:  14 * scale,
 		ItemHeight:     32 * scale,
 		Layout:         config.LayoutHorizontal, // Default to horizontal layout
 		HidePreedit:    false,
@@ -240,7 +238,8 @@ func (r *Renderer) GetTextRenderMode() TextRenderMode {
 }
 
 // applyFontDerivation 用当前 baseFontSize + DPI scale 重算字号派生：
-// 主文本=base、序号=base-4、行高=max(32, base*1.8)，均 ×scale。
+// 主候选字体=base、行高=max(32, base*1.8)，均 ×scale。
+// 序号/注释/页码/模式徽标字号一律由主题 views.<el>.font_size 相对 base 偏移（零派生魔法，见 refreshResolvedViews）。
 // P7-5：候选窗行高恒由字号派生（不再支持主题级固定行高 themeRowHeight），自然高度=文字+item 内边距由盒模型决定。
 func (r *Renderer) applyFontDerivation() {
 	scale := GetDPIScale()
@@ -249,7 +248,6 @@ func (r *Renderer) applyFontDerivation() {
 		base = 18
 	}
 	r.config.FontSize = base * scale
-	r.config.IndexFontSize = (base - 4) * scale
 	r.config.ItemHeight = math.Max(32, base*1.8) * scale
 }
 
@@ -447,14 +445,6 @@ func (r *Renderer) appendThemeLayers(v *View, layers []theme.RVImage, sc func(fl
 			H:       sc(float64(L.H)),
 		})
 	}
-}
-
-// getCommentColor returns the comment color from theme or default
-func (r *Renderer) getCommentColor() color.Color {
-	if r.resolvedV25 != nil {
-		return r.resolvedV25.Palette.CandidateWindow.Comment
-	}
-	return color.RGBA{150, 150, 150, 255}
 }
 
 // getModeIndicatorColors returns mode indicator colors from theme or defaults

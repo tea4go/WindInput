@@ -26,7 +26,6 @@ func parityConfig() RenderConfig {
 		TextRenderMode: TextRenderModeFreetype,
 		Layout:         config.LayoutHorizontal,
 		FontSize:       18,
-		IndexFontSize:  14,
 		ItemHeight:     32,
 		IndexStyle:     "circle",
 		HasAccentBar:   true,
