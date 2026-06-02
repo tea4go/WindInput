@@ -41,7 +41,7 @@ func (c *Coordinator) UpdateUIConfig(uiConfig *config.UIConfig) {
 		if fontSpec == "" {
 			fontSpec = uiConfig.FontPath
 		}
-		c.uiManager.UpdateConfig(uiConfig.FontSize, fontSpec, uiConfig.HideCandidateWindow)
+		c.uiManager.UpdateConfig(uiConfig.FontSize, uiConfig.FontSizeFollowTheme, fontSpec, uiConfig.HideCandidateWindow)
 		// Update candidate layout
 		if uiConfig.CandidateLayout != "" {
 			c.uiManager.SetCandidateLayout(uiConfig.CandidateLayout)

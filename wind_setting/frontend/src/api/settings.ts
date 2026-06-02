@@ -111,6 +111,7 @@ export interface TooltipConfig {
 // UI配置
 export interface UIConfig {
   font_size: number;
+  font_size_follow_theme: boolean; // true=候选字号跟随主题；false=用 font_size 自定义
   candidates_per_page: number;
   max_candidate_chars: number;
   font_family: string;
@@ -375,6 +376,7 @@ export function getDefaultConfig(): Config {
     },
     ui: {
       font_size: 18,
+      font_size_follow_theme: true,
       candidates_per_page: 7,
       max_candidate_chars: 16,
       font_family: "",

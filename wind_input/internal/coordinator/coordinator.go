@@ -662,7 +662,7 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 		if fontSpec == "" {
 			fontSpec = cfg.UI.FontPath
 		}
-		c.uiManager.UpdateConfig(cfg.UI.FontSize, fontSpec, cfg.UI.HideCandidateWindow)
+		c.uiManager.UpdateConfig(cfg.UI.FontSize, cfg.UI.FontSizeFollowTheme, fontSpec, cfg.UI.HideCandidateWindow)
 		// Set candidate layout (horizontal/vertical)
 		if cfg.UI.CandidateLayout != "" {
 			c.uiManager.SetCandidateLayout(cfg.UI.CandidateLayout)

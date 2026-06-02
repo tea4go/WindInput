@@ -25,16 +25,18 @@ type settingsLaunchAttempt struct {
 
 // UpdateConfig 更新 UI 配置（热更新）
 // fontFamily 仅作用于候选窗口渲染器，菜单/工具栏/提示等组件使用系统默认字体。
-func (m *Manager) UpdateConfig(fontSize float64, fontFamily string, hideCandidateWindow bool) {
+// fontFollowTheme=true 时候选字号跟随主题 behavior.font_size，忽略 fontSize（用户全局字号）。
+func (m *Manager) UpdateConfig(fontSize float64, fontFollowTheme bool, fontFamily string, hideCandidateWindow bool) {
 	// 候选字体仅影响候选窗口渲染器
 	if m.renderer != nil {
+		m.renderer.SetFontFollowTheme(fontFollowTheme)
 		m.renderer.UpdateFont(fontSize, fontFamily)
 	}
 	// 更新调试开关
 	m.mu.Lock()
 	m.hideCandidateWindow = hideCandidateWindow
 	m.mu.Unlock()
-	m.logger.Info("UI config updated", "fontSize", fontSize, "fontFamily", fontFamily, "hideCandidateWindow", hideCandidateWindow)
+	m.logger.Info("UI config updated", "fontSize", fontSize, "fontFollowTheme", fontFollowTheme, "fontFamily", fontFamily, "hideCandidateWindow", hideCandidateWindow)
 }
 
 // UpdateStatusIndicatorConfig 更新状态提示配置

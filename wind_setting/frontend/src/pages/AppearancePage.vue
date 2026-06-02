@@ -11,6 +11,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -449,8 +450,23 @@ onUnmounted(() => {
       <div class="card-title">候选窗口</div>
       <div class="setting-item">
         <div class="setting-info">
+          <label>字号跟随主题</label>
+          <p class="setting-hint">开启后候选字号由主题决定；关闭可在下方自定义</p>
+        </div>
+        <div class="setting-control">
+          <Switch
+            :checked="formData.ui.font_size_follow_theme"
+            @update:checked="formData.ui.font_size_follow_theme = $event"
+          />
+        </div>
+      </div>
+      <div
+        class="setting-item"
+        :class="{ 'setting-item-disabled': formData.ui.font_size_follow_theme }"
+      >
+        <div class="setting-info">
           <label>字体大小</label>
-          <p class="setting-hint">候选词字体大小</p>
+          <p class="setting-hint">候选词字体大小（跟随主题时由主题决定）</p>
         </div>
         <div class="setting-control range-control">
           <input
@@ -458,6 +474,7 @@ onUnmounted(() => {
             min="12"
             max="36"
             step="1"
+            :disabled="formData.ui.font_size_follow_theme"
             v-model.number="formData.ui.font_size"
           />
           <span class="range-value">{{ formData.ui.font_size }}px</span>
@@ -815,5 +832,14 @@ onUnmounted(() => {
 
 .checkbox-label input[type="checkbox"] {
   cursor: pointer;
+}
+
+/* 字号跟随主题时，字体大小行整体变暗并禁止交互，给出明确的禁用视觉反馈 */
+.setting-item-disabled .range-control {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.setting-item-disabled .range-control input[type="range"] {
+  cursor: not-allowed;
 }
 </style>

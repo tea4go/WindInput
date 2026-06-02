@@ -24,7 +24,8 @@ type Theme struct {
 	//   - map[string]any: 内联对象（内联形态），通过 yaml round-trip 解为 LayoutSchema/PaletteSchema
 	Layout    any        `yaml:"layout,omitempty" json:"layout,omitempty"`
 	Palette   any        `yaml:"palette,omitempty" json:"palette,omitempty"`
-	Views     *Views     `yaml:"views,omitempty" json:"views,omitempty"` // 盒模型 View 外观（v2.6 P2）
+	Views     *Views     `yaml:"views,omitempty" json:"views,omitempty"`       // 盒模型 View 外观（v2.6 P2）
+	Behavior  *Behavior  `yaml:"behavior,omitempty" json:"behavior,omitempty"` // 行为配置（v2.6 P6，可被用户覆盖）
 	Overrides *Overrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 }
 

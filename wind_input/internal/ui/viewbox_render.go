@@ -7,7 +7,25 @@ import (
 	"image"
 
 	"github.com/gogpu/gg"
+	"github.com/huanfeng/wind_input/pkg/theme"
 )
+
+// refreshResolvedViews 重建 r.resolvedViews，由渲染入口 render*V2 每次调用。
+// 候选窗外观直接消费 theme 包解析结果 ResolveCandidateViews（views 已 merge defaultViews
+// 基线、几何+颜色权威）；字号/行高/竖排宽是运行时值（用户全局字号派生 + DPI scale），在此回填。
+// 无主题（仅测试路径会出现：未调 SetTheme）时不改 r.resolvedViews，由测试自行预填。
+func (r *Renderer) refreshResolvedViews() {
+	if r.resolvedV25 == nil || r.themeViews == nil {
+		return
+	}
+	r.resolvedViews = theme.ResolveCandidateViews(*r.themeViews, r.resolvedV25.Palette)
+	r.resolvedViews.Text.FontSize = r.config.FontSize
+	r.resolvedViews.PreeditBar.FontSize = r.config.FontSize
+	r.resolvedViews.Index.FontSize = r.config.IndexFontSize
+	r.resolvedViews.ItemHeight = r.config.ItemHeight
+	// 竖排最大宽：用户运行时覆盖优先（cfg，目前仅测试设置），否则跟随主题 behavior.vertical_max_width。
+	r.resolvedViews.VerticalMaxWidth = pickF(r.config.VerticalMaxWidth, float64(r.resolvedV25.Behavior.VerticalMaxWidth))
+}
 
 // newSharedDrawContext 创建 dc 与 img 实时共享同一像素缓冲的绘制上下文（独立窗口用，
 // 每次新建 buffer，不复用 scratch；候选窗高频路径用 (*Renderer).acquireDrawContext）。

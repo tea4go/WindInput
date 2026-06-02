@@ -129,6 +129,27 @@ func blendColor(base, over color.Color, overAlpha uint32) color.Color {
 	return color.RGBA{mix(br, or), mix(bg, og), mix(bb, ob), 255}
 }
 
+// buildAccentRail 构建强调条占位元素：作为候选项行的前导 View，FixedW=railW 在**所有行**
+// 占位以保持序号/文字列对齐，仅 selected 行绘制强调条（z<0 纯色层，竖直居中、左缘偏移）。
+// 主题无强调条（HasAccentBar=false 或无颜色）时返回 nil，调用方据此不加 rail（沿用原内边距/无留白）。
+// 替代旧的 item.Layers 覆盖层写法：强调条从此参与盒模型布局，内容自然排在其右，不再依赖左内边距兜位。
+func (r *Renderer) buildAccentRail(railW float64, selected bool, rowH int, sc func(float64) int) *View {
+	rv := &r.resolvedViews
+	if !r.config.HasAccentBar || rv.AccentBar.BgColor == nil {
+		return nil
+	}
+	rail := &View{FixedW: sc(railW), FixedH: rowH}
+	if selected {
+		barW := sc(float64(rv.AccentBarWidth))
+		rail.Layers = []ImageLayer{{
+			Color: rv.AccentBar.BgColor, Z: -1, Anchor: "left",
+			OffsetX: sc(float64(rv.AccentBarOffset)), W: barW,
+			H: int(rv.ItemHeight*rv.AccentBarHRatio + 0.5), Radius: barW / 2,
+		}}
+	}
+	return rail
+}
+
 // buildHorizontalCandidateTree 构建横排候选窗 View 树。
 // candWindowTree 是构建结果：窗口根 + 命中测试所需的关键 View。
 type candWindowTree struct {
@@ -163,6 +184,9 @@ func (r *Renderer) buildHorizontalCandidateTree(
 	commentMarginLeft := float64(rv.Comment.MarginLeft)
 
 	itemSpacing := float64(rv.ItemSpacing)
+	if isTextIndex {
+		itemSpacing += 4 // 文本序号模式间距 +4（原合成桥 12/16，现下沉到 build，使 ResolveCandidateViews 保持运行时无感知）
+	}
 	commentSize := rv.Index.FontSize
 	if isTextIndex {
 		commentSize = rv.Index.FontSize + 2*scale
@@ -220,29 +244,24 @@ func (r *Renderer) buildHorizontalCandidateTree(
 			})
 		}
 
+		// 强调条占位元素：rail 存在时占据原左内边距宽度（内容位置不变），并承载强调条；
+		// 无强调条主题沿用左内边距。
+		itemChildren := children
+		itemPadLeft := bgPadL
+		if rail := r.buildAccentRail(bgPadL, i == selectedIndex, rowH, sc); rail != nil {
+			itemPadLeft = 0
+			itemChildren = append([]*View{rail}, children...)
+		}
 		item := &View{
 			Layout:     LayoutRow,
 			CrossAlign: AlignCenter,
-			Padding:    Edges{Left: sc(bgPadL), Right: sc(bgPadR)},
+			Padding:    Edges{Left: sc(itemPadLeft), Right: sc(bgPadR)},
 			FixedH:     rowH,
 			Border:     Border{Radius: sc(float64(rv.Item.BorderRadius))},
-			Children:   children,
+			Children:   itemChildren,
 		}
 		if i == selectedIndex {
 			item.Background = Fill{Color: rv.Item.SelectedBg}
-			// accent 强调条：选中项左缘竖条（z<0 纯色层，垂直居中，高约行高 60%）
-			if cfg.HasAccentBar && rv.AccentBar.BgColor != nil {
-				barW := sc(float64(rv.AccentBarWidth))
-				item.Layers = []ImageLayer{{
-					Color:   rv.AccentBar.BgColor,
-					Z:       -1,
-					Anchor:  "left",
-					OffsetX: sc(float64(rv.AccentBarOffset)),
-					W:       barW,
-					H:       int(rv.ItemHeight*rv.AccentBarHRatio + 0.5),
-					Radius:  barW / 2,
-				}}
-			}
 		} else if i == hoverIndex {
 			item.Background = Fill{Color: rv.Item.HoverBg}
 		}

@@ -58,14 +58,23 @@ func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*Resol
 		Layout:  fullLayout,
 		Palette: fullPalette,
 	}
-	// 5. views（v2.6 P2）：主题提供 views: 块时原样透传（仅显式写出的字段非 nil）。
-	// 不在此 merge defaultViews 基线——渲染器以合成桥（layout 现状）为基线，仅用主题
-	// 显式字段覆盖，保证未写字段沿用现状（零回归）。defaultViews/mergeViews 留待
-	// 「无合成桥」的纯 views 主题（后续切片）。
-	rv.Views = t.Views
-	if t.Views != nil && m.logger != nil {
-		m.logger.Info("主题提供盒模型 views，候选窗外观经 YAML 驱动 (P2)", "theme", t.Meta.Name)
+	// 5. views（v2.6 P6 阶段2c）：defaultViews 基线 ⊕ 主题 views（mergeViews 逐字段覆盖），
+	// rv.Views 始终非 nil。候选窗渲染器直接消费此结果（ResolveCandidateViews），合成桥退役中。
+	// 独立窗口（Status/Tooltip/Toolbar/Menu）按各自字段指针判空，基线不含这些字段，故无 views
+	// 块的主题仍回退到 palette 默认（零回归）。
+	base := defaultViews()
+	if t.Views != nil {
+		merged := mergeViews(base, *t.Views)
+		rv.Views = &merged
+		if m.logger != nil {
+			m.logger.Info("主题提供盒模型 views，候选窗外观经 YAML 驱动 (P6)", "theme", t.Meta.Name)
+		}
+	} else {
+		rv.Views = &base
 	}
+	// 6. behavior（v2.6 P6）：defaultBehavior 基线 ⊕ 主题 behavior（非 nil 字段覆盖）。
+	// 用户 override 不在此处——它在 ui/config 层注入（nil=跟随主题）。
+	rv.Behavior = mergeBehavior(defaultBehavior(), t.Behavior)
 	return rv, nil
 }
 

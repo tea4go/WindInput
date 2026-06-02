@@ -30,6 +30,7 @@
 - **新增 UIConfig 字段**：`PagerDisplayMode`（`pager_display_mode`），空值=使用主题配置，never=不显示页码文字，auto=多页时显示，always=总是显示
 - **新增 AdvancedConfig 字段**：`HostRenderProcesses`（Band 窗口宿主进程白名单，默认 `["SearchHost.exe"]`）
 - **新增 UIConfig 字段**：`CmdbarCandidatePrefix *string`（`cmdbar_candidate_prefix`），副作用命令直通车候选的渲染前缀；nil=默认 "⚡"，""=完全不显示，其他字符串=自定义符号。使用 `UIConfig.GetCmdbarCandidatePrefix()` 取值。
+- **新增 UIConfig 字段**：`FontSizeFollowTheme bool`（`font_size_follow_theme`），候选字号是否跟随主题 `behavior.font_size`：true=跟随（忽略 `FontSize`），false=用 `FontSize` 自定义。**yaml omitempty + json 不带 omitempty**（前端需总收到显式 bool）。**保守迁移**：`LoadFrom` 用探针检测用户文件是否含该字段，缺失（老配置）→ 置 false 自定义保留现字号；`DefaultConfig()` 设 true（新装无用户文件、提前返回默认，故跟随主题）。
 - 新增配置项时：在对应子结构体添加字段，设置 YAML 标签，在 `DefaultConfig()` 中提供默认值，在 `applyConfigFallbacks()` 中处理兜底
 - `RuntimeState` 与 `Config` 分开存储（`state.yaml`），避免用户编辑配置时覆盖运行时状态
 - 数据根目录通过 `GetDataDir(exeDir)` 获取（`exeDir/data`），词库和 Schema 文件均位于此目录下

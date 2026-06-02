@@ -2,7 +2,6 @@ package ui
 
 import (
 	"image"
-	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -16,28 +15,19 @@ import (
 // 用 freetype 文本后端（默认系统 CJK 字体），不依赖窗口/GDI。
 func TestBuildHorizontalCandidateTree_DumpPNG(t *testing.T) {
 	cfg := RenderConfig{
-		TextRenderMode:  TextRenderModeFreetype,
-		FontSize:        18,
-		IndexFontSize:   14,
-		ItemHeight:      32,
-		CornerRadius:    8,
-		Padding:         8,
-		IndexStyle:      "circle",
-		BackgroundColor: color.RGBA{255, 255, 255, 255},
-		TextColor:       color.RGBA{31, 31, 31, 255},
-		IndexColor:      color.RGBA{255, 255, 255, 255},
-		IndexBgColor:    color.RGBA{66, 133, 244, 255},
-		InputBgColor:    color.RGBA{240, 240, 240, 255},
-		InputTextColor:  color.RGBA{100, 100, 100, 255},
-		BorderColor:     color.RGBA{194, 198, 203, 255},
-		HoverBgColor:    color.RGBA{230, 240, 255, 255},
-		SelectedBgColor: color.RGBA{210, 228, 255, 255},
+		TextRenderMode: TextRenderModeFreetype,
+		FontSize:       18,
+		IndexFontSize:  14,
+		ItemHeight:     32,
+		IndexStyle:     "circle",
+		HasAccentBar:   true,
 	}
 	r := NewRenderer(cfg)
 	td := r.TextDrawer()
 	if td == nil {
 		t.Skip("无可用文本后端（freetype 字体未解析）")
 	}
+	applyParityThemePath(r) // 颜色/几何经 ResolveCandidateViews 填充 r.resolvedViews（合成桥已退役）
 
 	cands := []Candidate{
 		{Text: "中文", Index: 1},

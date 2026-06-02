@@ -63,6 +63,22 @@ type Views struct {
 	Tooltip       *ViewNode     `yaml:"tooltip,omitempty"` // P4-B Tooltip（独立窗口，单节点）
 	Toolbar       *ToolbarViews `yaml:"toolbar,omitempty"` // P4-C 工具栏
 	Menu          *MenuViews    `yaml:"menu,omitempty"`    // P4-D 弹出菜单
+	Metrics       *ViewMetrics  `yaml:"metrics,omitempty"` // P6 候选窗列表级几何
+}
+
+// ViewMetrics 候选窗"列表级"几何（P6）：不便归入单个 ViewNode 的尺寸。全部可空指针，nil=走 defaultViews 基线。
+type ViewMetrics struct {
+	ItemSpacing  *int              `yaml:"item_spacing,omitempty"`  // 横排候选框间距基数（旧 hardcode 12/16）
+	BandGap      *int              `yaml:"band_gap,omitempty"`      // band 间距（旧 WindowGap）
+	ShadowOffset *int              `yaml:"shadow_offset,omitempty"` // 窗口投影偏移
+	AccentBar    *AccentBarMetrics `yaml:"accent_bar,omitempty"`    // 强调条尺寸
+}
+
+// AccentBarMetrics 强调条尺寸（P6）。
+type AccentBarMetrics struct {
+	Width       *int     `yaml:"width,omitempty"`        // 条宽
+	Offset      *int     `yaml:"offset,omitempty"`       // 左缘偏移
+	HeightRatio *float64 `yaml:"height_ratio,omitempty"` // 条高 = ItemHeight × 此比例
 }
 
 // RVNode 渲染消费形态的单个 View 外观（plain 逻辑像素 + 颜色）。
@@ -185,6 +201,8 @@ type ResolvedMenuViews struct {
 
 func intp(v int) *int { return &v }
 
+func f64p(v float64) *float64 { return &v }
+
 // edgeOr 返回指针值或回退默认（保留显式 0）。
 func edgeOr(p *int, def int) int {
 	if p != nil {
@@ -206,6 +224,12 @@ func defaultViews() Views {
 		Comment:    ViewNode{Margin: ViewEdges{Left: intp(8)}}, // text→comment 间距
 		AccentBar:  ViewNode{},
 		FooterBar:  ViewNode{},
+		Metrics: &ViewMetrics{
+			ItemSpacing:  intp(12),
+			BandGap:      intp(4),
+			ShadowOffset: intp(2),
+			AccentBar:    &AccentBarMetrics{Width: intp(3), Offset: intp(1), HeightRatio: f64p(0.6)},
+		},
 	}
 }
 
@@ -281,7 +305,7 @@ func mergeViewNode(base, ov ViewNode) ViewNode {
 
 // mergeViews 把 override（通常来自主题 YAML）逐具名 View 合并到 base（通常是 defaultViews 基线）。
 func mergeViews(base, ov Views) Views {
-	return Views{
+	out := Views{
 		Window:        mergeViewNode(base.Window, ov.Window),
 		PreeditBar:    mergeViewNode(base.PreeditBar, ov.PreeditBar),
 		CandidateList: mergeViewNode(base.CandidateList, ov.CandidateList),
@@ -291,5 +315,70 @@ func mergeViews(base, ov Views) Views {
 		Comment:       mergeViewNode(base.Comment, ov.Comment),
 		AccentBar:     mergeViewNode(base.AccentBar, ov.AccentBar),
 		FooterBar:     mergeViewNode(base.FooterBar, ov.FooterBar),
+		Metrics:       mergeMetrics(base.Metrics, ov.Metrics),
 	}
+	// 独立窗口 views（Status/Tooltip/Toolbar/Menu）整体透传：ov 非 nil 取 ov，否则 base 兜底。
+	// 这 4 个是独立窗口的完整外观定义（P4），不做深度 merge——与现状 rv.Views 整体透传语义一致。
+	out.Status = base.Status
+	if ov.Status != nil {
+		out.Status = ov.Status
+	}
+	out.Tooltip = base.Tooltip
+	if ov.Tooltip != nil {
+		out.Tooltip = ov.Tooltip
+	}
+	out.Toolbar = base.Toolbar
+	if ov.Toolbar != nil {
+		out.Toolbar = ov.Toolbar
+	}
+	out.Menu = base.Menu
+	if ov.Menu != nil {
+		out.Menu = ov.Menu
+	}
+	return out
+}
+
+// mergeMetrics 用 ov 的非 nil 字段覆盖 base（任一为 nil 取另一方；均非 nil 逐字段覆盖）。
+func mergeMetrics(base, ov *ViewMetrics) *ViewMetrics {
+	if ov == nil {
+		return base
+	}
+	if base == nil {
+		return ov
+	}
+	out := *base
+	if ov.ItemSpacing != nil {
+		out.ItemSpacing = ov.ItemSpacing
+	}
+	if ov.BandGap != nil {
+		out.BandGap = ov.BandGap
+	}
+	if ov.ShadowOffset != nil {
+		out.ShadowOffset = ov.ShadowOffset
+	}
+	if ov.AccentBar != nil {
+		out.AccentBar = mergeAccentBarMetrics(out.AccentBar, ov.AccentBar)
+	}
+	return &out
+}
+
+// mergeAccentBarMetrics 同 mergeMetrics 的逐字段覆盖语义。
+func mergeAccentBarMetrics(base, ov *AccentBarMetrics) *AccentBarMetrics {
+	if ov == nil {
+		return base
+	}
+	if base == nil {
+		return ov
+	}
+	out := *base
+	if ov.Width != nil {
+		out.Width = ov.Width
+	}
+	if ov.Offset != nil {
+		out.Offset = ov.Offset
+	}
+	if ov.HeightRatio != nil {
+		out.HeightRatio = ov.HeightRatio
+	}
+	return &out
 }

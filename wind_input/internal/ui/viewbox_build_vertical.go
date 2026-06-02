@@ -94,7 +94,18 @@ func (r *Renderer) buildVerticalCandidateTree(
 	indexRadius := maxF(11*scale, (rv.Index.FontSize+8*scale)/2)
 	indexAreaW := int(2*indexRadius + 6*scale + 0.5)
 	if isTextIndex {
-		indexAreaW = sc(20 * scale)
+		// 文本序号列宽按字形测量收紧：取最宽序号标签实际宽 + 小留白，紧凑且各行候选文字对齐。
+		// （旧 sc(20*scale) 既偏宽、又重复乘 scale 致高 DPI 失真。）
+		maxLabelW := 0.0
+		for _, cand := range candidates {
+			if cand.Index >= 0 {
+				lw := r.textDrawer.MeasureString(indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel), rv.Index.FontSize)
+				if lw > maxLabelW {
+					maxLabelW = lw
+				}
+			}
+		}
+		indexAreaW = int(maxLabelW + 4*scale + 0.5)
 	}
 	commentSize := rv.Index.FontSize
 	if isTextIndex {
@@ -103,14 +114,26 @@ func (r *Renderer) buildVerticalCandidateTree(
 	rowH := int(rv.ItemHeight + 0.5)
 	commentColor := r.resolvedViews.Comment.TextColor
 
+	// 强调条占位 rail 宽度（逻辑像素）：与横排一致取 item 左内边距为左留白，承载强调条；
+	// 不足以容纳强调条（offset+width）时取下限。无强调条时 railFixedW=0（不占位）。
+	railW := 0.0
+	railFixedW := 0
+	if cfg.HasAccentBar && rv.AccentBar.BgColor != nil {
+		railW = float64(rv.Item.PadLeft)
+		if minW := float64(rv.AccentBarOffset + rv.AccentBarWidth + 2); railW < minW {
+			railW = minW
+		}
+		railFixedW = sc(railW)
+	}
+
 	// 长候选钳制：预量算自然宽，计算截断预算 targetW ≤ VerticalMaxWidth（默认 600*scale）。
 	maxItemW := rv.VerticalMaxWidth * scale
 	commentWidths := make([]float64, len(candidates))
 	maxNatural := 0.0
 	for i, cand := range candidates {
-		lo := 8 * scale
+		lo := float64(railFixedW) + 8*scale
 		if cand.Index >= 0 {
-			lo = float64(indexAreaW) + indexMarginRight
+			lo = float64(railFixedW) + float64(indexAreaW) + indexMarginRight
 		}
 		tw := r.textDrawer.MeasureString(candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize)
 		if cand.Comment != "" {
@@ -166,9 +189,9 @@ func (r *Renderer) buildVerticalCandidateTree(
 			}
 		}
 
-		lo := 8 * scale
+		lo := float64(railFixedW) + 8*scale
 		if cand.Index >= 0 {
-			lo = float64(indexAreaW) + indexMarginRight
+			lo = float64(railFixedW) + float64(indexAreaW) + indexMarginRight
 		}
 		availText := targetW - lo - itemPadR
 		if commentWidths[i] > 0 {
@@ -193,23 +216,22 @@ func (r *Renderer) buildVerticalCandidateTree(
 			})
 		}
 
+		// 强调条占位元素：rail 在所有行占据左留白（保持列对齐），仅选中行绘制强调条；
+		// 内容（序号/文字）排在 rail 右侧。无强调条主题不加 rail（railFixedW=0，内容靠左）。
+		itemChildren := children
+		if rail := r.buildAccentRail(railW, i == selectedIndex, rowH, sc); rail != nil {
+			itemChildren = append([]*View{rail}, children...)
+		}
 		item := &View{
 			Layout:     LayoutRow,
 			CrossAlign: AlignCenter,
 			Stretch:    true, // 每行全宽
 			FixedH:     rowH,
 			Padding:    Edges{Right: sc(itemPadR)},
-			Children:   children,
+			Children:   itemChildren,
 		}
 		if i == selectedIndex {
 			item.Background = Fill{Color: r.resolvedViews.Item.SelectedBg}
-			if cfg.HasAccentBar && r.resolvedViews.AccentBar.BgColor != nil {
-				barW := sc(float64(rv.AccentBarWidth))
-				item.Layers = []ImageLayer{{
-					Color: r.resolvedViews.AccentBar.BgColor, Z: -1, Anchor: "left",
-					OffsetX: sc(float64(rv.AccentBarOffset)), W: barW, H: int(rv.ItemHeight*rv.AccentBarHRatio + 0.5), Radius: barW / 2,
-				}}
-			}
 		} else if i == hoverIndex {
 			item.Background = Fill{Color: r.resolvedViews.Item.HoverBg}
 		}

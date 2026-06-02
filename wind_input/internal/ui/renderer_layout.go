@@ -98,7 +98,7 @@ func (r *Renderer) RenderCandidates(candidates []Candidate, input string, cursor
 	r.refreshDPIIfNeeded()
 	cfg := r.config
 	// 盒模型 View 引擎是唯一渲染路径（旧固定化渲染器已退役）。
-	// r.resolvedViews 由 render*V2 入口经 refreshResolvedViews 填充（合成桥 base ⊕ 主题 views）。
+	// r.resolvedViews 由 render*V2 入口经 refreshResolvedViews 填充（theme.ResolveCandidateViews + 运行时字号回填）。
 	if cfg.Layout == config.LayoutHorizontal {
 		return r.renderHorizontalV2(candidates, input, cursorPos, page, totalPages, hoverIndex, hoverPageBtn, selectedIndex)
 	}

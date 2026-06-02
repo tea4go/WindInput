@@ -5,10 +5,11 @@ import "image/color"
 // ResolvedV25 是 v2.5 schema 解析后的最终形态，所有引用已展开、所有缺省字段已派生填充。
 // P5 起为渲染层唯一解析结果来源（adapter/ResolvedTheme/v2 已退役）。
 type ResolvedV25 struct {
-	Meta    ThemeMeta
-	Layout  ResolvedLayout
-	Palette ResolvedPalette
-	Views   *Views // 盒模型 View 外观（v2.6 P2）；nil=主题未提供 views，渲染器用合成桥
+	Meta     ThemeMeta
+	Layout   ResolvedLayout
+	Palette  ResolvedPalette
+	Views    *Views           // 盒模型 View 外观（v2.6 P2）；nil=主题未提供 views，渲染器用合成桥
+	Behavior ResolvedBehavior // 行为配置（v2.6 P6）：defaultBehavior ⊕ 主题 behavior（用户 override 在 ui/config 层）
 }
 
 // ResolvedLayout layout 的解析形态（与 LayoutSchema 同形，标量类型不变）

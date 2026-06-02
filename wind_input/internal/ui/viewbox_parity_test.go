@@ -9,30 +9,28 @@ import (
 	"testing"
 
 	"github.com/huanfeng/wind_input/pkg/config"
+	"github.com/huanfeng/wind_input/pkg/theme"
 )
+
+// applyParityThemePath 给未调 SetTheme 的渲染测试装上 parity 等价 theme 路径，并立即
+// 填充 r.resolvedViews（合成桥退役后已无 RenderConfig 兜底；直接 build 的测试也需此值）。
+func applyParityThemePath(r *Renderer) {
+	views := themePathViews(8, 8)
+	r.resolvedV25 = &theme.ResolvedV25{Palette: themePathPalette(), Behavior: theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600}}
+	r.themeViews = &views
+	r.refreshResolvedViews()
+}
 
 func parityConfig() RenderConfig {
 	return RenderConfig{
-		TextRenderMode:  TextRenderModeFreetype,
-		Layout:          config.LayoutHorizontal,
-		FontSize:        18,
-		IndexFontSize:   14,
-		ItemHeight:      32,
-		CornerRadius:    8,
-		Padding:         8,
-		IndexStyle:      "circle",
-		BackgroundColor: color.RGBA{255, 255, 255, 255},
-		TextColor:       color.RGBA{31, 31, 31, 255},
-		IndexColor:      color.RGBA{255, 255, 255, 255},
-		IndexBgColor:    color.RGBA{66, 133, 244, 255},
-		InputBgColor:    color.RGBA{240, 240, 240, 255},
-		InputTextColor:  color.RGBA{100, 100, 100, 255},
-		BorderColor:     color.RGBA{194, 198, 203, 255},
-		HoverBgColor:    color.RGBA{230, 240, 255, 255},
-		SelectedBgColor: color.RGBA{210, 228, 255, 255},
-		HasAccentBar:    true,
-		AccentBarColor:  color.RGBA{0, 120, 212, 255},
-		ShowPageNumber:  true,
+		TextRenderMode: TextRenderModeFreetype,
+		Layout:         config.LayoutHorizontal,
+		FontSize:       18,
+		IndexFontSize:  14,
+		ItemHeight:     32,
+		IndexStyle:     "circle",
+		HasAccentBar:   true,
+		ShowPageNumber: true,
 	}
 }
 
@@ -60,6 +58,7 @@ func TestViewEngine_ModeLabelGlow_DumpPNG(t *testing.T) {
 	if r.TextDrawer() == nil {
 		t.Skip("无可用文本后端")
 	}
+	applyParityThemePath(r)
 	cands := []Candidate{{Text: "中文", Index: 1}, {Text: "中", Index: 2}, {Text: "众", Index: 3}}
 	img, _ := r.renderHorizontalV2(cands, "zhong", 5, 1, 1, 1, "", 0)
 	p := writePNG(t, "wind_modelabel.png", img)
@@ -74,6 +73,7 @@ func TestViewEngine_Embedded_DumpPNG(t *testing.T) {
 	if r.TextDrawer() == nil {
 		t.Skip("无可用文本后端")
 	}
+	applyParityThemePath(r)
 	cands := []Candidate{{Text: "中文", Index: 1}, {Text: "中", Index: 2}, {Text: "众", Index: 3}}
 	img, _ := r.renderHorizontalV2(cands, "zhong", 5, 1, 1, 1, "", 0)
 	p := writePNG(t, "wind_embedded.png", img)
@@ -90,6 +90,7 @@ func TestViewEngine_VerticalTruncation_DumpPNG(t *testing.T) {
 	if r.TextDrawer() == nil {
 		t.Skip("无可用文本后端")
 	}
+	applyParityThemePath(r)
 	cands := []Candidate{
 		{Text: "短候选", Index: 1},
 		{Text: "这是一个非常非常非常非常非常非常非常长的候选词条", Index: 2},

@@ -14,51 +14,28 @@ import (
 )
 
 // RenderConfig contains rendering configuration.
-// 这里只描述候选窗的视觉参数；字体文件选择与 fallback 细节由 FontConfig 接管。
+// 这里只描述候选窗的运行时参数；候选窗外观（颜色/几何）已由 theme.ResolveCandidateViews
+// 经 r.resolvedViews 承载（P6 阶段2e 删合成桥后，颜色/几何字段不再经 RenderConfig 中转）。
+// 字体文件选择与 fallback 细节由 FontConfig 接管。
 type RenderConfig struct {
-	FontPath           string
-	FontSize           float64
-	IndexFontSize      float64
-	Padding            float64
-	ItemHeight         float64
-	CornerRadius       float64
-	BackgroundColor    color.Color
-	TextColor          color.Color
-	IndexColor         color.Color
-	IndexBgColor       color.Color
-	InputBgColor       color.Color
-	InputTextColor     color.Color
-	BorderColor        color.Color
-	HoverBgColor       color.Color            // Background color for hovered candidate
-	SelectedBgColor    color.Color            // Background color for keyboard-selected candidate
-	Layout             config.CandidateLayout // "horizontal" or "vertical"
-	HidePreedit        bool                   // Hide preedit area when inline_preedit is enabled
-	IndexStyle         string                 // "circle" (default) or "text" (plain text index)
-	AccentBarColor     color.Color            // Left accent bar color, nil = no bar
-	HasAccentBar       bool                   // Whether to draw accent bar
-	IndexFontWeight    int                    // Index number font weight (100-900), 0 = use global weight
-	ItemPaddingLeft    float64                // Left padding of each candidate item (px), 0 = default 8
-	ItemPaddingRight   float64                // Right padding of each candidate item (px), 0 = default 8
-	ItemRadius         float64                // Candidate item corner radius (px), 0 = default 4
-	WindowPaddingX     float64                // Horizontal window padding (px), 0 = default (use Padding)
-	WindowPaddingY     float64                // Vertical window padding (px), 0 = default (use Padding)
-	IndexMarginRight   float64                // Gap between index and candidate text (scaled px)
-	TextMarginRight    float64                // Gap after candidate text (scaled px)
-	CommentMarginLeft  float64                // Gap between candidate text and comment (scaled px)
-	CommentMarginRight float64                // Gap after comment to item right edge (scaled px)
-	VerticalMinWidth   float64                // Vertical layout minimum width (scaled px), 0 = auto
-	VerticalMaxWidth   float64                // Vertical layout maximum width (scaled px), 0 = default 600
-	HorizontalMinWidth float64                // Horizontal layout minimum width (scaled px), 0 = default 60
-	HorizontalMaxWidth float64                // Horizontal layout maximum width (scaled px), 0 = no limit
-	AlwaysShowPager    bool                   // Always show page navigation (disable buttons when not navigable)
-	ShowPageNumber     bool                   // Show page number text (e.g. "1/3")
-	TextRenderMode     TextRenderMode         // "gdi" (Windows native) or "freetype" (original)
-	ModeLabel          string                 // Temporary mode label (e.g. "临时拼音", "快捷输入"), empty = no label
-	ModeAccentColor    color.Color            // Inner glow border color for special modes, nil = no glow
-	PreeditMode        config.PreeditMode     // "top" (default) or "embedded" (inline before candidates); only effective when HidePreedit=false
-	IndexLabels        string                 // 主题序号标签（来自 views.index.labels / 旧 layout）；空 = 默认 1-9,0
-	GlobalIndexLabels  string                 // 用户全局序号标签覆盖（config.UI.CandidateIndexLabels）；非空时覆盖 IndexLabels
-	CmdbarPrefix       string                 // 副作用 cmdbar 候选 (Actions 含 ActionEffect) 的前缀符号; 空 = 不显示前缀
+	FontPath          string
+	FontSize          float64                // 候选主文本字号（已乘 DPI scale）；回填进 resolvedViews
+	IndexFontSize     float64                // 序号字号（= FontSize-4，已乘 scale）；回填进 resolvedViews
+	ItemHeight        float64                // 行高（已乘 scale）；回填进 resolvedViews
+	Layout            config.CandidateLayout // "horizontal" or "vertical"
+	HidePreedit       bool                   // Hide preedit area when inline_preedit is enabled
+	IndexStyle        string                 // "circle" (default) or "text" (plain text index)
+	HasAccentBar      bool                   // Whether to draw accent bar
+	VerticalMaxWidth  float64                // Vertical layout maximum width (scaled px), 0 = default 600
+	AlwaysShowPager   bool                   // Always show page navigation (disable buttons when not navigable)
+	ShowPageNumber    bool                   // Show page number text (e.g. "1/3")
+	TextRenderMode    TextRenderMode         // "gdi" (Windows native) or "freetype" (original)
+	ModeLabel         string                 // Temporary mode label (e.g. "临时拼音", "快捷输入"), empty = no label
+	ModeAccentColor   color.Color            // Inner glow border color for special modes, nil = no glow
+	PreeditMode       config.PreeditMode     // "top" (default) or "embedded" (inline before candidates); only effective when HidePreedit=false
+	IndexLabels       string                 // 主题序号标签（来自 views.index.labels / 旧 layout）；空 = 默认 1-9,0
+	GlobalIndexLabels string                 // 用户全局序号标签覆盖（config.UI.CandidateIndexLabels）；非空时覆盖 IndexLabels
+	CmdbarPrefix      string                 // 副作用 cmdbar 候选 (Actions 含 ActionEffect) 的前缀符号; 空 = 不显示前缀
 
 	// v2.5 候选窗背景图（nil = 仅纯色背景）
 	BackgroundImage   *image.RGBA
@@ -73,22 +50,10 @@ func DefaultRenderConfig() RenderConfig {
 	scale := GetDPIScale()
 
 	return RenderConfig{
-		FontPath:        "", // Will use system font
-		FontSize:        18 * scale,
-		IndexFontSize:   14 * scale,
-		Padding:         10 * scale,
-		ItemHeight:      32 * scale,
-		CornerRadius:    8 * scale,
-		BackgroundColor: color.RGBA{255, 255, 255, 255}, // Opaque white
-		TextColor:       color.RGBA{30, 30, 30, 255},
-		IndexColor:      color.RGBA{255, 255, 255, 255},
-		IndexBgColor:    color.RGBA{66, 133, 244, 255}, // Blue
-		InputBgColor:    color.RGBA{240, 240, 240, 255},
-		InputTextColor:  color.RGBA{100, 100, 100, 255},
-		BorderColor:     color.RGBA{200, 200, 200, 255},
-		HoverBgColor:    color.RGBA{230, 240, 255, 255}, // Light blue for hover
-		SelectedBgColor: color.RGBA{204, 228, 255, 255}, // 键盘选中高亮 (默认值; 主题 SetTheme 会覆盖)。
-		// 不设默认会在无主题渲染 (如 darwin forwarder) 选中项走 dc.SetColor(nil) 崩溃。
+		FontPath:       "", // Will use system font
+		FontSize:       18 * scale,
+		IndexFontSize:  14 * scale,
+		ItemHeight:     32 * scale,
 		Layout:         config.LayoutHorizontal, // Default to horizontal layout
 		HidePreedit:    false,
 		ShowPageNumber: true,
@@ -216,14 +181,17 @@ func (fc *fontCache) Close() {
 type Renderer struct {
 	config        RenderConfig
 	resolvedV25   *theme.ResolvedV25
-	resolvedViews theme.ResolvedViews // 候选窗盒模型外观（P2 切片-0）：默认来自合成桥，主题提供 views 时来自 YAML
-	themeViews    *theme.Views        // 主题 YAML 提供的 views（已 merge 基线）；nil=用合成桥
+	resolvedViews theme.ResolvedViews // 候选窗盒模型外观：每帧由 refreshResolvedViews 经 theme.ResolveCandidateViews 重建（几何+颜色）+ 运行时字号回填
+	themeViews    *theme.Views        // 主题盒模型 views（已 merge defaultViews 基线）；来自 rv.Views
 	TextBackendManager
 
 	// Base (unscaled) values for DPI recalculation
-	baseFontSize   float64
-	themeRowHeight float64 // unscaled row height from theme; 0 = auto-compute from font size
-	lastDPI        int     // Last DPI used for scaling; 0 means not yet set
+	baseFontSize    float64 // 有效基准字号（= 跟随主题 ? themeFontSize : userFontSize），派生 FontSize/IndexFontSize/ItemHeight
+	userFontSize    float64 // 用户全局字号（config.UI.FontSize），自定义模式下生效
+	themeFontSize   float64 // 主题 behavior.font_size（来自 SetTheme），跟随模式下生效
+	fontFollowTheme bool    // true=候选字号跟随主题 behavior.font_size；false=用 userFontSize
+	themeRowHeight  float64 // unscaled row height from theme; 0 = auto-compute from font size
+	lastDPI         int     // Last DPI used for scaling; 0 means not yet set
 
 	// 候选框绘制缓冲. 跨帧复用以避免 gg.NewPixmap + dc.Image() 的双倍分配
 	// (旧 pprof 中合计 ~2.3 GB 累计). RenderCandidates 在 UI 单线程调用,
@@ -252,6 +220,7 @@ func NewRenderer(config RenderConfig) *Renderer {
 		config:             config,
 		TextBackendManager: NewTextBackendManager("candidate"),
 		baseFontSize:       18, // Default base font size (unscaled)
+		userFontSize:       18,
 	}
 	r.SetTextRenderMode(config.TextRenderMode)
 	return r
@@ -268,17 +237,45 @@ func (r *Renderer) GetTextRenderMode() TextRenderMode {
 	return r.config.TextRenderMode
 }
 
+// applyFontDerivation 用当前 baseFontSize + DPI scale 重算字号派生：
+// 主文本=base、序号=base-4、行高=themeRowHeight 或 max(32, base*1.8)，均 ×scale。
+func (r *Renderer) applyFontDerivation() {
+	scale := GetDPIScale()
+	base := r.baseFontSize
+	if base <= 0 {
+		base = 18
+	}
+	r.config.FontSize = base * scale
+	r.config.IndexFontSize = (base - 4) * scale
+	if r.themeRowHeight > 0 {
+		r.config.ItemHeight = r.themeRowHeight * scale
+	} else {
+		r.config.ItemHeight = math.Max(32, base*1.8) * scale
+	}
+}
+
+// recomputeBaseFont 依「跟随主题/自定义」选定有效基准字号，再重算派生。
+// 跟随且主题字号有效→主题 behavior.font_size；否则→用户全局字号。
+func (r *Renderer) recomputeBaseFont() {
+	if r.fontFollowTheme && r.themeFontSize > 0 {
+		r.baseFontSize = r.themeFontSize
+	} else if r.userFontSize > 0 {
+		r.baseFontSize = r.userFontSize
+	}
+	r.applyFontDerivation()
+}
+
+// SetFontFollowTheme 设置候选字号是否跟随主题 behavior.font_size（来自 config.UI.FontSizeFollowTheme）。
+func (r *Renderer) SetFontFollowTheme(follow bool) {
+	r.fontFollowTheme = follow
+	r.recomputeBaseFont()
+}
+
 // UpdateFont updates font settings
 func (r *Renderer) UpdateFont(fontSize float64, fontFamily string) {
-	scale := GetDPIScale()
-
 	if fontSize > 0 {
-		r.baseFontSize = fontSize
-		r.config.FontSize = fontSize * scale
-		r.config.IndexFontSize = (fontSize - 4) * scale
-		if r.themeRowHeight == 0 {
-			r.config.ItemHeight = math.Max(32, fontSize*1.8) * scale
-		}
+		r.userFontSize = fontSize
+		r.recomputeBaseFont() // 跟随模式下忽略用户字号，用主题字号
 	}
 
 	if fontFamily != r.FontFamily() {
@@ -299,22 +296,10 @@ func (r *Renderer) refreshDPIIfNeeded() {
 }
 
 // RefreshDPIScale recalculates all DPI-dependent config values.
-// Called when the effective DPI changes (e.g., monitor switch).
+// Called when the effective DPI changes (e.g., monitor switch). baseFontSize 已是有效值，
+// 仅按新 scale 重算派生（窗口 padding/圆角等已于 P6 阶段2e 退役，不再 RenderConfig 中转）。
 func (r *Renderer) RefreshDPIScale() {
-	scale := GetDPIScale()
-	baseFontSize := r.baseFontSize
-	if baseFontSize <= 0 {
-		baseFontSize = 18
-	}
-	r.config.FontSize = baseFontSize * scale
-	r.config.IndexFontSize = (baseFontSize - 4) * scale
-	r.config.Padding = 10 * scale
-	r.config.CornerRadius = 8 * scale
-	if r.themeRowHeight > 0 {
-		r.config.ItemHeight = r.themeRowHeight * scale
-	} else {
-		r.config.ItemHeight = math.Max(32, baseFontSize*1.8) * scale
-	}
+	r.applyFontDerivation()
 }
 
 // SetLayout sets the candidate layout mode
@@ -365,19 +350,10 @@ func (r *Renderer) SetTheme(rv *theme.ResolvedV25) {
 		return
 	}
 	r.resolvedV25 = rv
-	r.themeViews = rv.Views // 主题盒模型 views（nil=用合成桥）
-	// Update config colors from theme
-	colors := rv.Palette.CandidateWindow
-	r.config.BackgroundColor = colors.Background
-	r.config.BorderColor = colors.Border
-	r.config.TextColor = colors.Text
-	r.config.IndexColor = colors.IndexText
-	r.config.IndexBgColor = colors.IndexBg
-	r.config.HoverBgColor = colors.HoverBg
-	r.config.SelectedBgColor = colors.SelectedBg
-	r.config.InputBgColor = colors.PreeditBg
-	r.config.InputTextColor = colors.PreeditText
-	// Update style from theme（原 adapter 从 rv.Layout 派生的 Style 字段，现直接读 Layout）
+	r.themeViews = rv.Views // 主题盒模型 views（已 merge defaultViews 基线）
+	// 候选窗颜色/几何已由 theme.ResolveCandidateViews 经 r.resolvedViews 承载（P6 阶段2e 删合成桥）；
+	// 此处只搬运渲染运行时仍需的 RenderConfig 字段：IndexStyle / HasAccentBar / page 策略 /
+	// 行高（字号派生）/ 序号标签。颜色与几何 padding 不再经 RenderConfig 中转。
 	lay := rv.Layout.CandidateWindow
 	idx := lay.CandidateList.Index
 	if idx.Circle {
@@ -385,53 +361,20 @@ func (r *Renderer) SetTheme(rv *theme.ResolvedV25) {
 	} else {
 		r.config.IndexStyle = "text"
 	}
-	r.config.AccentBarColor = rv.Palette.CandidateWindow.AccentBar
 	r.config.HasAccentBar = lay.CandidateList.AccentBar.Enabled
-	r.config.IndexFontWeight = 0
-	r.config.ItemPaddingLeft = float64(lay.CandidateList.ItemPadding.Left)
-	r.config.ItemRadius = float64(lay.CandidateList.ItemRadius)
-	r.config.ItemPaddingRight = float64(lay.CandidateList.ItemPadding.Right)
-	r.config.AlwaysShowPager = false
-	r.config.ShowPageNumber = true
-	// Apply window padding from theme (override base Padding)
-	scale := GetDPIScale()
-	if wpx := float64(lay.WindowPadding.Left); wpx > 0 {
-		r.config.WindowPaddingX = wpx * scale
-	}
-	if wpy := float64(lay.WindowPadding.Top); wpy > 0 {
-		r.config.WindowPaddingY = wpy * scale
-	}
-	if cr := float64(lay.BorderRadius); cr > 0 {
-		r.config.CornerRadius = cr * scale
-	}
+	// page 策略默认来自主题 behavior（P6 阶段2d）；用户 PagerDisplayMode 覆盖在
+	// applyPagerOverride 注入（Default=跟随主题，即保留此处写入的 behavior 值）。
+	r.config.AlwaysShowPager = rv.Behavior.AlwaysShowPager
+	r.config.ShowPageNumber = rv.Behavior.ShowPageNumber
+	// 行高来源：主题 layout 指定则用之，否则由有效字号派生（recomputeBaseFont→applyFontDerivation 内处理）。
 	if rh := float64(lay.CandidateList.ItemHeight); rh > 0 {
 		r.themeRowHeight = rh
-		r.config.ItemHeight = rh * scale
 	} else {
 		r.themeRowHeight = 0
-		baseFontSize := r.baseFontSize
-		if baseFontSize <= 0 {
-			baseFontSize = 18
-		}
-		r.config.ItemHeight = math.Max(32, baseFontSize*1.8) * scale
 	}
-	// Apply element spacing from theme
-	if g := float64(lay.CandidateList.Index.Gap); g > 0 {
-		r.config.IndexMarginRight = g * scale
-	} else {
-		r.config.IndexMarginRight = 4 * scale // default
-	}
-	// TextMarginRight：原 adapter Style 未映射（恒 0），renderer 走 else 分支取默认值
-	r.config.TextMarginRight = 4 * scale // default
-	if g := float64(lay.CandidateList.Comment.Gap); g > 0 {
-		r.config.CommentMarginLeft = g * scale
-	} else {
-		r.config.CommentMarginLeft = 8 * scale // default
-	}
-	// CommentMarginRight：原 adapter Style 未映射（恒 0），renderer 走 else 分支取默认值
-	r.config.CommentMarginRight = 4 * scale // default
-	// 宽度限制（Vertical/Horizontal Min/Max）原 adapter Style 未映射（恒 0），
-	// 原 renderer 仅 if>0 设置、无 else，故 rv 路径不设置，保留 config 既有值（零回归）。
+	// 字号跟随：记录主题 behavior.font_size，按「跟随/自定义」重算有效基准字号 + 派生（含行高）。
+	r.themeFontSize = float64(rv.Behavior.FontSize)
+	r.recomputeBaseFont()
 	r.config.IndexLabels = theme.BuildIndexLabelsFromSlots(idx.Labels)
 
 	// 候选窗背景图：ResolvedV25 不支持解码后的背景图（种子主题无图），直接清空（零回归）
@@ -446,14 +389,6 @@ func (r *Renderer) getCommentColor() color.Color {
 		return r.resolvedV25.Palette.CandidateWindow.Comment
 	}
 	return color.RGBA{150, 150, 150, 255}
-}
-
-// getShadowColor returns the shadow color from theme or default
-func (r *Renderer) getShadowColor() color.Color {
-	if r.resolvedV25 != nil {
-		return r.resolvedV25.Palette.Shadow
-	}
-	return color.RGBA{0, 0, 0, 15}
 }
 
 // getModeIndicatorColors returns mode indicator colors from theme or defaults
