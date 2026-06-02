@@ -1,6 +1,9 @@
+//go:build windows
+
 package ui
 
 // viewbox_tooltip.go — Tooltip（候选编码提示）的 View 树构建与颜色解析（P4-B）。
+// 仅 Win：依赖 Windows 专属 TooltipWindow（darwin Tooltip 走原生 Swift）。
 // 复用包级 Layout/PaintTree + newSharedDrawContext；颜色经 token 解析自 views.tooltip，
 // 默认映射 Palette.Tooltip。多行 / \t 列对齐 / 行截断 / 行数上限逻辑在 build 内预处理。
 

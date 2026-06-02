@@ -1,6 +1,9 @@
+//go:build windows
+
 package ui
 
 // viewbox_status.go — 状态泡（mode indicator bubble）的 View 树构建与颜色解析（P4-A）。
+// 仅 Win：依赖 Windows 专属 StatusRenderer（darwin 状态泡走原生 Swift）。
 // 状态泡复用包级 Layout/PaintTree 引擎核心；颜色经 token 解析自 views.status，
 // 默认映射 Palette.Status（与 Toast/Tooltip 统一深灰底白字），运行时 StatusWindowConfig 自定义色优先。
 

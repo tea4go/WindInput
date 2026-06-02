@@ -1,6 +1,9 @@
+//go:build windows
+
 package ui
 
 // viewbox_toolbar.go — 工具栏 View 树构建与颜色解析（P4-C）。
+// 仅 Win：依赖 Windows 专属 ToolbarRenderer（darwin 无浮动工具栏）。
 // View 承载整条背景/边框 + 4 按钮背景框布局 + mode 文字；grip 点阵 / 全半角符号(●/月牙) /
 // 标点双符号 / 齿轮 这些矢量符号保留为后处理（定位用 Layout 后各按钮 Rect()）。
 // 复用 P4-A resolveTokenColor + newSharedDrawContext。

@@ -1,6 +1,9 @@
+//go:build windows
+
 package ui
 
 // viewbox_menu.go — 弹出菜单 View 树构建与颜色解析（P4-D）。
+// 仅 Win：依赖 Windows 专属 PopupMenu 渲染器（darwin 菜单走原生 Swift）。
 // root LayoutColumn + 每项 LayoutRow（check/text/arrow），勾选✓/箭头▸/文本走 View 文本叶子；
 // 分隔线后处理（矢量，定位用分隔项 Rect()）。复用 resolveTokenColor + newSharedDrawContext。
 
