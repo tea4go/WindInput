@@ -39,22 +39,23 @@ type Manager struct {
 	readyCh chan struct{}
 
 	// 配置/状态镜像 (darwin forwarder 暂未消费, 但保留语义为日后扩展)
-	hideCandidateWindow bool
-	hidePreedit         bool
-	preeditMode         config.PreeditMode
-	pagerDisplayMode    config.PagerDisplayMode
-	cmdbarPrefix        string
-	maxCandidateChars   int
-	isPinyinMode        bool
-	isQuickInputMode    bool
-	modeLabel           string
-	modeAccentColor     color.Color
-	appPinEnabled       bool
-	appPinPositions     map[string][2]int
-	candidateLayout     config.CandidateLayout
-	statusIndicatorCfg  StatusWindowConfig
-	tooltipDelay        int
-	chaiziFontPath      string // 拆字字根字体文件绝对路径 (随 tooltip 下发给 .app 注册)
+	hideCandidateWindow  bool
+	hidePreedit          bool
+	preeditMode          config.PreeditMode
+	pagerDisplayMode     config.PagerDisplayMode
+	cmdbarPrefix         string
+	maxCandidateChars    int
+	candidateIndexLabels string
+	isPinyinMode         bool
+	isQuickInputMode     bool
+	modeLabel            string
+	modeAccentColor      color.Color
+	appPinEnabled        bool
+	appPinPositions      map[string][2]int
+	candidateLayout      config.CandidateLayout
+	statusIndicatorCfg   StatusWindowConfig
+	tooltipDelay         int
+	chaiziFontPath       string // 拆字字根字体文件绝对路径 (随 tooltip 下发给 .app 注册)
 
 	// callback 引用 (darwin 上 forwarder 直接订阅 Events(), 这些回调暂留兼容)
 	candidateCallbacks *CandidateCallback
@@ -439,9 +440,20 @@ func (m *Manager) GetAvailableThemeInfos() []theme.ThemeDisplayInfo {
 // 配置 setter
 // ============================================================================
 
-func (m *Manager) UpdateConfig(fontSize float64, fontFamily string, hideCandidateWindow bool) {
+// UpdateConfig 与 Win 版同签名 (4 参)。darwin 上候选窗字体由 forwarder 自持的
+// ui.Renderer 管理 (启动时按系统 CJK 字体播种), 故 fontSize/fontFollowTheme/fontFamily
+// 暂不在此消费, 仅镜像 hideCandidateWindow; 字号跟随主题等后续由 forwarder 接入。
+func (m *Manager) UpdateConfig(fontSize float64, fontFollowTheme bool, fontFamily string, hideCandidateWindow bool) {
 	m.mu.Lock()
 	m.hideCandidateWindow = hideCandidateWindow
+	m.mu.Unlock()
+}
+
+// SetCandidateIndexLabels 与 Win 版同签名。darwin 上序号标签覆盖暂存于字段,
+// forwarder 接入逐元素序号配置后再下发给 renderer (日后扩展)。
+func (m *Manager) SetCandidateIndexLabels(labels string) {
+	m.mu.Lock()
+	m.candidateIndexLabels = labels
 	m.mu.Unlock()
 }
 func (m *Manager) UpdateStatusIndicatorConfig(duration, offsetX, offsetY int) {}

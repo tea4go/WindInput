@@ -129,7 +129,7 @@ func (f *darwinForwarder) refreshThemeIfNeeded() {
 	}
 	darkChanged := f.themeMgr.SetDarkMode(dark)
 	if nameChanged || darkChanged {
-		f.renderer.SetTheme(f.themeMgr.GetResolvedTheme())
+		f.renderer.SetTheme(f.themeMgr.GetResolvedV25())
 		f.logger.Info("darwin forwarder 主题已应用", "theme", f.lastTheme, "dark", dark)
 	}
 }
@@ -288,11 +288,11 @@ func (f *darwinForwarder) tooltipColors() (bg, fg string) {
 	if f.themeMgr == nil {
 		return "", ""
 	}
-	rt := f.themeMgr.GetResolvedTheme()
+	rt := f.themeMgr.GetResolvedV25()
 	if rt == nil {
 		return "", ""
 	}
-	return theme.ColorToHex(rt.Tooltip.BackgroundColor), theme.ColorToHex(rt.Tooltip.TextColor)
+	return theme.ColorToHex(rt.Palette.Tooltip.Background), theme.ColorToHex(rt.Palette.Tooltip.Text)
 }
 
 // showStatusBubble 按 config 把 ShowStatusIndicator 投递的状态合成最终气泡帧推给 .app。
@@ -340,9 +340,9 @@ func (f *darwinForwarder) statusColors() (bg, fg string) {
 	var bgC color.Color = color.RGBA{60, 60, 60, 240}
 	var fgC color.Color = color.RGBA{255, 255, 255, 255}
 	if f.themeMgr != nil {
-		if rt := f.themeMgr.GetResolvedTheme(); rt != nil {
-			bgC = rt.ModeIndicator.BackgroundColor
-			fgC = rt.ModeIndicator.TextColor
+		if rt := f.themeMgr.GetResolvedV25(); rt != nil {
+			bgC = rt.Palette.Status.Background
+			fgC = rt.Palette.Status.Text
 		}
 	}
 	if c, err := theme.ParseHexColor(f.cfgStatus.BackgroundColor); err == nil {
@@ -389,9 +389,9 @@ func (f *darwinForwarder) toastColors() (bg, fg string) {
 	var bgC color.Color = color.RGBA{0x2B, 0x2B, 0x2B, 0xFF}
 	var fgC color.Color = color.RGBA{0xFF, 0xFF, 0xFF, 0xFF}
 	if f.themeMgr != nil {
-		if rt := f.themeMgr.GetResolvedTheme(); rt != nil {
-			bgC = forceOpaqueColor(rt.Tooltip.BackgroundColor)
-			fgC = rt.Tooltip.TextColor
+		if rt := f.themeMgr.GetResolvedV25(); rt != nil {
+			bgC = forceOpaqueColor(rt.Palette.Tooltip.Background)
+			fgC = rt.Palette.Tooltip.Text
 		}
 	}
 	return theme.ColorToHex(bgC), theme.ColorToHex(fgC)
