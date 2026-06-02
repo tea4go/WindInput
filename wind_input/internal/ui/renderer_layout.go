@@ -85,18 +85,32 @@ func pagerButtonHeight(pageFontSize, scale float64) float64 {
 
 // indexLabel returns the display string for a candidate index.
 // Priority: overrideLabel > IndexLabels config > default 1-9,0
+//
+// IndexLabels 支持两种格式：
+//   - 10 个字符的字符串（如 "①②③④⑤⑥⑦⑧⑨⑩"），按位取字符
+//   - 包含 '/' 分隔符的模板（如 "1./2./3./4./5./6./7./8./9./0."），按斜杠分割取槽位
+//
+// index 取值 1..9 对应槽位 0..8；index=0 对应槽位 9（第十个候选）。
 func indexLabel(indexLabels string, index int, overrideLabel string) string {
 	if overrideLabel != "" {
 		return overrideLabel
 	}
 	if indexLabels != "" {
-		labels := []rune(indexLabels)
 		pos := index - 1
 		if index == 0 {
 			pos = 9
 		}
-		if pos >= 0 && pos < len(labels) {
-			return string(labels[pos])
+		// 斜杠分隔的多字符模板
+		if strings.Contains(indexLabels, "/") {
+			parts := strings.Split(indexLabels, "/")
+			if pos >= 0 && pos < len(parts) {
+				return parts[pos]
+			}
+		} else {
+			labels := []rune(indexLabels)
+			if pos >= 0 && pos < len(labels) {
+				return string(labels[pos])
+			}
 		}
 	}
 	return string(rune('0' + index))
@@ -353,6 +367,8 @@ func (r *Renderer) renderVerticalCandidates(candidates []Candidate, input string
 	dc.SetColor(cfg.BackgroundColor)
 	r.drawRoundedRect(dc, 0, 0, width-2, height-2, cfg.CornerRadius)
 	dc.Fill()
+	// v2.5 背景图叠加在纯色之上（裁剪到圆角窗口区域由后续 mask 处理，此处直接叠绘）
+	r.drawBackgroundImage(img, 0, 0, int(width-2), int(height-2))
 
 	// Border — accent 模式下用 accent 颜色替换默认边框
 	if cfg.ModeAccentColor != nil {
@@ -898,6 +914,8 @@ func (r *Renderer) renderHorizontalCandidates(candidates []Candidate, input stri
 	dc.SetColor(cfg.BackgroundColor)
 	r.drawRoundedRect(dc, 0, 0, width-2, height-2, cfg.CornerRadius)
 	dc.Fill()
+	// v2.5 背景图叠加在纯色之上（裁剪到圆角窗口区域由后续 mask 处理，此处直接叠绘）
+	r.drawBackgroundImage(img, 0, 0, int(width-2), int(height-2))
 
 	// Border — accent 模式下用 accent 颜色替换默认边框
 	if cfg.ModeAccentColor != nil {

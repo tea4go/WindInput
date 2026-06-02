@@ -605,18 +605,35 @@ function Prepare-DataFiles {
     }
     Write-Detail "  - 已复制预制数据文件 ($dataCopied 个文件)"
 
-    # 复制主题文件
+    # 复制主题文件: 每个主题目录的 theme.yaml + 共享零件目录 _layouts / _palettes (v2.5)
     Write-Detail "  - 复制主题文件..."
     $themesSrc = Join-Path $ScriptDir "wind_input\themes"
     $themesDst = Join-Path $DataDir "themes"
     if (Test-Path $themesSrc) {
         Get-ChildItem -Path $themesSrc -Directory | ForEach-Object {
+            $name = $_.Name
+            # 下划线前缀目录视为 v2.5 共享零件 (_layouts / _palettes), 整目录递归复制
+            if ($name.StartsWith("_")) {
+                $destDir = Join-Path $themesDst $name
+                if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir -Force | Out-Null }
+                Get-ChildItem -Path $_.FullName -File -Recurse | Where-Object { $_.Extension -ne ".md" } | ForEach-Object {
+                    $rel = $_.FullName.Substring($_.FullName.IndexOf($name) + $name.Length + 1)
+                    $dst = Join-Path $destDir $rel
+                    $dstParent = Split-Path -Parent $dst
+                    if (-not (Test-Path $dstParent)) { New-Item -ItemType Directory -Path $dstParent -Force | Out-Null }
+                    Copy-Item -Path $_.FullName -Destination $dst -Force
+                }
+                $count = (Get-ChildItem -Path $destDir -File -Recurse).Count
+                Write-Detail "    - $name/ ($count 个零件)"
+                return
+            }
+            # 普通主题: 复制 theme.yaml + 同目录可能存在的资源 (背景图等)，排除 *.md
             $themeYaml = Join-Path $_.FullName "theme.yaml"
             if (Test-Path $themeYaml) {
-                $destDir = Join-Path $themesDst $_.Name
+                $destDir = Join-Path $themesDst $name
                 if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir -Force | Out-Null }
-                Copy-Item -Path $themeYaml -Destination $destDir -Force
-                Write-Detail "    - $($_.Name)"
+                Get-ChildItem -Path $_.FullName -File | Where-Object { $_.Extension -ne ".md" } | Copy-Item -Destination $destDir -Force
+                Write-Detail "    - $name"
             }
         }
         Write-Detail "  - 主题文件复制完成"

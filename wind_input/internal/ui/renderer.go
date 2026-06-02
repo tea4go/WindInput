@@ -57,6 +57,12 @@ type RenderConfig struct {
 	PreeditMode        config.PreeditMode     // "top" (default) or "embedded" (inline before candidates); only effective when HidePreedit=false
 	IndexLabels        string                 // 10 custom label chars replacing default 1-9,0; empty = default
 	CmdbarPrefix       string                 // 副作用 cmdbar 候选 (Actions 含 ActionEffect) 的前缀符号; 空 = 不显示前缀
+
+	// v2.5 候选窗背景图（nil = 仅纯色背景）
+	BackgroundImage   *image.RGBA
+	BackgroundMode    string  // nine_slice | stretch | tile | center
+	BackgroundSlice   theme.Padding
+	BackgroundOpacity float64
 }
 
 // DefaultRenderConfig returns default rendering configuration with DPI scaling
@@ -219,6 +225,10 @@ type Renderer struct {
 	// (旧 pprof 中合计 ~2.3 GB 累计). RenderCandidates 在 UI 单线程调用,
 	// UpdateLayeredWindow 同步消费 img, 之后下一帧才会写入 — 无并发竞争.
 	scratchPix []byte
+
+	// 背景图预合成缓存：按 (源图指针, w, h) 失效；避免每帧 scale 开销
+	bgCache    *image.RGBA
+	bgCacheSrc *image.RGBA
 }
 
 // acquireDrawContext 返回一个 gg.Context 与对应的 *image.RGBA, 二者共享
@@ -432,6 +442,42 @@ func (r *Renderer) SetTheme(resolved *theme.ResolvedTheme) {
 		r.config.HorizontalMaxWidth = resolved.Style.HorizontalMaxWidth * scale
 	}
 	r.config.IndexLabels = resolved.Style.IndexLabels
+
+	// 候选窗背景图（v2.5）
+	if resolved.Background != nil && resolved.Background.Image != nil {
+		r.config.BackgroundImage = resolved.Background.Image
+		r.config.BackgroundMode = resolved.Background.Mode
+		r.config.BackgroundSlice = resolved.Background.Slice
+		r.config.BackgroundOpacity = resolved.Background.Opacity
+	} else {
+		r.config.BackgroundImage = nil
+		r.config.BackgroundMode = ""
+		r.config.BackgroundOpacity = 0
+	}
+}
+
+// drawBackgroundImage 在 dst 的 (x,y,w,h) 区域绘制 v2.5 背景图（如已配置）。
+// 为避免每帧重 scale，缓存当前 src + 尺寸下预合成的 bg buffer。
+// 缓存按 (BackgroundImage 指针, w, h) 失效。
+func (r *Renderer) drawBackgroundImage(dst *image.RGBA, x, y, w, h int) {
+	if r.config.BackgroundImage == nil || w <= 0 || h <= 0 {
+		return
+	}
+	if r.bgCache == nil || r.bgCacheSrc != r.config.BackgroundImage ||
+		r.bgCache.Bounds().Dx() != w || r.bgCache.Bounds().Dy() != h {
+		buf := image.NewRGBA(image.Rect(0, 0, w, h))
+		// 预填充 alpha=255 以让 blendOver 的圆角保护通过；renderer 调用方负责后续 mask
+		for i := 3; i < len(buf.Pix); i += 4 {
+			buf.Pix[i] = 255
+		}
+		theme.DrawBackground(buf, buf.Bounds(), r.config.BackgroundImage,
+			r.config.BackgroundMode, r.config.BackgroundSlice, r.config.BackgroundOpacity)
+		r.bgCache = buf
+		r.bgCacheSrc = r.config.BackgroundImage
+	}
+	// 把缓存 buffer 叠绘到 dst（blendOver 走 dst alpha gate 保护圆角）
+	theme.DrawBackground(dst, image.Rect(x, y, x+w, y+h), r.bgCache, "stretch",
+		theme.Padding{}, 1.0)
 }
 
 // getCommentColor returns the comment color from theme or default

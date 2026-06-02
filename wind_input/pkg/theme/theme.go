@@ -2,6 +2,7 @@
 package theme
 
 import (
+	"image"
 	"image/color"
 )
 
@@ -109,14 +110,23 @@ type ThemeVariant struct {
 }
 
 // Theme represents a complete theme configuration.
-// Supports two formats:
-//   - New format: light/dark variants under "light:" and "dark:" keys
+// Supports three formats (优先级从高到低):
+//   - v2.5 format: Layout/Palette fields (string ID 外链 或 inline 对象)
+//   - v2 format: light/dark variants under "light:" and "dark:" keys
 //   - Legacy format: colors at top level (treated as single variant for both modes)
 type Theme struct {
 	Meta  ThemeMeta            `yaml:"meta" json:"meta"`
 	Style CandidateWindowStyle `yaml:"style" json:"style"`
 
-	// New format: light/dark variants
+	// v2.5 format: layout / palette 字段。值可为：
+	//   - string: 共享零件 ID（外链形态），加载器到 themes/_layouts/ 或 _palettes/ 解析
+	//   - map[string]any: 内联对象（内联形态），通过 yaml round-trip 解为 LayoutSchema/PaletteSchema
+	// nil 表示未使用 v2.5 schema，回退到 v2/legacy 字段。
+	Layout    any        `yaml:"layout,omitempty" json:"layout,omitempty"`
+	Palette   any        `yaml:"palette,omitempty" json:"palette,omitempty"`
+	Overrides *Overrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
+
+	// v2 format: light/dark variants
 	Light *ThemeVariant `yaml:"light,omitempty" json:"light,omitempty"`
 	Dark  *ThemeVariant `yaml:"dark,omitempty" json:"dark,omitempty"`
 
@@ -126,6 +136,19 @@ type Theme struct {
 	PopupMenu       PopupMenuColors       `yaml:"popup_menu" json:"popup_menu"`
 	Tooltip         TooltipColors         `yaml:"tooltip" json:"tooltip"`
 	ModeIndicator   ModeIndicatorColors   `yaml:"mode_indicator" json:"mode_indicator"`
+}
+
+// Overrides 用于外链形态对引用的 layout/palette 做就地微调。
+// 字段为 map[string]any，按 yaml 路径深度合并到被引用文件之上。
+// 内联形态不使用此字段（直接在内联块里改即可）。
+type Overrides struct {
+	Layout  map[string]any `yaml:"layout,omitempty" json:"layout,omitempty"`
+	Palette map[string]any `yaml:"palette,omitempty" json:"palette,omitempty"`
+}
+
+// HasV25Schema 返回 true 表示该 Theme 使用了 v2.5 的 layout/palette 字段
+func (t *Theme) HasV25Schema() bool {
+	return t.Layout != nil || t.Palette != nil
 }
 
 // HasVariants returns true if the theme uses the new light/dark variant format
@@ -257,6 +280,17 @@ type ResolvedTheme struct {
 	PopupMenu       ResolvedPopupMenuColors
 	Tooltip         ResolvedTooltipColors
 	ModeIndicator   ResolvedModeIndicatorColors
+	// Background v2.5 候选窗背景图（v2 主题或未配置时为 nil）
+	Background *ResolvedThemeBackground
+}
+
+// ResolvedThemeBackground 暴露给 renderer 消费的背景图数据。
+// Image 已 decode 为 RGBA，可直接绘制。
+type ResolvedThemeBackground struct {
+	Image   *image.RGBA
+	Mode    string
+	Slice   Padding
+	Opacity float64
 }
 
 // resolveStyle parses the style configuration

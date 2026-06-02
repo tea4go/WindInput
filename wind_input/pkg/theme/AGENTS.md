@@ -1,50 +1,72 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-13 | Updated: 2026-04-20 -->
+<!-- Generated: 2026-03-13 | Updated: 2026-05-27 -->
 
 # pkg/theme
 
 ## Purpose
-主题系统。定义候选窗口、工具栏、弹出菜单、Tooltip、模式指示器的颜色结构体及样式配置，提供从 YAML 文件动态加载主题和颜色解析工具。
+主题系统。定义候选窗口、工具栏、弹出菜单、Tooltip、模式指示器的颜色与布局结构，提供从 YAML 文件动态加载主题、颜色解析、layout/palette 双形态组合与派生工具。
 
 ## Key Files
+
+### v2 / Legacy（运行中，P5 后逐步退役）
 | File | Description |
 |------|-------------|
-| `theme.go` | `Theme` 顶层结构体（含 Meta、CandidateWindow、Style、Toolbar、PopupMenu、Tooltip、ModeIndicator）；`Resolve()` 方法将字符串颜色解析为 `color.Color` |
-| `colors.go` | `ParseColor`/`MustParseHexColor`：解析 `#RRGGBB` 或 `#RRGGBBAA` 格式的十六进制颜色 |
-| `colors_test.go` | 颜色解析单元测试 |
-| `manager.go` | `Manager`：多路径搜索加载主题、列出可用主题（`ListAvailableThemes`/`ListAvailableThemeInfos`）、返回解析后主题（`GetResolvedTheme`） |
-| `default_themes.go` | `emptyTheme()`：空主题（所有颜色字段为空，`Resolve()` 时使用硬编码默认值作为回退） |
+| `theme.go` | `Theme` 顶层结构体（含 Meta、CandidateWindow、Style、Toolbar、PopupMenu、Tooltip、ModeIndicator）；`Resolve()` 方法将字符串颜色解析为 `color.Color`；扩展了 v2.5 字段 `Layout`/`Palette`/`Overrides` |
+| `colors.go` | `ParseColor`/`MustParseHexColor`：解析 `#RRGGBB` 或 `#RRGGBBAA` |
+| `manager.go` | `Manager`：多路径搜索加载主题、列出可用主题、返回解析后主题 |
+| `default_themes.go` | `emptyTheme()`：空主题 |
+
+### v2.5（layout+palette 双形态、density、派生）
+| File | Description |
+|------|-------------|
+| `layout.go` | 原始解析层 `LayoutSchema` + `Raw*` 结构体（`RawCandidateWindowLayout` 等）：距离/圆角/间隙/边框 用 `*int` 表示，nil=未写、非 nil（含 0）=显式值；plain 结构体（`Padding`/`BandLayout`/...）供 `resolved.go` 复用 |
+| `palette.go` | `PaletteSchema` 数据类型：light/dark 双变体颜色 + 背景图 |
+| `resolved.go` | `ResolvedV25` / `ResolvedLayout` / `ResolvedPalette`：renderer 消费形态（plain int） |
+| `density.go` | density 基线表（compact/cozy/comfortable，直接返回 `ResolvedLayout`）与 `mergeWithDensityBaseline`（Raw `*int` → plain int 合并） |
+| `derive.go` | 从 primary 派生语义色（HSL-shift；hct 暂等价 HSL-shift） |
+| `refexpand.go` | 展开 palette 中的 `${name}` 引用 |
+| `resolver.go` | `(*Manager).ResolveV25`：双形态加载器入口，外链 ID/内联对象统一处理 |
+| `inline.go` | `(*Manager).InlineTheme` / `ExternalizeTheme`：内联与外链互转 |
 
 ## For AI Agents
 
-### Working In This Directory
-- 颜色格式：`#RRGGBB`（不透明）或 `#RRGGBBAA`（含 Alpha），均支持 6 位和 8 位十六进制
-- **主题搜索路径（优先级从高到低）**：
-  1. `%APPDATA%\WindInput\themes\<name>\theme.yaml`（用户自定义主题）
-  2. `<exeDir>\themes\<name>\theme.yaml`（随程序分发的主题）
-  3. 也支持单文件形式：`<dir>/<name>.yaml`
-- `Theme` 顶层字段：`meta`、`candidate_window`、`style`、`toolbar`、`popup_menu`、`tooltip`、`mode_indicator`
-- `CandidateWindowColors` 含 11 个颜色字段；`ToolbarColors` 含 17 个；`PopupMenuColors` 含 7 个；`TooltipColors` 含 2 个；`ModeIndicatorColors` 含 2 个
-- `CandidateWindowStyle` 含样式字段：`index_style`（`"circle"`/`"text"`）、`accent_bar_color`、间距/圆角/行高等布局参数
-- 添加新颜色字段时需同时更新：结构体定义、`Resolve()` 中的默认值、所有 theme.yaml 文件（default/dark/msime）
-- 渲染器使用 `GetResolvedTheme()` 获取已解析的 `*ResolvedTheme`（包含 `color.Color` 值），避免重复解析
-- `ThemeDisplayInfo` 提供 ID（目录名）和 DisplayName（`meta.name + meta.version`）供 UI 菜单展示
+### v2.5 schema 关键约定
+
+- **layout + palette 解耦**：layout 描述尺寸，palette 描述颜色，theme.yaml 通过 `layout: <id>` + `palette: <id>` 组合
+- **双形态**：
+  - 外链：`layout: "compact-horizontal"` 字符串 ID → 加载器查 `themes/_layouts/<id>.yaml`
+  - 内联：`layout: {meta: ..., density: ..., ...}` 对象 → 直接解析
+  - 两种形态产出的 `ResolvedV25` 等价
+- **overrides 仅外链形态使用**：`Theme.Overrides.Layout / .Palette` 为深度合并 map；内联形态直接改内联块即可
+- **density 基线**：用户写 `density: compact|cozy|comfortable` 等同于先填该档基线，再用显式字段覆盖；未指定 density 视为 compact
+- **显式 0 语义**：layout 原始解析层（`LayoutSchema` / `Raw*`）把"距离/圆角/间隙/边框"类字段建模为 `*int`：nil=未写（回退 density 基线），非 nil（含 0）=用户显式值。因此 `border_radius: 0`、`padding: {top: 0}`、`band_gap: 0` 等"显式关闭"语义会被保留，不被基线覆盖。字号/高度/最大宽度/Scale 仍用零值=回退基线（0 无物理意义）。`mergeWithDensityBaseline` 直接产出 plain int 的 `ResolvedLayout`
+- **颜色派生**：palette 顶层语义色（bg/surface/border/text/text_dim/text_hint/accent/on_accent/shadow）未显式给出时按 derive.algorithm 派生；用户显式值始终优先
+- **`${name}` 引用**：仅在 palette 文件内有效；可引用 `${primary}` 或同变体内的语义色名；禁止两级嵌套引用
+- **背景图**：相对路径相对 palette 文件解析；`data:` URI 原样透传；模式：nine_slice / stretch / tile / center
+- **候选序号 index**：`index.labels` 是序号显示的**唯一来源**（字符串数组，≤10），槽位 0→序号 1、…、槽位 9→第 10 个候选（index 0）；不足 10 项或空串槽位回退默认数字（1..9,0），单个标签不应含 `/`（渲染器以 `/` 切分槽位）。"风格"（`1.`/`①`/`❶`…）只是编辑器侧把对应字符填入 labels 的预设，schema 不再有 `style` 字段。`index.circle`（bool）是与 labels **正交**的圆形背景开关。`adapter.go`：`IndexLabels = buildIndexLabelsFromSlots(labels)`、`IndexStyle = circle ? "circle" : "text"`
+
+### 主题搜索路径（优先级从高到低）
+1. `%APPDATA%\WindInput\themes\<name>\theme.yaml`
+2. `<exeDir>\data\themes\<name>\theme.yaml`
+
+v2.5 共享零件目录：
+- `themes/_layouts/<id>.yaml`
+- `themes/_palettes/<id>.yaml`
 
 ### Testing Requirements
-- `go test ./pkg/theme/`（`colors_test.go` 测试颜色解析）
-- 主题加载测试需要文件系统访问
+- `go test ./pkg/theme/` 覆盖：颜色解析、density 基线、派生、引用展开、双形态等价、Overrides、Inline/Externalize round-trip
 
-### Common Patterns
-- 渲染器在绘制前调用 `theme.Manager.GetResolvedTheme()` 获取当前主题的解析后颜色值
-- 颜色字段存储为 `string`（YAML 中的十六进制），渲染时通过 `MustParseHexColor` 转为 `color.Color`（含 fallback 默认值）
-- 空字段 `""` 在 `Resolve()` 时自动回退到硬编码默认颜色，因此 theme.yaml 中可省略不需要自定义的字段
+### v2 → v2.5 兼容
+- 旧 theme.yaml（v2 格式：light/dark 直挂组件颜色）继续可读
+- `(*Theme).HasV25Schema()` 判定是否走 v2.5 解析路径
+- 渲染器在 P2 阶段切换到 v2.5；过渡期两路径并存
 
 ## Dependencies
 ### Internal
 - 无
 
 ### External
-- `gopkg.in/yaml.v3` — 主题文件解析
-- `image/color`（标准库）— `color.Color` 类型
+- `gopkg.in/yaml.v3`
+- `image/color`（标准库）
 
 <!-- MANUAL: -->

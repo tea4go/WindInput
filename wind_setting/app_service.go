@@ -250,19 +250,13 @@ func (a *App) GetAvailableThemes() ([]ThemeInfo, error) {
 
 // GetThemePreview 获取主题预览数据（颜色配置）
 // themeStyle 参数：传入 "system"/"light"/"dark" 以选择对应变体预览
+//
+// v2.5 支持：通过 ResolvedTheme 统一消费 v2/v2.5 两种主题；v2.5 主题的
+// layout/palette 派生与背景图（如有）均会在此正确解析。
 func (a *App) GetThemePreview(themeName string, themeStyle string) (map[string]interface{}, error) {
-	themeManager := theme.NewManager(nil)
+	// 用轻量 Manager 避免 NewManager 的 default 主题双重 resolve
+	themeManager := theme.NewLightweightManager(nil)
 
-	if err := themeManager.LoadTheme(themeName); err != nil {
-		return nil, fmt.Errorf("failed to load theme: %w", err)
-	}
-
-	t := themeManager.GetCurrentTheme()
-	if t == nil {
-		return nil, fmt.Errorf("theme not found")
-	}
-
-	// 根据传入的 themeStyle 确定使用亮色还是暗色变体
 	if themeStyle == "" {
 		themeStyle = "system"
 	}
@@ -275,11 +269,23 @@ func (a *App) GetThemePreview(themeName string, themeStyle string) (map[string]i
 	default: // "system"
 		isDark = theme.IsSystemDarkMode()
 	}
+	// 在 LoadTheme 之前设置 isDark，让加载路径按目标模式 resolve
+	themeManager.SetDarkMode(isDark)
 
-	// 使用变体系统获取当前模式的颜色
-	v := t.GetVariant(isDark)
+	if err := themeManager.LoadTheme(themeName); err != nil {
+		return nil, fmt.Errorf("failed to load theme: %w", err)
+	}
 
-	// 返回完整的颜色配置供前端预览
+	t := themeManager.GetCurrentTheme()
+	resolved := themeManager.GetResolvedTheme()
+	if t == nil || resolved == nil {
+		return nil, fmt.Errorf("theme not found")
+	}
+
+	// 把 color.Color 转为 #RRGGBBAA 字符串供前端消费
+	cwc := resolved.CandidateWindow
+	tbc := resolved.Toolbar
+
 	preview := map[string]interface{}{
 		"meta": map[string]string{
 			"name":    t.Meta.Name,
@@ -287,43 +293,52 @@ func (a *App) GetThemePreview(themeName string, themeStyle string) (map[string]i
 			"author":  t.Meta.Author,
 		},
 		"candidate_window": map[string]string{
-			"background_color":  v.CandidateWindow.BackgroundColor,
-			"border_color":      v.CandidateWindow.BorderColor,
-			"text_color":        v.CandidateWindow.TextColor,
-			"index_color":       v.CandidateWindow.IndexColor,
-			"index_bg_color":    v.CandidateWindow.IndexBgColor,
-			"hover_bg_color":    v.CandidateWindow.HoverBgColor,
-			"selected_bg_color": v.CandidateWindow.SelectedBgColor,
-			"input_bg_color":    v.CandidateWindow.InputBgColor,
-			"input_text_color":  v.CandidateWindow.InputTextColor,
-			"comment_color":     v.CandidateWindow.CommentColor,
-			"shadow_color":      v.CandidateWindow.ShadowColor,
+			"background_color":  theme.ColorToHex(cwc.BackgroundColor),
+			"border_color":      theme.ColorToHex(cwc.BorderColor),
+			"text_color":        theme.ColorToHex(cwc.TextColor),
+			"index_color":       theme.ColorToHex(cwc.IndexColor),
+			"index_bg_color":    theme.ColorToHex(cwc.IndexBgColor),
+			"hover_bg_color":    theme.ColorToHex(cwc.HoverBgColor),
+			"selected_bg_color": theme.ColorToHex(cwc.SelectedBgColor),
+			"input_bg_color":    theme.ColorToHex(cwc.InputBgColor),
+			"input_text_color":  theme.ColorToHex(cwc.InputTextColor),
+			"comment_color":     theme.ColorToHex(cwc.CommentColor),
+			"shadow_color":      theme.ColorToHex(cwc.ShadowColor),
 		},
 		"toolbar": map[string]string{
-			"background_color":        v.Toolbar.BackgroundColor,
-			"border_color":            v.Toolbar.BorderColor,
-			"grip_color":              v.Toolbar.GripColor,
-			"mode_chinese_bg_color":   v.Toolbar.ModeChineseBgColor,
-			"mode_english_bg_color":   v.Toolbar.ModeEnglishBgColor,
-			"mode_text_color":         v.Toolbar.ModeTextColor,
-			"full_width_on_bg_color":  v.Toolbar.FullWidthOnBgColor,
-			"full_width_off_bg_color": v.Toolbar.FullWidthOffBgColor,
-			"full_width_on_color":     v.Toolbar.FullWidthOnColor,
-			"full_width_off_color":    v.Toolbar.FullWidthOffColor,
-			"punct_chinese_bg_color":  v.Toolbar.PunctChineseBgColor,
-			"punct_english_bg_color":  v.Toolbar.PunctEnglishBgColor,
-			"punct_chinese_color":     v.Toolbar.PunctChineseColor,
-			"punct_english_color":     v.Toolbar.PunctEnglishColor,
-			"settings_bg_color":       v.Toolbar.SettingsBgColor,
-			"settings_icon_color":     v.Toolbar.SettingsIconColor,
+			"background_color":        theme.ColorToHex(tbc.BackgroundColor),
+			"border_color":            theme.ColorToHex(tbc.BorderColor),
+			"grip_color":              theme.ColorToHex(tbc.GripColor),
+			"mode_chinese_bg_color":   theme.ColorToHex(tbc.ModeChineseBgColor),
+			"mode_english_bg_color":   theme.ColorToHex(tbc.ModeEnglishBgColor),
+			"mode_text_color":         theme.ColorToHex(tbc.ModeTextColor),
+			"full_width_on_bg_color":  theme.ColorToHex(tbc.FullWidthOnBgColor),
+			"full_width_off_bg_color": theme.ColorToHex(tbc.FullWidthOffBgColor),
+			"full_width_on_color":     theme.ColorToHex(tbc.FullWidthOnColor),
+			"full_width_off_color":    theme.ColorToHex(tbc.FullWidthOffColor),
+			"punct_chinese_bg_color":  theme.ColorToHex(tbc.PunctChineseBgColor),
+			"punct_english_bg_color":  theme.ColorToHex(tbc.PunctEnglishBgColor),
+			"punct_chinese_color":     theme.ColorToHex(tbc.PunctChineseColor),
+			"punct_english_color":     theme.ColorToHex(tbc.PunctEnglishColor),
+			"settings_bg_color":       theme.ColorToHex(tbc.SettingsBgColor),
+			"settings_icon_color":     theme.ColorToHex(tbc.SettingsIconColor),
 		},
-		"style": map[string]string{
-			"index_style":      t.Style.IndexStyle,
-			"accent_bar_color": t.Style.AccentBarColor,
+		"style": map[string]interface{}{
+			"index_style":  resolved.Style.IndexStyle,
+			"index_labels": resolved.Style.IndexLabels,
+			"is_v25":       t.HasV25Schema(),
 		},
 		"is_dark": map[string]bool{
 			"active": isDark,
 		},
+	}
+	// v2.5 背景图（仅暴露 mode / opacity / 是否有图，不暴露内部指针）
+	if resolved.Background != nil {
+		preview["background"] = map[string]interface{}{
+			"mode":      resolved.Background.Mode,
+			"opacity":   resolved.Background.Opacity,
+			"has_image": resolved.Background.Image != nil,
+		}
 	}
 
 	return preview, nil

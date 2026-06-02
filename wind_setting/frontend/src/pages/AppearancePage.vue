@@ -95,6 +95,23 @@ const statusSchema = computed<PageSchema>(() => {
     });
 });
 
+// resolveIndexLabel 根据当前主题的 index_labels 模板返回第 slotIdx (0..9) 个候选项的序号字符串
+// 优先级：v2.5 IndexLabels (斜杠分隔 / 10 字符) > 默认 1-9,0
+function resolveIndexLabel(slotIdx: number): string {
+  const labels = props.themePreview?.style?.index_labels ?? "";
+  if (labels) {
+    if (labels.includes("/")) {
+      const parts = labels.split("/");
+      if (slotIdx >= 0 && slotIdx < parts.length) return parts[slotIdx];
+    } else {
+      const chars = [...labels];
+      if (slotIdx >= 0 && slotIdx < chars.length) return chars[slotIdx];
+    }
+  }
+  // 默认数字
+  return slotIdx === 9 ? "0" : String(slotIdx + 1);
+}
+
 // 命令直通车标注模式: 把 cmdbar_candidate_prefix 单字段映射成 3 种模式。
 // undefined / "⚡" → default, "" → none, 其他 → custom。
 type CmdbarPrefixMode = "default" | "none" | "custom";
@@ -300,9 +317,9 @@ onUnmounted(() => {
                   <div class="preview-candidates">
                     <div
                       v-for="(item, idx) in [
-                        { n: '1', text: '中文', hover: true },
-                        { n: '2', text: '清风', comment: 'igmq' },
-                        { n: '3', text: '输入' },
+                        { n: resolveIndexLabel(0), text: '中文', hover: true },
+                        { n: resolveIndexLabel(1), text: '清风', comment: 'igmq' },
+                        { n: resolveIndexLabel(2), text: '输入' },
                       ]"
                       :key="idx"
                       class="preview-candidate-item"

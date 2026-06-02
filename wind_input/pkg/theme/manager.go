@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/huanfeng/wind_input/pkg/config"
@@ -21,13 +22,22 @@ var BuiltinThemeIDs = map[string]bool{
 
 // Manager manages theme loading and switching
 type Manager struct {
-	logger         *slog.Logger
-	mu             sync.RWMutex
-	currentTheme   *Theme
-	currentThemeID string // Theme ID used for loading (e.g., "default", "msime")
-	resolved       *ResolvedTheme
-	isDarkMode     bool     // Current dark mode state
-	themeDirs      []string // Directories to search for themes
+	logger          *slog.Logger
+	mu              sync.RWMutex
+	currentTheme    *Theme
+	currentThemeID  string // Theme ID used for loading (e.g., "default", "msime")
+	currentThemeDir string // theme.yaml 所在目录（v2.5 用于定位 _layouts/_palettes 与背景图）
+	resolved        *ResolvedTheme
+	isDarkMode      bool     // Current dark mode state
+	themeDirs       []string // Directories to search for themes
+}
+
+// NewLightweightManager 仅初始化搜索路径，不预加载 default 主题。
+// 适用于 preview / 临时查询场景，避免 NewManager 的双重 resolve 开销。
+func NewLightweightManager(logger *slog.Logger) *Manager {
+	m := &Manager{logger: logger}
+	m.initThemeDirs()
+	return m
 }
 
 // NewManager creates a new theme manager
@@ -75,14 +85,52 @@ func (m *Manager) initThemeDirs() {
 
 // loadAndApply loads a theme from file and applies it (caller must not hold lock)
 func (m *Manager) loadAndApply(name string) error {
-	theme, err := m.loadThemeFile(name)
+	theme, themeDir, err := m.loadThemeFileWithDir(name)
 	if err != nil {
 		return err
 	}
 	m.currentTheme = theme
 	m.currentThemeID = name
-	m.resolved = m.currentTheme.Resolve(m.isDarkMode)
+	m.currentThemeDir = themeDir
+	m.resolved = m.resolveTheme(theme, themeDir)
 	return nil
+}
+
+// resolveTheme 根据主题 schema 版本选择解析路径：
+//   - v2.5 (HasV25Schema): ResolveV25 → ResolvedToLegacy 适配
+//   - v2/legacy: 直接 (*Theme).Resolve
+//
+// 适配失败（如 layout/palette 找不到）时回退到 (*Theme).Resolve 以保证 UI 不崩。
+func (m *Manager) resolveTheme(t *Theme, themeDir string) *ResolvedTheme {
+	return m.resolveThemeWithDark(t, themeDir, m.isDarkMode)
+}
+
+// resolveThemeWithDark 与 resolveTheme 等价，但显式接收 isDark 参数，
+// 用于在锁外执行解析时携带快照值。
+func (m *Manager) resolveThemeWithDark(t *Theme, themeDir string, isDark bool) *ResolvedTheme {
+	if t.HasV25Schema() {
+		rv, err := m.ResolveV25(t, isDark, themeDir)
+		if err != nil {
+			if m.logger != nil {
+				m.logger.Warn("v2.5 主题解析失败, 回退到 v2 路径", "error", err)
+			}
+		} else {
+			resolved := ResolvedToLegacy(rv)
+			// 加载背景图（I/O 在锁外执行，解码失败时静默丢弃背景）
+			if resolved.Background != nil && rv.Palette.Background != nil {
+				if img, ierr := LoadBackgroundImage(rv.Palette.Background.ImagePath); ierr == nil {
+					resolved.Background.Image = img
+				} else {
+					if m.logger != nil {
+						m.logger.Warn("背景图加载失败", "path", rv.Palette.Background.ImagePath, "error", ierr)
+					}
+					resolved.Background = nil
+				}
+			}
+			return resolved
+		}
+	}
+	return t.Resolve(isDark)
 }
 
 // LoadTheme loads a theme by name from theme directories.
@@ -90,15 +138,16 @@ func (m *Manager) loadAndApply(name string) error {
 // - A theme directory name to search in theme directories (e.g., "default", "msime")
 // - An absolute path to a theme.yaml file
 func (m *Manager) LoadTheme(name string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if name == "" {
 		name = "default"
 	}
 
-	// Try to load from file
-	theme, err := m.loadThemeFile(name)
+	// 1) 锁外做磁盘 I/O 与解析（避免持锁 10ms+ 与 coordinator slow request 冲突）
+	m.mu.RLock()
+	isDark := m.isDarkMode
+	m.mu.RUnlock()
+
+	theme, themeDir, err := m.loadThemeFileWithDir(name)
 	if err != nil {
 		if m.logger != nil {
 			m.logger.Error("加载主题失败", "name", name, "error", err,
@@ -106,12 +155,18 @@ func (m *Manager) LoadTheme(name string) error {
 		}
 		return fmt.Errorf("加载主题 %q 失败: %w (搜索路径: %v)", name, err, m.themeDirs)
 	}
+	resolved := m.resolveThemeWithDark(theme, themeDir, isDark)
 
+	// 2) 仅在 commit 字段时持锁
+	m.mu.Lock()
 	m.currentTheme = theme
 	m.currentThemeID = name
-	m.resolved = m.currentTheme.Resolve(m.isDarkMode)
+	m.currentThemeDir = themeDir
+	m.resolved = resolved
+	m.mu.Unlock()
+
 	if m.logger != nil {
-		m.logger.Info("Loaded theme", "name", theme.Meta.Name, "id", name, "isDark", m.isDarkMode)
+		m.logger.Info("Loaded theme", "name", theme.Meta.Name, "id", name, "isDark", isDark, "v25", theme.HasV25Schema())
 	}
 	return nil
 }
@@ -128,7 +183,7 @@ func (m *Manager) SetDarkMode(isDark bool) bool {
 
 	m.isDarkMode = isDark
 	if m.currentTheme != nil {
-		m.resolved = m.currentTheme.Resolve(isDark)
+		m.resolved = m.resolveTheme(m.currentTheme, m.currentThemeDir)
 	}
 	if m.logger != nil {
 		m.logger.Info("Dark mode changed, theme re-resolved", "isDark", isDark, "theme", m.currentThemeID)
@@ -145,27 +200,31 @@ func (m *Manager) GetDarkMode() bool {
 
 // loadThemeFile attempts to load a theme from various locations
 func (m *Manager) loadThemeFile(name string) (*Theme, error) {
-	// If it's an absolute path to a file, load directly
+	t, _, err := m.loadThemeFileWithDir(name)
+	return t, err
+}
+
+// loadThemeFileWithDir 同 loadThemeFile，但额外返回 theme.yaml 所在目录，
+// 用于 v2.5 解析时定位 _layouts/_palettes 与背景图相对路径。
+func (m *Manager) loadThemeFileWithDir(name string) (*Theme, string, error) {
 	if filepath.IsAbs(name) {
-		return m.loadThemeFromPath(name)
+		t, err := m.loadThemeFromPath(name)
+		return t, filepath.Dir(name), err
 	}
 
-	// Search in theme directories
 	for _, dir := range m.themeDirs {
-		// Try <dir>/<name>/theme.yaml
 		themePath := filepath.Join(dir, name, "theme.yaml")
 		if _, err := os.Stat(themePath); err == nil {
-			return m.loadThemeFromPath(themePath)
+			t, err := m.loadThemeFromPath(themePath)
+			return t, filepath.Dir(themePath), err
 		}
-
-		// Try <dir>/<name>.yaml
 		themePath = filepath.Join(dir, name+".yaml")
 		if _, err := os.Stat(themePath); err == nil {
-			return m.loadThemeFromPath(themePath)
+			t, err := m.loadThemeFromPath(themePath)
+			return t, filepath.Dir(themePath), err
 		}
 	}
-
-	return nil, fmt.Errorf("theme not found: %s", name)
+	return nil, "", fmt.Errorf("theme not found: %s", name)
 }
 
 // loadThemeFromPath loads a theme from a specific file path
@@ -210,6 +269,10 @@ func (m *Manager) ListAvailableThemes() []string {
 		}
 
 		for _, entry := range entries {
+			// 下划线前缀的目录与文件保留为 v2.5 共享零件库（_layouts / _palettes），不作为主题列出
+			if strings.HasPrefix(entry.Name(), "_") {
+				continue
+			}
 			if entry.IsDir() {
 				// Check if it contains theme.yaml
 				themePath := filepath.Join(dir, entry.Name(), "theme.yaml")

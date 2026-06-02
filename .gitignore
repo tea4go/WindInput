@@ -104,6 +104,9 @@ package.json.md5
 # SuperPowers
 docs/superpowers
 
+# MCP
+.playwright-mcp
+
 # node
 node_modules
 

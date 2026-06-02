@@ -252,10 +252,18 @@ export interface ThemePreview {
   };
   style?: {
     index_style: string;
-    accent_bar_color: string;
+    accent_bar_color?: string;
+    index_labels?: string;
+    is_v25?: boolean;
   };
   is_dark?: {
     active: boolean;
+  };
+  // v2.5 背景图（仅当 palette 配置了 background 时出现）
+  background?: {
+    mode: string;
+    opacity: number;
+    has_image: boolean;
   };
 }
 
