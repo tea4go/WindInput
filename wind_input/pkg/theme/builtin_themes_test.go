@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -16,6 +17,11 @@ func builtinThemesDir(t *testing.T) string {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// build/ 是构建产物（被 .gitignore 的 /build/ 忽略），未构建或 CI checkout 后不存在。
+	// 与 dict 包测试一致：数据目录缺失时跳过端到端主题加载，而非 t.Fatalf 硬失败。
+	if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
+		t.Skipf("跳过测试：内置主题目录不存在（需先构建 build/data/themes）：%s", abs)
 	}
 	return abs
 }
