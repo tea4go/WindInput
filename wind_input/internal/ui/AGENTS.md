@@ -29,7 +29,7 @@
 | File | Description |
 |------|-------------|
 | `renderer.go` | `Renderer`: gg 渲染候选词列表 (文字/颜色/高亮/序号圈), 出 `*image.RGBA`; 嵌入 `TextBackendManager` |
-| `renderer_layout.go` | 候选窗布局计算 (水平/垂直, DPI 感知), 纯函数易测 |
+| `renderer_layout.go` | `RenderCandidates` 候选窗渲染入口（DPI 刷新后按 Layout 委派 `renderHorizontalV2`/`renderVerticalV2`）+ 横竖排共用辅助 `candidateDisplayText`/`indexLabel`/`hasSideEffectAction`；盒模型 View 引擎为唯一路径（旧固定化渲染器已删） |
 | `text_drawer.go` | `TextDrawer` 接口 + `freeTypeDrawer` (gg/text 实现, 含 glyph 级字体 fallback) + `fontCache`; 彩色 emoji 段经平台 hook `drawColorEmoji` 画到独立 `emojiOverlay` (gg.Context.Image() 返回拷贝, 不能直接画), EndDraw 叠回; emoji 段宽用 `colorEmojiAdvance` 取整 em |
 | `font_config.go` | `FontConfig`: 字体路径/大小/样式; 调 `systemfont.ResolveFile/HasFamily/ResolveDWFamily` 解析系统字体; `textFallbackFonts()` 调平台 hook `platformTextFallbackFonts()` 注入原生回退链 |
 | `font_fallback_other.go` / `emoji_sbix_other.go` | `//go:build !darwin` 平台 hook 空实现 (`platformTextFallbackFonts`/`drawColorEmoji`/`colorEmojiAdvance` 返回空; Win 走 DirectWrite 彩色路径) |
@@ -53,8 +53,6 @@
 | `text_drawer_windows.go` | `gdiDrawer` + `directWriteDrawer`：`TextDrawer` 的 GDI/DirectWrite 实现 (依赖 `TextRenderer`/`DWriteRenderer`) |
 | `dwrite_cgo_windows.go` | CGO 桥接文件（仅 Windows）：C trampoline `cDrawGlyphRunTrampoline` 从 XMM 寄存器正确接收 float 参数后转发给 Go 导出函数 `goDrawGlyphRunBridge`；解决 Windows x64 COM 回调中 float 参数无法通过 `syscall.NewCallback` 可靠提取的问题；`dwCGODrawGlyphRunCallback()` 返回 C 函数指针供 COM vtable 使用 |
 | `dwrite_text.go` | DirectWrite 文字渲染实现（IDWriteFactory/IDWriteTextLayout COM 接口调用）；`TextRenderer`(GDI)/`DWriteRenderer` 类型定义在此与 gdi_text.go |
-| `renderer.go` | `Renderer`：GDI 渲染候选词列表（文字、颜色、高亮） |
-| `renderer_layout.go` | `RenderCandidates` 候选窗渲染入口（DPI 刷新后按 Layout 委派 `renderHorizontalV2`/`renderVerticalV2`）+ 横竖排共用辅助 `candidateDisplayText`/`indexLabel`/`hasSideEffectAction`；旧固定化渲染器已退役删除，盒模型 View 引擎为唯一路径 |
 | `viewbox.go` | **盒模型 View 渲染引擎**(v2.6 P1，设计见 docs/design/theme-view-architecture.md)：`View`/`Fill`/`Border`/`ImageLayer`(图片或纯色层)/`TextStyle`/`Shadow`/`GlyphKind`(矢量箭头)/`Edges` 类型 + measure/arrange（行/列流式、margin/padding、交叉轴对齐、`Stretch` 撑满、`Grow` 弹性占位右对齐）；布局层经 `TextMeasurer` 注入文本度量，可纯断言单测 |
 | `viewbox_paint.go` | 盒模型绘制层：`PaintTree` 三趟遍历（形状/背景图/z<0 → 文本 → z>0 覆盖图），复用 `theme.DrawBackground` + 注入 `TextDrawer`；含 chevron 箭头绘制 |
 | `viewbox_build.go` | `(r *Renderer) buildHorizontalCandidateTree`：从 **`r.resolvedViews`(ResolvedViews)** + 候选构建横排候选窗 View 树（外观取值 single-scale，派生公式留 build）；覆盖 selected/hover 背景、accent 强调条（z<0 纯色层）、pager 翻页区；序号经 `effectiveIndexLabels`(全局>主题>默认) + `indexLabel`；返回 `candWindowTree`(root + items + pagerUp/Down) |
@@ -77,11 +75,7 @@
 | `toast_renderer.go` | `ToastRenderer`：toast 图像渲染（标题 + 多行正文 + 圆角矩形 + Level accent 边框），复用 `TextBackendManager`（DirectWrite） |
 | `monitor.go` | 多显示器支持：获取目标显示器工作区，用于窗口位置计算 |
 | `dpi.go` | Win DPI 检测 (`GetEffectiveDPI`/WM_DPICHANGED)；`init()` 注入 `dpiScaleProvider` 给跨平台 `dpi_neutral.go` |
-| `gdi_text.go` | GDI 文字渲染实现 (`TextRenderer` + `containsSymbolChars`)；`FontSpecToName` 已移至跨平台 `fontspec.go` |
-| `font_config.go` | `FontConfig`：字体路径/大小/样式配置 |
-| `text_drawer.go` | `TextDrawer` 接口（跨平台）：统一 GDI/DirectWrite/freeType 绘制 API；**P7-B** 增 `MeasureStringFont`/`DrawStringFull`（按平台字体族名度量/绘制，空 family 回退全局，未知名由平台引擎替换；freeType 路径加载无法按名切换故忽略 family）。`TextStyle.Family` 经 `paintText` 透传，`measure` 经可选 `fontMeasurer` 接口按 family 度量。freeType 实现留此，GDI/DirectWrite 实现移至 `text_drawer_windows.go` |
-| `protocol.go` | UI 内部消息类型（`UICommand`、`Candidate`、`ToolbarState`） |
-| `uicmd_post.go` | `postCmd` 投递 helper + `snapshotCandidatesMarkers/Config/PinState` 全量快照构造器 (供 setter 末尾投递 snapshot 命令到 cmdCh) |
+| `gdi_text.go` | GDI 文字渲染实现 (`TextRenderer` + `containsSymbolChars`)；`FontSpecToName` 已移至跨平台 `fontspec.go` || `uicmd_post.go` | `postCmd` 投递 helper + `snapshotCandidatesMarkers/Config/PinState` 全量快照构造器 (供 setter 末尾投递 snapshot 命令到 cmdCh) |
 | `uicmd_events.go` | 反向事件通道: `Events() <-chan uicmd.Event` + `wrapCandidateCallbacks/wrapToolbarCallbacks/wrapHotkeyCallback` 双流并行包装 (原 callback + 推一份 uicmd.Event) |
 | `uicmd_post_test.go` | snapshot helper + wrap callback 双流行为 + 背压测试 |
 
