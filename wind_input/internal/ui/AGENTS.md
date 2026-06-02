@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-13 | Updated: 2026-06-01 -->
+<!-- Generated: 2026-03-13 | Updated: 2026-06-02 -->
 
 # internal/ui
 
@@ -102,6 +102,12 @@
 - 不能 import windows / cgo / syscall / unsafe
 - 任何新增"两个平台都用到的数据类型"集中在 types_neutral.go, 避免在 *_darwin.go 复刻
 - darwin Manager 在 `manager_darwin.go` 内独立 struct + 同名方法, 与 Win 版字段不共享
+
+**双端 (Win/darwin) 统一菜单注意事项** (经一次漏项回归后补, 改右键菜单前必读):
+- **单一构建源, 声明式裁剪**: 右键菜单只有 `BuildUnifiedMenuItems` 一个构建函数, Win 与 darwin 共用。平台差异**不靠**两套菜单树, 而靠 `UnifiedMenuState.Omit*` 标志裁剪 —— Win 路径 `coordinator.buildUnifiedMenuState()` 不设标志(全显示); darwin 路径 `coordinator.UnifiedMenuItems()`(`handle_ui_callbacks_darwin.go`) 置 `OmitToolbarToggle=true`/`OmitAdvanced=true`。新增"平台专属项"时加一个 `Omit*` 字段并**仅在对应平台**的 state 构建处置位, 不要在 `*_darwin.go` 复刻整棵菜单。
+- **加一个菜单项 = 改三处, 缺一即静默失效**: ① `types_neutral.go` 定义 `UnifiedMenu*` ID 常量; ② `unified_menu_build.go` 在 `BuildUnifiedMenuItems` 里 `append`; ③ `coordinator/handle_ui_callbacks.go` 的 `handleUnifiedMenuAction` 加 `case` 派发。只缺②→项不显示但**编译通过**(常量未被引用不报错); 只缺③→点击无反应。**回归案例**: macOS 移植把 `BuildUnifiedMenuItems` 从 `manager.go` 搬到 `unified_menu_build.go` 时漏搬"重载配置/重启服务", 常量与 dispatch 都在、编译绿、菜单却少两项 —— 搬运共用函数后务必逐项点验最终菜单。
+- **两端都显示的项, 底层动作必须两端都可用**: 如"重启服务"→`coordinator.resetAndResync()`→`bridge.Server.RestartService()` 在 Win/darwin 均有实现; "重载配置"→`config.Load()` 跨平台。若某动作仅单端可用, 应改用 `Omit*` 裁剪到该平台, 而非两端都挂上去。
+- **darwin 经 bridge 下发, ID 跨语言对齐**: darwin 端菜单树经 `toBridgeMenuItems`→`encodeUnifiedMenuPayload`(`bridge/unified_menu.go`) 编成 `CmdMenuShow` payload, Swift 递归建 NSMenu, 点击回 `CmdMenuAction`(id)。ID 必须落在 `int32` 且与现有区间不冲突(当前 101–305); 改 ID 编码 / flags 语义需同步 Swift 解码端。
 
 **Win 端旧文档** (channel/UI 渲染基础不变):
 - UI 线程 (Windows 消息循环) 与 coordinator goroutine 通过 `chan uicmdItem` 通信 (历史上是 `chan UICommand`, PR-2 已迁移)
