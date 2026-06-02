@@ -6,7 +6,6 @@ package ui
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"log/slog"
 	"slices"
 	"strings"
@@ -14,7 +13,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/gogpu/gg"
 	"github.com/huanfeng/wind_input/pkg/theme"
 	"golang.org/x/sys/windows"
 )
@@ -31,6 +29,7 @@ type TooltipWindow struct {
 	leaveBlocked  bool // 右键菜单显示期间抑制 WM_MOUSELEAVE 隐藏
 	text          string
 	resolvedTheme *theme.ResolvedTheme
+	themeViews    *theme.Views
 	onRightClick  func(text string, x, y int)
 
 	TextBackendManager
@@ -120,16 +119,11 @@ func (w *TooltipWindow) SetTheme(resolved *theme.ResolvedTheme) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.resolvedTheme = resolved
-}
-
-// getTooltipColors returns tooltip colors from theme or defaults
-func (w *TooltipWindow) getTooltipColors() (bgColor, textColor color.Color) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.resolvedTheme != nil {
-		return w.resolvedTheme.Tooltip.BackgroundColor, w.resolvedTheme.Tooltip.TextColor
+	if resolved != nil {
+		w.themeViews = resolved.Views
+	} else {
+		w.themeViews = nil
 	}
-	return color.RGBA{60, 60, 60, 240}, color.RGBA{255, 255, 255, 255}
 }
 
 // Global tooltip window registry
@@ -342,160 +336,23 @@ func (w *TooltipWindow) Destroy() {
 	w.mu.Unlock()
 }
 
-// render 将 tooltip 文本渲染到图像（支持 \n 换行）。
+// render 将 tooltip 文本渲染到图像（盒模型 View 引擎，支持 \n 换行 + \t 列对齐）。
 // maxContentWidth 为可用内容区最大像素宽度（不含 padding）；<=0 表示不限制。
-// 超长行会以"…"截断尾部，行数过多则汇总成"… (+N)"。
+// 超长行以"…"截断尾部、行数过多汇总"… (+N)"的逻辑在 buildTooltipTree 内预处理。
 func (w *TooltipWindow) render(text string, maxContentWidth float64) *image.RGBA {
 	scale := GetDPIScale()
-	bgColor, textColor := w.getTooltipColors()
-
 	w.mu.Lock()
 	td := w.TextDrawer()
+	rtv := w.resolveTooltipColors()
 	w.mu.Unlock()
 
-	fontSize := 14.0 * scale
-	padding := 6.0 * scale
-	lineSpacing := 2.0 * scale
-
-	const maxLines = 20
-
-	lines := splitLines(text)
-	if len(lines) == 0 {
+	root := buildTooltipTree(text, maxContentWidth, rtv, scale, td)
+	if root == nil {
 		return nil
 	}
-
-	// 限制最大行数：保留前 maxLines-1 行，最后一行汇总剩余
-	if len(lines) > maxLines {
-		hidden := len(lines) - (maxLines - 1)
-		kept := append([]string{}, lines[:maxLines-1]...)
-		kept = append(kept, "… (+"+itoaCompact(hidden)+")")
-		lines = kept
-	}
-
-	// 将每行按 \t 拆成 cells，支持列对齐渲染（用于"拆字 / 拼音"合并显示等场景）
-	innerMax := maxContentWidth - padding*2
-	colGap := 16.0 * scale
-
-	rows := make([][]string, len(lines))
-	numCols := 1
-	for i, line := range lines {
-		cells := strings.Split(line, "\t")
-		rows[i] = cells
-		if len(cells) > numCols {
-			numCols = len(cells)
-		}
-	}
-
-	// 单列路径：保持原有简单行截断
-	if numCols == 1 {
-		if innerMax > 0 {
-			for i, line := range lines {
-				if td.MeasureString(line, fontSize) > innerMax {
-					lines[i] = truncateLineToWidth(td, line, fontSize, innerMax)
-				}
-			}
-		}
-	} else {
-		// 多列路径：每列取最大宽度对齐；若总宽超 innerMax，截断最后一列
-		colWidth := make([]float64, numCols)
-		for _, cells := range rows {
-			for k := 0; k < numCols; k++ {
-				if k >= len(cells) {
-					break
-				}
-				lw := td.MeasureString(cells[k], fontSize)
-				if lw > colWidth[k] {
-					colWidth[k] = lw
-				}
-			}
-		}
-		if innerMax > 0 {
-			var fixed float64
-			for k := 0; k < numCols-1; k++ {
-				fixed += colWidth[k]
-			}
-			fixed += float64(numCols-1) * colGap
-			lastBudget := innerMax - fixed
-			if lastBudget < 0 {
-				lastBudget = 0
-			}
-			if colWidth[numCols-1] > lastBudget {
-				colWidth[numCols-1] = 0
-				for i, cells := range rows {
-					if len(cells) < numCols {
-						continue
-					}
-					if td.MeasureString(cells[numCols-1], fontSize) > lastBudget {
-						rows[i][numCols-1] = truncateLineToWidth(td, cells[numCols-1], fontSize, lastBudget)
-					}
-					lw := td.MeasureString(rows[i][numCols-1], fontSize)
-					if lw > colWidth[numCols-1] {
-						colWidth[numCols-1] = lw
-					}
-				}
-			}
-		}
-
-		// 依列宽重组行用于宽度计算（保留 rows 给绘制阶段）
-		var totalW float64
-		for k := 0; k < numCols; k++ {
-			totalW += colWidth[k]
-		}
-		totalW += float64(numCols-1) * colGap
-
-		lineH := fontSize + lineSpacing
-		width := totalW + padding*2
-		height := lineH*float64(len(rows)) - lineSpacing + padding*2
-
-		dc := gg.NewContext(int(width), int(height))
-		dc.SetColor(bgColor)
-		dc.DrawRoundedRectangle(0, 0, width, height, 4*scale)
-		dc.Fill()
-
-		img := dc.Image().(*image.RGBA)
-		td.BeginDraw(img)
-		for i, cells := range rows {
-			y := padding + fontSize*0.8 + float64(i)*lineH
-			x := padding
-			for k := 0; k < numCols; k++ {
-				if k < len(cells) {
-					td.DrawString(cells[k], x, y, fontSize, textColor)
-				}
-				x += colWidth[k] + colGap
-			}
-		}
-		td.EndDraw()
-
-		DrawDebugBanner(img)
-		return img
-	}
-
-	// 计算各行宽度，取最大值（单列路径）
-	var maxLineWidth float64
-	for _, line := range lines {
-		lw := td.MeasureString(line, fontSize)
-		if lw > maxLineWidth {
-			maxLineWidth = lw
-		}
-	}
-
-	lineH := fontSize + lineSpacing
-	width := maxLineWidth + padding*2
-	height := lineH*float64(len(lines)) - lineSpacing + padding*2
-
-	dc := gg.NewContext(int(width), int(height))
-	dc.SetColor(bgColor)
-	dc.DrawRoundedRectangle(0, 0, width, height, 4*scale)
-	dc.Fill()
-
-	img := dc.Image().(*image.RGBA)
-	td.BeginDraw(img)
-	for i, line := range lines {
-		y := padding + fontSize*0.8 + float64(i)*lineH
-		td.DrawString(line, padding, y, fontSize, textColor)
-	}
-	td.EndDraw()
-
+	Layout(root, 0, 0, td)
+	dc, img := newSharedDrawContext(root.Rect().Dx(), root.Rect().Dy())
+	PaintTree(root, dc, img, td)
 	DrawDebugBanner(img)
 	return img
 }
@@ -525,13 +382,13 @@ func itoaCompact(n int) string {
 
 // truncateLineToWidth 将单行裁剪到 ≤ maxWidth 宽度，尾部加 "…"。
 // 二分查找最长可放入前缀（按 rune 切，避免破坏多字节字符）。
-func truncateLineToWidth(td TextDrawer, line string, fontSize, maxWidth float64) string {
+func truncateLineToWidth(m TextMeasurer, line string, fontSize, maxWidth float64) string {
 	const ellipsis = "…"
 	runes := []rune(line)
 	if len(runes) == 0 {
 		return line
 	}
-	ellipsisW := td.MeasureString(ellipsis, fontSize)
+	ellipsisW := m.MeasureString(ellipsis, fontSize)
 	if ellipsisW >= maxWidth {
 		return ellipsis // 极端情况下连 "…" 都放不下
 	}
@@ -539,7 +396,7 @@ func truncateLineToWidth(td TextDrawer, line string, fontSize, maxWidth float64)
 	lo, hi := 0, len(runes)
 	for lo < hi {
 		mid := (lo + hi + 1) / 2
-		if td.MeasureString(string(runes[:mid]), fontSize) <= budget {
+		if m.MeasureString(string(runes[:mid]), fontSize) <= budget {
 			lo = mid
 		} else {
 			hi = mid - 1

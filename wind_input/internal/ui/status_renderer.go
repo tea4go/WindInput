@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gogpu/gg"
 	"github.com/huanfeng/wind_input/pkg/theme"
 )
 
@@ -19,6 +18,7 @@ type StatusRenderer struct {
 
 	mu            sync.Mutex
 	resolvedTheme *theme.ResolvedTheme
+	themeViews    *theme.Views
 	logger        *slog.Logger
 }
 
@@ -47,7 +47,7 @@ func BuildStatusText(state StatusState, showMode, showPunct, showFullWidth bool)
 	return strings.Join(parts, " ")
 }
 
-// Render 将状态信息渲染为 RGBA 图像
+// Render 将状态信息渲染为 RGBA 图像（盒模型 View 引擎）。
 func (r *StatusRenderer) Render(state StatusState, cfg StatusWindowConfig) *image.RGBA {
 	text := BuildStatusText(state, cfg.ShowMode, cfg.ShowPunct, cfg.ShowFullWidth)
 	if text == "" {
@@ -55,76 +55,26 @@ func (r *StatusRenderer) Render(state StatusState, cfg StatusWindowConfig) *imag
 	}
 
 	scale := GetDPIScale()
-	fontSize := cfg.FontSize * scale
-	padding := 6.0 * scale
-	minWidth := 32.0 * scale
-	borderRadius := cfg.BorderRadius * scale
 
 	r.mu.Lock()
 	td := r.TextDrawer()
+	rsv := r.resolveStatusColors(cfg)
 	r.mu.Unlock()
 
-	// 测量文本宽度
-	tw := td.MeasureString(text, fontSize)
-	width := tw + padding*2
-	if width < minWidth {
-		width = minWidth
-	}
-	height := fontSize + padding*2
+	// 透明度应用到背景色（与现状一致）
+	rsv.BgColor = applyOpacity(rsv.BgColor, cfg.Opacity)
 
-	// 获取颜色
-	bgColor, textColor := r.getColors(cfg)
+	// 构建 View 树 + 布局
+	root := buildStatusTree(text, rsv, cfg.FontSize, 6.0, cfg.BorderRadius, scale, td)
+	Layout(root, 0, 0, td)
 
-	// 应用透明度
-	bgColor = applyOpacity(bgColor, cfg.Opacity)
-
-	// 绘制圆角矩形背景
-	dc := gg.NewContext(int(width), int(height))
-	dc.SetColor(bgColor)
-	dc.DrawRoundedRectangle(0, 0, width, height, borderRadius)
-	dc.Fill()
-
-	// 绘制文本（居中）
-	img := dc.Image().(*image.RGBA)
-	textX := (width - tw) / 2
-	textY := padding + fontSize*0.8
-	td.BeginDraw(img)
-	td.DrawString(text, textX, textY, fontSize, textColor)
-	td.EndDraw()
+	w := root.Rect().Dx()
+	h := root.Rect().Dy()
+	dc, img := newSharedDrawContext(w, h)
+	PaintTree(root, dc, img, td)
 
 	DrawDebugBanner(img)
 	return img
-}
-
-// getColors 获取渲染颜色，优先级：自定义颜色 > 主题颜色 > 默认颜色
-func (r *StatusRenderer) getColors(cfg StatusWindowConfig) (bgColor, textColor color.Color) {
-	// 默认颜色
-	var bg color.Color = color.RGBA{60, 60, 60, 240}
-	var text color.Color = color.RGBA{255, 255, 255, 255}
-
-	// 尝试主题颜色
-	r.mu.Lock()
-	resolved := r.resolvedTheme
-	r.mu.Unlock()
-
-	if resolved != nil {
-		bg = resolved.ModeIndicator.BackgroundColor
-		text = resolved.ModeIndicator.TextColor
-	}
-
-	// 自定义颜色优先级最高
-	if cfg.BackgroundColor != "" {
-		if c, ok := parseHexColor(cfg.BackgroundColor); ok {
-			bg = c
-		}
-	}
-	if cfg.TextColor != "" {
-		if c, ok := parseHexColor(cfg.TextColor); ok {
-			text = c
-		}
-	}
-
-	return bg, text
 }
 
 // applyOpacity 将透明度应用到颜色的 alpha 通道
@@ -200,6 +150,11 @@ func (r *StatusRenderer) SetTheme(resolved *theme.ResolvedTheme) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.resolvedTheme = resolved
+	if resolved != nil {
+		r.themeViews = resolved.Views
+	} else {
+		r.themeViews = nil
+	}
 }
 
 // Close 释放渲染资源

@@ -71,13 +71,9 @@ type ToolbarPalette struct {
 	ModeChineseBg    string `yaml:"mode_chinese_bg" json:"mode_chinese_bg"`
 	ModeEnglishBg    string `yaml:"mode_english_bg" json:"mode_english_bg"`
 	ModeText         string `yaml:"mode_text" json:"mode_text"`
-	FullWidthOnBg    string `yaml:"full_width_on_bg" json:"full_width_on_bg"`
 	FullWidthOffBg   string `yaml:"full_width_off_bg" json:"full_width_off_bg"`
-	FullWidthOnText  string `yaml:"full_width_on_text" json:"full_width_on_text"`
 	FullWidthOffText string `yaml:"full_width_off_text" json:"full_width_off_text"`
-	PunctChineseBg   string `yaml:"punct_chinese_bg" json:"punct_chinese_bg"`
 	PunctEnglishBg   string `yaml:"punct_english_bg" json:"punct_english_bg"`
-	PunctChineseText string `yaml:"punct_chinese_text" json:"punct_chinese_text"`
 	PunctEnglishText string `yaml:"punct_english_text" json:"punct_english_text"`
 	SettingsBg       string `yaml:"settings_bg" json:"settings_bg"`
 	SettingsIcon     string `yaml:"settings_icon" json:"settings_icon"`

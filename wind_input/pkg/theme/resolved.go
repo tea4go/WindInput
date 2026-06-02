@@ -83,13 +83,9 @@ type ResolvedToolbarPalette struct {
 	ModeChineseBg    color.Color
 	ModeEnglishBg    color.Color
 	ModeText         color.Color
-	FullWidthOnBg    color.Color
 	FullWidthOffBg   color.Color
-	FullWidthOnText  color.Color
 	FullWidthOffText color.Color
-	PunctChineseBg   color.Color
 	PunctEnglishBg   color.Color
-	PunctChineseText color.Color
 	PunctEnglishText color.Color
 	SettingsBg       color.Color
 	SettingsIcon     color.Color

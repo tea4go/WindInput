@@ -23,6 +23,7 @@ const (
 // ToolbarRenderer renders the toolbar UI
 type ToolbarRenderer struct {
 	resolvedTheme *theme.ResolvedTheme
+	themeViews    *theme.Views
 	TextBackendManager
 }
 
@@ -38,6 +39,11 @@ func NewToolbarRenderer() *ToolbarRenderer {
 // SetTheme sets the theme for the toolbar renderer
 func (r *ToolbarRenderer) SetTheme(resolved *theme.ResolvedTheme) {
 	r.resolvedTheme = resolved
+	if resolved != nil {
+		r.themeViews = resolved.Views
+	} else {
+		r.themeViews = nil
+	}
 }
 
 // getToolbarColors returns toolbar colors from theme or defaults
@@ -53,13 +59,9 @@ func (r *ToolbarRenderer) getToolbarColors() *theme.ResolvedToolbarColors {
 		ModeChineseBgColor:  color.RGBA{51, 154, 245, 255},
 		ModeEnglishBgColor:  color.RGBA{115, 127, 148, 255},
 		ModeTextColor:       color.RGBA{255, 255, 255, 255},
-		FullWidthOnBgColor:  color.RGBA{46, 184, 153, 255},
 		FullWidthOffBgColor: color.RGBA{230, 234, 239, 255},
-		FullWidthOnColor:    color.RGBA{255, 255, 255, 255},
 		FullWidthOffColor:   color.RGBA{89, 102, 122, 255},
-		PunctChineseBgColor: color.RGBA{245, 133, 67, 255},
 		PunctEnglishBgColor: color.RGBA{230, 234, 239, 255},
-		PunctChineseColor:   color.RGBA{255, 255, 255, 255},
 		PunctEnglishColor:   color.RGBA{89, 102, 122, 255},
 		SettingsBgColor:     color.RGBA{230, 234, 239, 255},
 		SettingsIconColor:   color.RGBA{122, 102, 184, 255},
@@ -75,207 +77,105 @@ func (r *ToolbarRenderer) getTooltipColors() (bgColor, textColor, borderColor co
 	return color.RGBA{38, 46, 56, 242}, color.RGBA{242, 242, 242, 255}, color.RGBA{77, 89, 107, 255}
 }
 
-// Render renders the toolbar with the given state
+// Render renders the toolbar with the given state（盒模型 View 引擎）。
+// View 承载整条背景/边框 + 4 按钮框 + mode 文字；grip/全半角/标点/齿轮矢量符号后处理。
 func (r *ToolbarRenderer) Render(state ToolbarState) *image.RGBA {
 	scale := GetDPIScale()
-	colors := r.getToolbarColors()
-
-	width := int(float64(toolbarBaseWidth) * scale)
-	height := int(float64(toolbarBaseHeight) * scale)
-
-	dc := gg.NewContext(width, height)
-	fontSize := 14.0 * scale
-
-	// ========== Phase 1: Draw all shapes with gg ==========
-
-	// Background with rounded corners
-	radius := 6.0 * scale
-	dc.DrawRoundedRectangle(0, 0, float64(width), float64(height), radius)
-	dc.SetColor(colors.BackgroundColor)
-	dc.Fill()
-
-	// Border
-	dc.DrawRoundedRectangle(0.5, 0.5, float64(width)-1, float64(height)-1, radius)
-	dc.SetColor(colors.BorderColor)
-	dc.SetLineWidth(1)
-	dc.Stroke()
-
-	// Draw grip handle (left side)
-	r.drawGrip(dc, scale, height, colors)
-
-	// Draw button backgrounds
-	x := gripWidth * scale
-	buttonW := buttonWidth * scale
-	padding := buttonPadding * scale
-
-	// Mode button background
-	modeBtnX, modeBtnY := x+padding, padding
-	modeBtnW, modeBtnH := buttonW-padding*2, float64(height)-padding*2
-	r.drawModeButton(dc, modeBtnX, modeBtnY, modeBtnW, modeBtnH, state, scale, colors)
-	x += buttonW
-
-	// Full-width button background + symbol
-	widthBtnX, widthBtnY := x+padding, padding
-	widthBtnW, widthBtnH := buttonW-padding*2, float64(height)-padding*2
-	r.drawWidthButton(dc, widthBtnX, widthBtnY, widthBtnW, widthBtnH, state.FullWidth, scale, colors)
-	r.drawWidthSymbol(dc, widthBtnX, widthBtnY, widthBtnW, widthBtnH, state.FullWidth, scale, colors)
-	x += buttonW
-
-	// Punctuation button background
-	punctBtnX, punctBtnY := x+padding, padding
-	punctBtnW, punctBtnH := buttonW-padding*2, float64(height)-padding*2
-	r.drawPunctButton(dc, punctBtnX, punctBtnY, punctBtnW, punctBtnH, state.ChinesePunct, scale, colors)
-	x += buttonW
-
-	// Settings button (shapes only, no text)
-	r.drawSettingsButton(dc, x+padding, padding, buttonW-padding*2, float64(height)-padding*2, scale, colors)
-
-	// ========== Phase 2: Draw all text with TextDrawer ==========
-	img := dc.Image().(*image.RGBA)
+	rtv := r.resolveToolbarViews()
 	td := r.TextDrawer()
-	td.BeginDraw(img)
 
-	// Mode button text
-	var modeText string
-	if state.ChineseMode {
-		if state.ModeLabel != "" {
-			modeText = state.ModeLabel
-		} else {
-			modeText = "中"
-		}
-	} else if state.CapsLock {
-		modeText = "A"
-	} else {
-		modeText = "英"
-	}
-	tw := td.MeasureString(modeText, fontSize)
-	td.DrawString(modeText, modeBtnX+modeBtnW/2-tw/2, modeBtnY+modeBtnH/2+fontSize*0.35, fontSize, colors.ModeTextColor)
+	tt := buildToolbarTree(state, rtv, scale)
+	Layout(tt.root, 0, 0, td)
+	dc, img := newSharedDrawContext(tt.root.Rect().Dx(), tt.root.Rect().Dy())
+	PaintTree(tt.root, dc, img, td)
 
-	// Width button: symbol drawn in Phase 1, no text needed here
+	// 后处理矢量符号（坐标用 Layout 后各按钮 Rect()）
+	r.paintGrip(dc, tt.grip.Rect(), scale, rtv)
+	r.paintWidthSymbol(dc, tt.width.Rect(), state.FullWidth, scale, rtv)
+	r.paintPunctSymbols(img, td, tt.punct.Rect(), state.ChinesePunct, scale, rtv)
+	r.paintGear(dc, tt.settings.Rect(), scale, rtv)
 
-	// Punct button text: draw left and right symbols separately
-	// 。is full-width so its glyph is visually offset; compensate with manual nudge
-	punctFontSize := 13.0 * scale
-	punctTextColor := colors.PunctEnglishColor
-	punctY := punctBtnY + punctBtnH/2 + punctFontSize*0.35
-	leftAnchor := punctBtnX + punctBtnW*0.33  // visual center for left symbol
-	rightAnchor := punctBtnX + punctBtnW*0.72 // visual center for right symbol
-	if state.ChinesePunct {
-		// 。(U+3002) is full-width: nudge right to compensate left-biased glyph
-		periodText := "\u3002"
-		lwP := td.MeasureString(periodText, punctFontSize)
-		nudge := 2.0 * scale
-		td.DrawString(periodText, leftAnchor-lwP/2+nudge, punctY, punctFontSize, punctTextColor)
-		// ，(U+FF0C) full-width comma
-		commaText := "\uFF0C"
-		rwP := td.MeasureString(commaText, punctFontSize)
-		td.DrawString(commaText, rightAnchor-rwP/2+nudge, punctY, punctFontSize, punctTextColor)
-	} else {
-		dotText := "."
-		lwP := td.MeasureString(dotText, punctFontSize)
-		td.DrawString(dotText, leftAnchor-lwP/2, punctY, punctFontSize, punctTextColor)
-		commaText := ","
-		rwP := td.MeasureString(commaText, punctFontSize)
-		td.DrawString(commaText, rightAnchor-rwP/2, punctY, punctFontSize, punctTextColor)
-	}
-
-	td.EndDraw()
 	DrawDebugBanner(img)
 	return img
 }
 
-// drawGrip draws the grip handle for dragging
-func (r *ToolbarRenderer) drawGrip(dc *gg.Context, scale float64, height int, colors *theme.ResolvedToolbarColors) {
-	gripW := gripWidth * scale
+// paintGrip 在 grip 区域 rect 内绘制拖动点阵（后处理，复刻原 drawGrip 几何）。
+func (r *ToolbarRenderer) paintGrip(dc *gg.Context, rect image.Rectangle, scale float64, rtv theme.ResolvedToolbarViews) {
 	dotSize := 2.0 * scale
 	dotGap := 4.0 * scale
-
-	// Modern subtle grip dots
-	dc.SetColor(colors.GripColor)
-
-	// Draw dots pattern
-	startY := float64(height)/2 - dotGap
+	dc.SetColor(rtv.Grip)
+	cx := float64(rect.Min.X) + float64(rect.Dx())/2
+	cy := float64(rect.Min.Y) + float64(rect.Dy())/2
+	startY := cy - dotGap
 	for row := 0; row < 3; row++ {
 		y := startY + float64(row)*dotGap
 		for col := 0; col < 2; col++ {
-			x := gripW/2 - dotGap/2 + float64(col)*dotGap
+			x := cx - dotGap/2 + float64(col)*dotGap
 			dc.DrawCircle(x, y, dotSize/2)
 			dc.Fill()
 		}
 	}
 }
 
-// drawModeButton draws the mode button background (text drawn separately in Phase 2)
-func (r *ToolbarRenderer) drawModeButton(dc *gg.Context, x, y, w, h float64, state ToolbarState, scale float64, colors *theme.ResolvedToolbarColors) {
-	if state.ChineseMode {
-		dc.SetColor(colors.ModeChineseBgColor)
-	} else {
-		dc.SetColor(colors.ModeEnglishBgColor)
-	}
-	radius := 4.0 * scale
-	dc.DrawRoundedRectangle(x, y, w, h, radius)
-	dc.Fill()
-}
-
-// drawWidthButton draws the full/half width button background (no colored bg, same as off state)
-func (r *ToolbarRenderer) drawWidthButton(dc *gg.Context, x, y, w, h float64, fullWidth bool, scale float64, colors *theme.ResolvedToolbarColors) {
-	dc.SetColor(colors.FullWidthOffBgColor)
-	radius := 4.0 * scale
-	dc.DrawRoundedRectangle(x, y, w, h, radius)
-	dc.Fill()
-}
-
-// drawWidthSymbol draws the full-width/half-width symbol on the width button
-func (r *ToolbarRenderer) drawWidthSymbol(dc *gg.Context, x, y, w, h float64, fullWidth bool, scale float64, colors *theme.ResolvedToolbarColors) {
-	cx := x + w/2
-	cy := y + h/2
+// paintWidthSymbol 在 width 按钮 rect 内绘制全角实心圆 / 半角月牙（色用 ButtonText/ButtonBg）。
+func (r *ToolbarRenderer) paintWidthSymbol(dc *gg.Context, rect image.Rectangle, fullWidth bool, scale float64, rtv theme.ResolvedToolbarViews) {
+	cx := float64(rect.Min.X) + float64(rect.Dx())/2
+	cy := float64(rect.Min.Y) + float64(rect.Dy())/2
 	radius := 6.5 * scale
 
 	if fullWidth {
-		// Solid circle ● for full-width
-		dc.SetColor(colors.FullWidthOffColor)
+		dc.SetColor(rtv.ButtonText)
 		dc.DrawCircle(cx, cy, radius)
 		dc.Fill()
 	} else {
-		// Crescent moon with opening towards upper-left for half-width
-		dc.SetColor(colors.FullWidthOffColor)
+		dc.SetColor(rtv.ButtonText)
 		dc.DrawCircle(cx, cy, radius)
 		dc.Fill()
-
-		// Cut out upper-left portion to create crescent shape
+		// 挖掉左上一块形成月牙（用按钮底色覆盖）
 		offset := radius * 0.5
-		dc.SetColor(colors.FullWidthOffBgColor)
+		dc.SetColor(rtv.ButtonBg)
 		dc.DrawCircle(cx-offset, cy-offset, radius*0.95)
 		dc.Fill()
 	}
 }
 
-// drawPunctButton draws the punctuation button background (no colored bg, same as off state)
-func (r *ToolbarRenderer) drawPunctButton(dc *gg.Context, x, y, w, h float64, chinesePunct bool, scale float64, colors *theme.ResolvedToolbarColors) {
-	dc.SetColor(colors.PunctEnglishBgColor)
-	radius := 4.0 * scale
-	dc.DrawRoundedRectangle(x, y, w, h, radius)
-	dc.Fill()
+// paintPunctSymbols 在 punct 按钮 rect 内绘制中/英标点双符号（带全角 nudge 补偿；色用 ButtonText）。
+func (r *ToolbarRenderer) paintPunctSymbols(img *image.RGBA, td TextDrawer, rect image.Rectangle, chinesePunct bool, scale float64, rtv theme.ResolvedToolbarViews) {
+	punctFontSize := 13.0 * scale
+	x := float64(rect.Min.X)
+	w := float64(rect.Dx())
+	punctY := float64(rect.Min.Y) + float64(rect.Dy())/2 + punctFontSize*0.35
+	leftAnchor := x + w*0.33
+	rightAnchor := x + w*0.72
+	td.BeginDraw(img)
+	if chinesePunct {
+		periodText := "。"
+		lwP := td.MeasureString(periodText, punctFontSize)
+		nudge := 2.0 * scale
+		td.DrawString(periodText, leftAnchor-lwP/2+nudge, punctY, punctFontSize, rtv.ButtonText)
+		commaText := "，"
+		rwP := td.MeasureString(commaText, punctFontSize)
+		td.DrawString(commaText, rightAnchor-rwP/2+nudge, punctY, punctFontSize, rtv.ButtonText)
+	} else {
+		dotText := "."
+		lwP := td.MeasureString(dotText, punctFontSize)
+		td.DrawString(dotText, leftAnchor-lwP/2, punctY, punctFontSize, rtv.ButtonText)
+		commaText := ","
+		rwP := td.MeasureString(commaText, punctFontSize)
+		td.DrawString(commaText, rightAnchor-rwP/2, punctY, punctFontSize, rtv.ButtonText)
+	}
+	td.EndDraw()
 }
 
-// drawSettingsButton draws the settings button (gear icon)
-func (r *ToolbarRenderer) drawSettingsButton(dc *gg.Context, x, y, w, h float64, scale float64, colors *theme.ResolvedToolbarColors) {
-	// Background
-	dc.SetColor(colors.SettingsBgColor)
-	radius := 4.0 * scale
-	dc.DrawRoundedRectangle(x, y, w, h, radius)
-	dc.Fill()
-
-	// Draw gear icon
-	centerX := x + w/2
-	centerY := y + h/2
+// paintGear 在 settings 按钮 rect 内绘制齿轮矢量（背景框已由 View 画；色用 SettingsIcon/Hole）。
+func (r *ToolbarRenderer) paintGear(dc *gg.Context, rect image.Rectangle, scale float64, rtv theme.ResolvedToolbarViews) {
+	centerX := float64(rect.Min.X) + float64(rect.Dx())/2
+	centerY := float64(rect.Min.Y) + float64(rect.Dy())/2
 	outerR := 8.0 * scale
 	innerR := 4.0 * scale
 	toothHeight := 2.5 * scale
 
-	dc.SetColor(colors.SettingsIconColor)
-
-	// Draw gear teeth
+	dc.SetColor(rtv.SettingsIcon)
 	teeth := 8
 	for i := 0; i < teeth; i++ {
 		angle := float64(i) * 360.0 / float64(teeth)
@@ -285,13 +185,9 @@ func (r *ToolbarRenderer) drawSettingsButton(dc *gg.Context, x, y, w, h float64,
 		dc.Fill()
 		dc.Pop()
 	}
-
-	// Draw outer circle
 	dc.DrawCircle(centerX, centerY, outerR-toothHeight)
 	dc.Fill()
-
-	// Draw inner circle (hole)
-	dc.SetColor(colors.SettingsHoleColor)
+	dc.SetColor(rtv.SettingsHole)
 	dc.DrawCircle(centerX, centerY, innerR)
 	dc.Fill()
 }

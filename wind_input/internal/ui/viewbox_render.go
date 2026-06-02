@@ -5,7 +5,18 @@ package ui
 
 import (
 	"image"
+
+	"github.com/gogpu/gg"
 )
+
+// newSharedDrawContext 创建 dc 与 img 实时共享同一像素缓冲的绘制上下文（独立窗口用，
+// 每次新建 buffer，不复用 scratch；候选窗高频路径用 (*Renderer).acquireDrawContext）。
+// 注意：gogpu/gg 的 NewContext().Image() 返回快照而非实时视图，PaintTree 要求 dc 绘制
+// 实时反映到 img，故必须经 pixmap 的 ImageView 共享缓冲。
+func newSharedDrawContext(w, h int) (*gg.Context, *image.RGBA) {
+	pm := gg.NewPixmapFromBuffer(make([]byte, w*h*4), w, h)
+	return gg.NewContextForPixmap(pm), pm.ImageView()
+}
 
 // renderHorizontalV2 用盒模型引擎渲染横排候选窗。
 func (r *Renderer) renderHorizontalV2(

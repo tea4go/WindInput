@@ -31,6 +31,7 @@ type PopupMenu struct {
 
 	// Theme
 	resolvedTheme *theme.ResolvedTheme
+	themeViews    *theme.Views
 
 	// Submenu support
 	submenu      *PopupMenu // 当前展开的子菜单实例
@@ -296,6 +297,7 @@ func newPopupMenuShared(parent *PopupMenu) *PopupMenu {
 	parent.mu.Lock()
 	menuFontSizeOverride := parent.menuFontSizeOverride
 	resolvedTheme := parent.resolvedTheme
+	themeViews := parent.themeViews
 	lockedDPI := parent.lockedDPI
 	parent.mu.Unlock()
 
@@ -310,6 +312,7 @@ func newPopupMenuShared(parent *PopupMenu) *PopupMenu {
 		fontConfig:           parent.fontConfig,
 		menuFontSizeOverride: menuFontSizeOverride,
 		resolvedTheme:        resolvedTheme,
+		themeViews:           themeViews,
 		lockedDPI:            lockedDPI,
 	}
 }
@@ -544,6 +547,11 @@ func (m *PopupMenu) SetTextRenderMode(mode TextRenderMode) {
 func (m *PopupMenu) SetTheme(resolved *theme.ResolvedTheme) {
 	m.mu.Lock()
 	m.resolvedTheme = resolved
+	if resolved != nil {
+		m.themeViews = resolved.Views
+	} else {
+		m.themeViews = nil
+	}
 	sub := m.submenu
 	m.mu.Unlock()
 

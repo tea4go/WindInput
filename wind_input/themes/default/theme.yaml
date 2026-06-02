@@ -36,3 +36,31 @@ views:
     color: "${comment}"
   accent_bar:
     background: {color: "${accent}"}
+  status:
+    background: {color: "${background}"}
+    color: "${text}"
+  tooltip:
+    background: {color: "${background}"}
+    color: "${text}"
+  toolbar:
+    background: {color: "${background}"}
+    border: {color: "${border}"}
+    grip: {color: "${grip}"}
+    button:
+      background: {color: "${button_bg}"}
+      color: "${button_text}"
+      mode:
+        chinese: {background: {color: "${mode_cn_bg}"}}
+        english: {background: {color: "${mode_en_bg}"}}
+    settings:
+      icon: {color: "${settings_icon}"}
+      hole: {color: "${settings_hole}"}
+  menu:
+    background: {color: "${background}"}
+    border: {color: "${border}"}
+    color: "${text}"
+    separator: {color: "${separator}"}
+    disabled: "${disabled}"
+    hover:
+      background: {color: "${hover_bg}"}
+      color: "${hover_text}"

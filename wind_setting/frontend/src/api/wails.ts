@@ -239,13 +239,9 @@ export interface ThemePreview {
     mode_chinese_bg_color: string;
     mode_english_bg_color: string;
     mode_text_color: string;
-    full_width_on_bg_color: string;
     full_width_off_bg_color: string;
-    full_width_on_color: string;
     full_width_off_color: string;
-    punct_chinese_bg_color: string;
     punct_english_bg_color: string;
-    punct_chinese_color: string;
     punct_english_color: string;
     settings_bg_color: string;
     settings_icon_color: string;

@@ -50,15 +50,19 @@ type ViewNode struct {
 
 // Views 具名 View 集合（固定骨架，设计文档 D3）。
 type Views struct {
-	Window        ViewNode `yaml:"window,omitempty"`
-	PreeditBar    ViewNode `yaml:"preedit_bar,omitempty"`
-	CandidateList ViewNode `yaml:"candidate_list,omitempty"`
-	Item          ViewNode `yaml:"item,omitempty"`
-	Index         ViewNode `yaml:"index,omitempty"`
-	Text          ViewNode `yaml:"text,omitempty"`
-	Comment       ViewNode `yaml:"comment,omitempty"`
-	AccentBar     ViewNode `yaml:"accent_bar,omitempty"`
-	FooterBar     ViewNode `yaml:"footer_bar,omitempty"`
+	Window        ViewNode      `yaml:"window,omitempty"`
+	PreeditBar    ViewNode      `yaml:"preedit_bar,omitempty"`
+	CandidateList ViewNode      `yaml:"candidate_list,omitempty"`
+	Item          ViewNode      `yaml:"item,omitempty"`
+	Index         ViewNode      `yaml:"index,omitempty"`
+	Text          ViewNode      `yaml:"text,omitempty"`
+	Comment       ViewNode      `yaml:"comment,omitempty"`
+	AccentBar     ViewNode      `yaml:"accent_bar,omitempty"`
+	FooterBar     ViewNode      `yaml:"footer_bar,omitempty"`
+	Status        *ViewNode     `yaml:"status,omitempty"`  // P4-A 状态泡（独立窗口，单节点）
+	Tooltip       *ViewNode     `yaml:"tooltip,omitempty"` // P4-B Tooltip（独立窗口，单节点）
+	Toolbar       *ToolbarViews `yaml:"toolbar,omitempty"` // P4-C 工具栏
+	Menu          *MenuViews    `yaml:"menu,omitempty"`    // P4-D 弹出菜单
 }
 
 // RVNode 渲染消费形态的单个 View 外观（plain 逻辑像素 + 颜色）。
@@ -104,6 +108,79 @@ type ResolvedViews struct {
 	AccentBarHRatio  float64     // 强调条高 = ItemHeight * 此比例
 	VerticalMaxWidth float64     // 竖排最大宽（逻辑像素）
 	ShadowColor      color.Color // 窗口投影颜色（P2 切片-1）
+}
+
+// ResolvedStatusViews 状态泡解析后外观（P4-A）。仅颜色——几何/字号由运行时 StatusWindowConfig 提供。
+type ResolvedStatusViews struct {
+	BgColor   color.Color
+	TextColor color.Color
+}
+
+// ResolvedTooltipViews Tooltip 解析后外观（P4-B）。仅颜色——几何由 render 内置默认（hardcode）。
+type ResolvedTooltipViews struct {
+	BgColor   color.Color
+	TextColor color.Color
+}
+
+// ToolbarViews 工具栏 YAML schema（P4-C）。button base + mode 状态覆盖 + settings 齿轮色。
+type ToolbarViews struct {
+	Background ViewFill            `yaml:"background,omitempty"`
+	Border     ViewBorder          `yaml:"border,omitempty"`
+	Grip       ViewNode            `yaml:"grip,omitempty"`
+	Button     ToolbarButtonNode   `yaml:"button,omitempty"`
+	Settings   ToolbarSettingsNode `yaml:"settings,omitempty"`
+}
+
+// ToolbarButtonNode 按钮通用 base（background/color）+ mode 状态覆盖。
+type ToolbarButtonNode struct {
+	Background ViewFill           `yaml:"background,omitempty"`
+	Color      string             `yaml:"color,omitempty"`
+	Border     ViewBorder         `yaml:"border,omitempty"`
+	Mode       *ToolbarModeStates `yaml:"mode,omitempty"`
+}
+
+// ToolbarModeStates 模式按钮中/英两态覆盖（仅 background）。
+type ToolbarModeStates struct {
+	Chinese ViewNode `yaml:"chinese,omitempty"`
+	English ViewNode `yaml:"english,omitempty"`
+}
+
+// ToolbarSettingsNode 设置按钮：background（继承 button base 若空）+ 齿轮 icon/hole 色。
+type ToolbarSettingsNode struct {
+	Background ViewFill `yaml:"background,omitempty"`
+	Icon       ViewFill `yaml:"icon,omitempty"`
+	Hole       ViewFill `yaml:"hole,omitempty"`
+}
+
+// ResolvedToolbarViews 工具栏解析后扁平颜色集（P4-C）。几何 hardcode；mode 中/英 build 按 state 选。
+type ResolvedToolbarViews struct {
+	BarBg, BarBorder, Grip                 color.Color
+	ButtonBg, ButtonText                   color.Color // base（width/punct/settings 共用）
+	ModeChineseBg, ModeEnglishBg, ModeText color.Color
+	SettingsBg, SettingsIcon, SettingsHole color.Color
+}
+
+// MenuViews 弹出菜单 YAML schema（P4-D）。7 色：背景/边框/文本/分隔/禁用 + hover 状态。
+type MenuViews struct {
+	Background ViewFill       `yaml:"background,omitempty"`
+	Border     ViewBorder     `yaml:"border,omitempty"`
+	Color      string         `yaml:"color,omitempty"`     // 普通文本
+	Separator  ViewFill       `yaml:"separator,omitempty"` // 分隔线色（用 .Color）
+	Disabled   string         `yaml:"disabled,omitempty"`  // 禁用文本
+	Hover      MenuHoverState `yaml:"hover,omitempty"`
+}
+
+// MenuHoverState 菜单项 hover 覆盖：背景 + 文本。
+type MenuHoverState struct {
+	Background ViewFill `yaml:"background,omitempty"`
+	Color      string   `yaml:"color,omitempty"`
+}
+
+// ResolvedMenuViews 菜单解析后扁平 7 色集（P4-D）。
+type ResolvedMenuViews struct {
+	BgColor, BorderColor, TextColor             color.Color
+	DisabledColor, HoverBgColor, HoverTextColor color.Color
+	SeparatorColor                              color.Color
 }
 
 func intp(v int) *int { return &v }

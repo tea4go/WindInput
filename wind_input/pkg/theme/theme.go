@@ -40,13 +40,9 @@ type ToolbarColors struct {
 	ModeChineseBgColor  string `yaml:"mode_chinese_bg_color" json:"mode_chinese_bg_color"`
 	ModeEnglishBgColor  string `yaml:"mode_english_bg_color" json:"mode_english_bg_color"`
 	ModeTextColor       string `yaml:"mode_text_color" json:"mode_text_color"`
-	FullWidthOnBgColor  string `yaml:"full_width_on_bg_color" json:"full_width_on_bg_color"`
 	FullWidthOffBgColor string `yaml:"full_width_off_bg_color" json:"full_width_off_bg_color"`
-	FullWidthOnColor    string `yaml:"full_width_on_color" json:"full_width_on_color"`
 	FullWidthOffColor   string `yaml:"full_width_off_color" json:"full_width_off_color"`
-	PunctChineseBgColor string `yaml:"punct_chinese_bg_color" json:"punct_chinese_bg_color"`
 	PunctEnglishBgColor string `yaml:"punct_english_bg_color" json:"punct_english_bg_color"`
-	PunctChineseColor   string `yaml:"punct_chinese_color" json:"punct_chinese_color"`
 	PunctEnglishColor   string `yaml:"punct_english_color" json:"punct_english_color"`
 	SettingsBgColor     string `yaml:"settings_bg_color" json:"settings_bg_color"`
 	SettingsIconColor   string `yaml:"settings_icon_color" json:"settings_icon_color"`
@@ -211,13 +207,9 @@ type ResolvedToolbarColors struct {
 	ModeChineseBgColor  color.Color
 	ModeEnglishBgColor  color.Color
 	ModeTextColor       color.Color
-	FullWidthOnBgColor  color.Color
 	FullWidthOffBgColor color.Color
-	FullWidthOnColor    color.Color
 	FullWidthOffColor   color.Color
-	PunctChineseBgColor color.Color
 	PunctEnglishBgColor color.Color
-	PunctChineseColor   color.Color
 	PunctEnglishColor   color.Color
 	SettingsBgColor     color.Color
 	SettingsIconColor   color.Color
@@ -370,13 +362,9 @@ func (t *Theme) Resolve(isDark bool) *ResolvedTheme {
 			ModeChineseBgColor:  MustParseHexColor(v.Toolbar.ModeChineseBgColor, defaults.modeChineseBg),
 			ModeEnglishBgColor:  MustParseHexColor(v.Toolbar.ModeEnglishBgColor, defaults.modeEnglishBg),
 			ModeTextColor:       MustParseHexColor(v.Toolbar.ModeTextColor, defaults.modeText),
-			FullWidthOnBgColor:  MustParseHexColor(v.Toolbar.FullWidthOnBgColor, defaults.fullWidthOnBg),
 			FullWidthOffBgColor: MustParseHexColor(v.Toolbar.FullWidthOffBgColor, defaults.fullWidthOffBg),
-			FullWidthOnColor:    MustParseHexColor(v.Toolbar.FullWidthOnColor, defaults.fullWidthOnColor),
 			FullWidthOffColor:   MustParseHexColor(v.Toolbar.FullWidthOffColor, defaults.fullWidthOffColor),
-			PunctChineseBgColor: MustParseHexColor(v.Toolbar.PunctChineseBgColor, defaults.punctChineseBg),
 			PunctEnglishBgColor: MustParseHexColor(v.Toolbar.PunctEnglishBgColor, defaults.punctEnglishBg),
-			PunctChineseColor:   MustParseHexColor(v.Toolbar.PunctChineseColor, defaults.punctChineseColor),
 			PunctEnglishColor:   MustParseHexColor(v.Toolbar.PunctEnglishColor, defaults.punctEnglishColor),
 			SettingsBgColor:     MustParseHexColor(v.Toolbar.SettingsBgColor, defaults.settingsBg),
 			SettingsIconColor:   MustParseHexColor(v.Toolbar.SettingsIconColor, defaults.settingsIcon),
@@ -404,20 +392,18 @@ func (t *Theme) Resolve(isDark bool) *ResolvedTheme {
 
 // defaultColors holds fallback colors for a mode
 type defaultColors struct {
-	candidateBg, candidateBorder, candidateText       color.Color
-	indexColor, indexBg, hoverBg, selectedBg          color.Color
-	inputBg, inputText, commentColor, shadowColor     color.Color
-	toolbarBg, toolbarBorder, toolbarGrip             color.Color
-	modeChineseBg, modeEnglishBg, modeText            color.Color
-	fullWidthOnBg, fullWidthOffBg, fullWidthOnColor   color.Color
-	fullWidthOffColor                                 color.Color
-	punctChineseBg, punctEnglishBg, punctChineseColor color.Color
-	punctEnglishColor                                 color.Color
-	settingsBg, settingsIcon, settingsHole            color.Color
-	menuBg, menuBorder, menuText, menuDisabled        color.Color
-	menuHoverBg, menuHoverText, menuSeparator         color.Color
-	tooltipBg, tooltipText                            color.Color
-	indicatorBg, indicatorText                        color.Color
+	candidateBg, candidateBorder, candidateText   color.Color
+	indexColor, indexBg, hoverBg, selectedBg      color.Color
+	inputBg, inputText, commentColor, shadowColor color.Color
+	toolbarBg, toolbarBorder, toolbarGrip         color.Color
+	modeChineseBg, modeEnglishBg, modeText        color.Color
+	fullWidthOffBg, fullWidthOffColor             color.Color
+	punctEnglishBg, punctEnglishColor             color.Color
+	settingsBg, settingsIcon, settingsHole        color.Color
+	menuBg, menuBorder, menuText, menuDisabled    color.Color
+	menuHoverBg, menuHoverText, menuSeparator     color.Color
+	tooltipBg, tooltipText                        color.Color
+	indicatorBg, indicatorText                    color.Color
 }
 
 var lightDefaults = defaultColors{
@@ -430,11 +416,9 @@ var lightDefaults = defaultColors{
 	toolbarBg: color.RGBA{255, 255, 255, 255}, toolbarBorder: color.RGBA{199, 209, 224, 255},
 	toolbarGrip:   color.RGBA{153, 173, 199, 179},
 	modeChineseBg: color.RGBA{51, 154, 245, 255}, modeEnglishBg: color.RGBA{115, 127, 148, 255},
-	modeText:      color.RGBA{255, 255, 255, 255},
-	fullWidthOnBg: color.RGBA{46, 184, 153, 255}, fullWidthOffBg: color.RGBA{230, 234, 239, 255},
-	fullWidthOnColor: color.RGBA{255, 255, 255, 255}, fullWidthOffColor: color.RGBA{89, 102, 122, 255},
-	punctChineseBg: color.RGBA{245, 133, 67, 255}, punctEnglishBg: color.RGBA{230, 234, 239, 255},
-	punctChineseColor: color.RGBA{255, 255, 255, 255}, punctEnglishColor: color.RGBA{89, 102, 122, 255},
+	modeText:       color.RGBA{255, 255, 255, 255},
+	fullWidthOffBg: color.RGBA{230, 234, 239, 255}, fullWidthOffColor: color.RGBA{89, 102, 122, 255},
+	punctEnglishBg: color.RGBA{230, 234, 239, 255}, punctEnglishColor: color.RGBA{89, 102, 122, 255},
 	settingsBg: color.RGBA{230, 234, 239, 255}, settingsIcon: color.RGBA{122, 102, 184, 255},
 	settingsHole: color.RGBA{230, 234, 239, 255},
 	menuBg:       color.RGBA{255, 255, 255, 255}, menuBorder: color.RGBA{199, 199, 199, 255},
@@ -455,11 +439,9 @@ var darkDefaults = defaultColors{
 	toolbarBg: color.RGBA{45, 45, 45, 255}, toolbarBorder: color.RGBA{64, 64, 64, 255},
 	toolbarGrip:   color.RGBA{90, 90, 90, 179},
 	modeChineseBg: color.RGBA{51, 154, 245, 255}, modeEnglishBg: color.RGBA{90, 90, 90, 255},
-	modeText:      color.RGBA{255, 255, 255, 255},
-	fullWidthOnBg: color.RGBA{46, 184, 153, 255}, fullWidthOffBg: color.RGBA{64, 64, 64, 255},
-	fullWidthOnColor: color.RGBA{255, 255, 255, 255}, fullWidthOffColor: color.RGBA{176, 176, 176, 255},
-	punctChineseBg: color.RGBA{245, 133, 67, 255}, punctEnglishBg: color.RGBA{64, 64, 64, 255},
-	punctChineseColor: color.RGBA{255, 255, 255, 255}, punctEnglishColor: color.RGBA{176, 176, 176, 255},
+	modeText:       color.RGBA{255, 255, 255, 255},
+	fullWidthOffBg: color.RGBA{64, 64, 64, 255}, fullWidthOffColor: color.RGBA{176, 176, 176, 255},
+	punctEnglishBg: color.RGBA{64, 64, 64, 255}, punctEnglishColor: color.RGBA{176, 176, 176, 255},
 	settingsBg: color.RGBA{64, 64, 64, 255}, settingsIcon: color.RGBA{155, 140, 206, 255},
 	settingsHole: color.RGBA{64, 64, 64, 255},
 	menuBg:       color.RGBA{45, 45, 45, 255}, menuBorder: color.RGBA{64, 64, 64, 255},

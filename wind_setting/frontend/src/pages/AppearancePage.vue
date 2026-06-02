@@ -422,9 +422,9 @@ onUnmounted(() => {
                     class="preview-toolbar-item"
                     :style="{
                       backgroundColor:
-                        themePreview.toolbar?.punct_chinese_bg_color,
+                        themePreview.toolbar?.punct_english_bg_color,
                       color:
-                        themePreview.toolbar?.punct_chinese_color || '#fff',
+                        themePreview.toolbar?.punct_english_color || '#666',
                     }"
                     >。</span
                   >
