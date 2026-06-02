@@ -225,6 +225,10 @@ type UIConfig struct {
 	//   - 指向空字符串  完全不显示
 	//   - 指向非空字符串 使用该符号 (如 "▶")
 	CmdbarCandidatePrefix *string `yaml:"cmdbar_candidate_prefix,omitempty" json:"cmdbar_candidate_prefix,omitempty"`
+
+	// CandidateIndexLabels 用户全局序号标签覆盖（10 槽位字符或 /-分隔模板，如 "①②③④⑤⑥⑦⑧⑨⑩" 或 "1./2./…"）。
+	// 非空时覆盖主题 views.index.labels；空=用主题。优先级低于运行时 per-候选 IndexLabel。
+	CandidateIndexLabels string `yaml:"candidate_index_labels,omitempty" json:"candidate_index_labels,omitempty"`
 }
 
 // GetCmdbarCandidatePrefix 返回 cmdbar 副作用候选的渲染前缀。

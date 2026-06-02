@@ -8,6 +8,7 @@ type ResolvedV25 struct {
 	Meta    ThemeMeta
 	Layout  ResolvedLayout
 	Palette ResolvedPalette
+	Views   *Views // 盒模型 View 外观（v2.6 P2）；nil=主题未提供 views，渲染器用合成桥
 }
 
 // ResolvedLayout layout 的解析形态（与 LayoutSchema 同形，标量类型不变）

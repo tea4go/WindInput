@@ -82,6 +82,13 @@ func (m *Manager) UpdateStatusIndicatorFullConfig(cfg StatusWindowConfig) {
 	}))
 }
 
+// SetCandidateIndexLabels 设置用户全局序号标签覆盖（config.UI.CandidateIndexLabels）。
+func (m *Manager) SetCandidateIndexLabels(labels string) {
+	if m.renderer != nil {
+		m.renderer.SetGlobalIndexLabels(labels)
+	}
+}
+
 // SetTooltipDelay 设置编码提示延迟显示时间（毫秒）
 func (m *Manager) SetTooltipDelay(delay int) {
 	m.mu.Lock()

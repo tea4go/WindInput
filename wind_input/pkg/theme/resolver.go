@@ -53,11 +53,20 @@ func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*Resol
 		return nil, fmt.Errorf("palette 派生失败: %w", err)
 	}
 
-	return &ResolvedV25{
+	rv := &ResolvedV25{
 		Meta:    t.Meta,
 		Layout:  fullLayout,
 		Palette: fullPalette,
-	}, nil
+	}
+	// 5. views（v2.6 P2）：主题提供 views: 块时原样透传（仅显式写出的字段非 nil）。
+	// 不在此 merge defaultViews 基线——渲染器以合成桥（layout 现状）为基线，仅用主题
+	// 显式字段覆盖，保证未写字段沿用现状（零回归）。defaultViews/mergeViews 留待
+	// 「无合成桥」的纯 views 主题（后续切片）。
+	rv.Views = t.Views
+	if t.Views != nil && m.logger != nil {
+		m.logger.Info("主题提供盒模型 views，候选窗外观经 YAML 驱动 (P2)", "theme", t.Meta.Name)
+	}
+	return rv, nil
 }
 
 // resolveLayoutField 把 Theme.Layout 字段（string 或 map）规范化为 *LayoutSchema。

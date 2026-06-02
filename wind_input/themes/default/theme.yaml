@@ -7,3 +7,32 @@ meta:
 # v2.5 schema: 引用共享 layout + palette 零件
 layout: compact-horizontal
 palette: windy-blue
+
+# v2.6 盒模型 View 外观（P2 切片-0 几何 + 切片-1 颜色）：与 compact-horizontal/windy-blue
+# 现状一致，仅显式字段覆盖渲染器合成桥基线。颜色用 ${语义} token 解析自 palette（零回归）；
+# 字号不在此声明（沿用用户全局配置）。
+views:
+  window:
+    padding: {top: 6, right: 8, bottom: 6, left: 8}
+    border: {radius: 8, color: "${border}"}
+    background: {color: "${background}"}
+  preedit_bar:
+    padding: {left: 8, right: 8}
+    background: {color: "${preedit_bg}"}
+    color: "${preedit_text}"
+  item:
+    padding: {left: 8, right: 10}
+    border: {radius: 4}
+    selected: {background: {color: "${selected_bg}"}}
+    hover: {background: {color: "${hover_bg}"}}
+  index:
+    background: {color: "${index_bg}"}
+    color: "${index_text}"
+  text:
+    margin: {left: 4}
+    color: "${text}"
+  comment:
+    margin: {left: 6}
+    color: "${comment}"
+  accent_bar:
+    background: {color: "${accent}"}

@@ -124,6 +124,7 @@ type Theme struct {
 	// nil 表示未使用 v2.5 schema，回退到 v2/legacy 字段。
 	Layout    any        `yaml:"layout,omitempty" json:"layout,omitempty"`
 	Palette   any        `yaml:"palette,omitempty" json:"palette,omitempty"`
+	Views     *Views     `yaml:"views,omitempty" json:"views,omitempty"` // 盒模型 View 外观（v2.6 P2）；nil=用合成桥/density 默认
 	Overrides *Overrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 
 	// v2 format: light/dark variants
@@ -255,6 +256,7 @@ type ResolvedCandidateWindowStyle struct {
 	IndexFontWeight    int     // Index number font weight (100-900), 0 = use global weight
 	ItemPaddingLeft    float64 // Left padding of each candidate item (px, 0 = default 8)
 	ItemPaddingRight   float64 // Right padding of each candidate item (px, 0 = default 8)
+	ItemRadius         float64 // Candidate item corner radius (px, 0 = default 4)
 	WindowPaddingX     float64 // Horizontal window padding (px, 0 = default 10)
 	WindowPaddingY     float64 // Vertical window padding (px, 0 = default 10)
 	CornerRadius       float64 // Window corner radius (px, 0 = default 8)
@@ -282,6 +284,9 @@ type ResolvedTheme struct {
 	ModeIndicator   ResolvedModeIndicatorColors
 	// Background v2.5 候选窗背景图（v2 主题或未配置时为 nil）
 	Background *ResolvedThemeBackground
+	// Views 盒模型 View 外观（v2.6 P2）；nil=主题未提供 views，渲染器用合成桥。
+	// 过渡期搭车 legacy ResolvedTheme 透传；adapter 退役后改走 ResolvedV25 直通。
+	Views *Views
 }
 
 // ResolvedThemeBackground 暴露给 renderer 消费的背景图数据。

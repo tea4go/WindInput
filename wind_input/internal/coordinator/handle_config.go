@@ -48,6 +48,8 @@ func (c *Coordinator) UpdateUIConfig(uiConfig *config.UIConfig) {
 		}
 		// Update hide preedit setting
 		c.uiManager.SetHidePreedit(uiConfig.InlinePreedit)
+		// 用户全局序号标签覆盖
+		c.uiManager.SetCandidateIndexLabels(uiConfig.CandidateIndexLabels)
 		// Update preedit display mode
 		c.uiManager.SetPreeditMode(uiConfig.PreeditMode)
 		// Update pager display mode override

@@ -97,8 +97,8 @@ func (r *Renderer) RenderCandidates(candidates []Candidate, input string, cursor
 	// Auto-refresh DPI-dependent config if DPI changed since last render
 	r.refreshDPIIfNeeded()
 	cfg := r.config
-
 	// 盒模型 View 引擎是唯一渲染路径（旧固定化渲染器已退役）。
+	// r.resolvedViews 由 render*V2 入口经 refreshResolvedViews 填充（合成桥 base ⊕ 主题 views）。
 	if cfg.Layout == config.LayoutHorizontal {
 		return r.renderHorizontalV2(candidates, input, cursorPos, page, totalPages, hoverIndex, hoverPageBtn, selectedIndex)
 	}

@@ -15,6 +15,7 @@ func (r *Renderer) renderHorizontalV2(
 	hoverPageBtn string,
 	selectedIndex int,
 ) (*image.RGBA, *RenderResult) {
+	r.refreshResolvedViews()
 	tree := r.buildHorizontalCandidateTree(candidates, input, cursorPos, page, totalPages, selectedIndex, hoverIndex, hoverPageBtn)
 	return r.renderTree(tree)
 }
@@ -27,6 +28,7 @@ func (r *Renderer) renderVerticalV2(
 	hoverPageBtn string,
 	selectedIndex int,
 ) (*image.RGBA, *RenderResult) {
+	r.refreshResolvedViews()
 	tree := r.buildVerticalCandidateTree(candidates, input, cursorPos, page, totalPages, selectedIndex, hoverIndex, hoverPageBtn)
 	return r.renderTree(tree)
 }

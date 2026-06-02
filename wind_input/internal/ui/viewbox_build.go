@@ -25,7 +25,7 @@ func (r *Renderer) buildEmbeddedPreedit(input string, cursorPos, rowH int, scale
 	}
 	children := make([]*View, 0, 2)
 	if input != "" {
-		children = append(children, &View{Text: input, TextStyle: TextStyle{FontSize: cfg.FontSize, Color: cfg.InputTextColor}})
+		children = append(children, &View{Text: input, TextStyle: TextStyle{FontSize: cfg.FontSize, Color: r.resolvedViews.PreeditBar.TextColor}})
 	}
 	if cfg.ModeLabel != "" {
 		ml := &View{Text: cfg.ModeLabel, TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Color: r.getCommentColor()}}
@@ -42,7 +42,7 @@ func (r *Renderer) buildEmbeddedPreedit(input string, cursorPos, rowH int, scale
 	if input != "" && cursorPos >= 0 && cursorPos <= len(input) {
 		cw := r.textDrawer.MeasureString(input[:cursorPos], cfg.FontSize)
 		inline.Layers = append(inline.Layers, ImageLayer{
-			Color: cfg.InputTextColor, Z: 1, Anchor: "left",
+			Color: r.resolvedViews.PreeditBar.TextColor, Z: 1, Anchor: "left",
 			OffsetX: int(cw + 0.5), W: maxInt(1, sc(1.5*scale)), H: int(float64(rowH) * 0.7),
 		})
 	}
@@ -53,13 +53,13 @@ func (r *Renderer) buildEmbeddedPreedit(input string, cursorPos, rowH int, scale
 // inputH 为条高（横/竖排不同）。
 func (r *Renderer) buildPreeditBand(input string, cursorPos, inputH int, scale float64, sc func(float64) int) *View {
 	cfg := &r.config
-	bgColor := cfg.InputBgColor
+	bgColor := r.resolvedViews.PreeditBar.BgColor
 	if cfg.ModeAccentColor != nil {
-		bgColor = blendColor(cfg.InputBgColor, cfg.ModeAccentColor, 35) // 临时拼音等模式：input 区半透 accent 叠加
+		bgColor = blendColor(r.resolvedViews.PreeditBar.BgColor, cfg.ModeAccentColor, 35) // 临时拼音等模式：input 区半透 accent 叠加
 	}
 	children := []*View{{
 		Text:      input,
-		TextStyle: TextStyle{FontSize: cfg.FontSize, Color: cfg.InputTextColor},
+		TextStyle: TextStyle{FontSize: cfg.FontSize, Color: r.resolvedViews.PreeditBar.TextColor},
 	}}
 	if cfg.ModeLabel != "" {
 		children = append(children,
@@ -67,18 +67,19 @@ func (r *Renderer) buildPreeditBand(input string, cursorPos, inputH int, scale f
 			&View{Text: cfg.ModeLabel, TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Color: r.getCommentColor()}},
 		)
 	}
+	pb := &r.resolvedViews.PreeditBar
 	band := &View{
 		Layout: LayoutRow, CrossAlign: AlignCenter, Stretch: true, FixedH: inputH,
-		Padding:    Edges{Left: sc(8 * scale), Right: sc(8 * scale)},
+		Padding:    Edges{Left: sc(float64(pb.PadLeft)), Right: sc(float64(pb.PadRight))},
 		Background: Fill{Color: bgColor},
-		Border:     Border{Radius: sc(4 * scale)},
+		Border:     Border{Radius: sc(float64(pb.BorderRadius))},
 		Children:   children,
 	}
 	if input != "" && cursorPos >= 0 && cursorPos <= len(input) {
 		cw := r.textDrawer.MeasureString(input[:cursorPos], cfg.FontSize)
 		band.Layers = append(band.Layers, ImageLayer{
-			Color: cfg.InputTextColor, Z: 1, Anchor: "left",
-			OffsetX: sc(8*scale) + int(cw+0.5), W: maxInt(1, sc(1.5*scale)), H: int(cfg.FontSize + 0.5),
+			Color: r.resolvedViews.PreeditBar.TextColor, Z: 1, Anchor: "left",
+			OffsetX: sc(float64(pb.PadLeft)) + int(cw+0.5), W: maxInt(1, sc(1.5*scale)), H: int(cfg.FontSize + 0.5),
 		})
 	}
 	return band
@@ -90,7 +91,7 @@ func (r *Renderer) windowBorder(radius int, sc func(float64) int, scale float64)
 	if cfg.ModeAccentColor != nil {
 		return Border{Width: maxInt(1, sc(2.5*scale)), Color: cfg.ModeAccentColor, Radius: radius}
 	}
-	return Border{Width: 1, Color: cfg.BorderColor, Radius: radius}
+	return Border{Width: 1, Color: r.resolvedViews.Window.BorderColor, Radius: radius}
 }
 
 // truncateToWidth 把 text 截断到不超过 avail 像素宽，超出时尾部加省略号。
@@ -108,6 +109,15 @@ func (r *Renderer) truncateToWidth(text string, fontSize, avail float64) string 
 		}
 	}
 	return ell
+}
+
+// effectiveIndexLabels 返回生效的序号标签：用户全局覆盖（config）优先于主题 labels。
+// 运行时 per-候选 IndexLabel 优先级更高，由 indexLabel() 内部处理（构成四层优先级）。
+func (r *Renderer) effectiveIndexLabels() string {
+	if r.config.GlobalIndexLabels != "" {
+		return r.config.GlobalIndexLabels
+	}
+	return r.config.IndexLabels
 }
 
 // blendColor 把 over 以 overAlpha/255 透明度叠加到 base 上，返回不透明结果。
@@ -143,22 +153,23 @@ func (r *Renderer) buildHorizontalCandidateTree(
 	isTextIndex := cfg.IndexStyle == "text"
 	isEmbedded := cfg.PreeditMode == config.PreeditEmbedded && !cfg.HidePreedit
 
-	padX := pickF(cfg.WindowPaddingX, cfg.Padding)
-	padY := pickF(cfg.WindowPaddingY, cfg.Padding)
-	bgPadL := pickF(cfg.ItemPaddingLeft*scale, 8*scale)
-	bgPadR := pickF(cfg.ItemPaddingRight*scale, 8*scale)
-	indexMarginRight := pickF(cfg.IndexMarginRight*scale, 4*scale)
-	commentMarginLeft := pickF(cfg.CommentMarginLeft*scale, 8*scale)
+	// 外观取值改走 ResolvedViews（逻辑像素，single-scale；后续 sc() 乘一次 scale）。
+	rv := &r.resolvedViews
+	padX := float64(rv.Window.PadLeft)
+	padY := float64(rv.Window.PadTop)
+	bgPadL := float64(rv.Item.PadLeft)
+	bgPadR := float64(rv.Item.PadRight)
+	indexMarginRight := float64(rv.Text.MarginLeft)
+	commentMarginLeft := float64(rv.Comment.MarginLeft)
 
-	itemSpacing := 12 * scale
-	commentSize := cfg.IndexFontSize
+	itemSpacing := float64(rv.ItemSpacing)
+	commentSize := rv.Index.FontSize
 	if isTextIndex {
-		itemSpacing = 16 * scale
-		commentSize = cfg.IndexFontSize + 2*scale
+		commentSize = rv.Index.FontSize + 2*scale
 	}
-	indexSize := maxF(18*scale, cfg.IndexFontSize+4*scale)
-	rowH := int(cfg.ItemHeight + 0.5)
-	commentColor := r.getCommentColor()
+	indexSize := maxF(18*scale, rv.Index.FontSize+4*scale)
+	rowH := int(rv.ItemHeight + 0.5)
+	commentColor := rv.Comment.TextColor
 
 	// ---- 候选项 ----
 	items := make([]*View, 0, len(candidates))
@@ -166,25 +177,25 @@ func (r *Renderer) buildHorizontalCandidateTree(
 		children := make([]*View, 0, 3)
 
 		if cand.Index >= 0 {
-			label := indexLabel(cfg.IndexLabels, cand.Index, cand.IndexLabel)
+			label := indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel)
 			if isTextIndex {
 				children = append(children, &View{
 					Text:      label,
-					TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Weight: cfg.IndexFontWeight, Color: cfg.IndexColor},
+					TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: rv.Index.FontWeight, Color: rv.Index.TextColor},
 				})
 			} else {
 				d := int(indexSize + 0.5)
 				children = append(children, &View{
 					FixedW:     d,
 					FixedH:     d,
-					Background: Fill{Color: cfg.IndexBgColor},
+					Background: Fill{Color: rv.Index.BgColor},
 					Border:     Border{Radius: d / 2},
 					Layout:     LayoutStack,
 					Children: []*View{{
 						FixedW:    d,
 						FixedH:    d,
 						Text:      label,
-						TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Weight: cfg.IndexFontWeight, Color: cfg.IndexColor, Align: AlignCenter},
+						TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: rv.Index.FontWeight, Color: rv.Index.TextColor, Align: AlignCenter},
 					}},
 				})
 			}
@@ -193,7 +204,7 @@ func (r *Renderer) buildHorizontalCandidateTree(
 		// 候选文字
 		textChild := &View{
 			Text:      candidateDisplayText(cand, cfg.CmdbarPrefix),
-			TextStyle: TextStyle{FontSize: cfg.FontSize, Color: cfg.TextColor},
+			TextStyle: TextStyle{FontSize: rv.Text.FontSize, Color: rv.Text.TextColor},
 		}
 		if len(children) > 0 {
 			textChild.Margin = Edges{Left: sc(indexMarginRight)}
@@ -214,26 +225,26 @@ func (r *Renderer) buildHorizontalCandidateTree(
 			CrossAlign: AlignCenter,
 			Padding:    Edges{Left: sc(bgPadL), Right: sc(bgPadR)},
 			FixedH:     rowH,
-			Border:     Border{Radius: sc(4 * scale)},
+			Border:     Border{Radius: sc(float64(rv.Item.BorderRadius))},
 			Children:   children,
 		}
 		if i == selectedIndex {
-			item.Background = Fill{Color: cfg.SelectedBgColor}
+			item.Background = Fill{Color: rv.Item.SelectedBg}
 			// accent 强调条：选中项左缘竖条（z<0 纯色层，垂直居中，高约行高 60%）
-			if cfg.HasAccentBar && cfg.AccentBarColor != nil {
-				barW := sc(3 * scale)
+			if cfg.HasAccentBar && rv.AccentBar.BgColor != nil {
+				barW := sc(float64(rv.AccentBarWidth))
 				item.Layers = []ImageLayer{{
-					Color:   cfg.AccentBarColor,
+					Color:   rv.AccentBar.BgColor,
 					Z:       -1,
 					Anchor:  "left",
-					OffsetX: sc(1 * scale),
+					OffsetX: sc(float64(rv.AccentBarOffset)),
 					W:       barW,
-					H:       int(cfg.ItemHeight*0.6 + 0.5),
+					H:       int(rv.ItemHeight*rv.AccentBarHRatio + 0.5),
 					Radius:  barW / 2,
 				}}
 			}
 		} else if i == hoverIndex {
-			item.Background = Fill{Color: cfg.HoverBgColor}
+			item.Background = Fill{Color: rv.Item.HoverBg}
 		}
 		items = append(items, item)
 	}
@@ -265,18 +276,18 @@ func (r *Renderer) buildHorizontalCandidateTree(
 	// ---- band 列表（preedit + 候选列表）----
 	bands := make([]*View, 0, 2)
 	if (input != "" || cfg.ModeLabel != "") && !cfg.HidePreedit && !isEmbedded {
-		inputH := int(maxF(24*scale, cfg.FontSize*1.3) + 0.5)
+		inputH := int(maxF(24*scale, rv.PreeditBar.FontSize*1.3) + 0.5)
 		bands = append(bands, r.buildPreeditBand(input, cursorPos, inputH, scale, sc))
 	}
 	bands = append(bands, list)
 
 	window := &View{
 		Layout:     LayoutColumn,
-		Gap:        sc(4 * scale),
+		Gap:        sc(float64(rv.WindowGap)),
 		Padding:    Edges{Top: sc(padY), Right: sc(padX), Bottom: sc(padY), Left: sc(padX)},
-		Background: Fill{Color: cfg.BackgroundColor, Image: cfg.BackgroundImage, Mode: cfg.BackgroundMode, Slice: cfg.BackgroundSlice, Opacity: cfg.BackgroundOpacity},
-		Border:     r.windowBorder(int(cfg.CornerRadius+0.5), sc, scale),
-		Shadow:     &ViewShadow{OffsetX: sc(2 * scale), OffsetY: sc(2 * scale), Color: r.getShadowColor()},
+		Background: Fill{Color: rv.Window.BgColor, Image: cfg.BackgroundImage, Mode: cfg.BackgroundMode, Slice: cfg.BackgroundSlice, Opacity: cfg.BackgroundOpacity},
+		Border:     r.windowBorder(sc(float64(rv.Window.BorderRadius)), sc, scale),
+		Shadow:     &ViewShadow{OffsetX: sc(float64(rv.ShadowOffset)), OffsetY: sc(float64(rv.ShadowOffset)), Color: rv.ShadowColor},
 		Children:   bands,
 	}
 	return &candWindowTree{root: window, items: items, pagerUp: pagerUp, pagerDown: pagerDown}

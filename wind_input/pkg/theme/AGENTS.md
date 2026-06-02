@@ -28,6 +28,11 @@
 | `resolver.go` | `(*Manager).ResolveV25`：双形态加载器入口，外链 ID/内联对象统一处理 |
 | `inline.go` | `(*Manager).InlineTheme` / `ExternalizeTheme`：内联与外链互转 |
 
+### v2.6（盒模型 View，P2 切片-0/1）
+| File | Description |
+|------|-------------|
+| `views.go` | 盒模型 View 主题 schema：`Views`/`ViewNode`/`ViewEdges`/`ViewFill`/`ViewBorder`（YAML schema，距离/边框用 `*int` 显式语义）+ `ResolvedViews`/`RVNode`（渲染消费 plain：几何逻辑像素 + 颜色 `color.Color`；`ResolvedViews.ShadowColor` 顶层）+ `defaultViews()` 基线 + `mergeViews`/`mergeViewNode`/`mergeEdges`（指针非 nil / string 非空 / slice 非 nil 覆盖 + Selected/Hover 递归）。`Theme.Views`→`ResolvedV25.Views`→`ResolvedTheme.Views` 透传：`ResolveV25` 原样透传主题 views（仅显式字段，**不** merge 基线），渲染器（internal/ui）以合成桥为基线、用主题 views 覆盖几何+颜色字段（颜色 token 在 ui 侧 `resolveViewColor` 解析）；字号/杂项仍走合成桥（字号用户全局优先）|
+
 ## For AI Agents
 
 ### v2.5 schema 关键约定

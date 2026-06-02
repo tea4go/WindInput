@@ -24,7 +24,8 @@ func ResolvedToLegacy(rv *ResolvedV25) *ResolvedTheme {
 	indexLabels := buildIndexLabelsFromSlots(idx.Labels)
 
 	out := &ResolvedTheme{
-		Meta: rv.Meta,
+		Meta:  rv.Meta,
+		Views: rv.Views, // 盒模型 View 外观透传（v2.6 P2，过渡期搭车 legacy）
 		Style: ResolvedCandidateWindowStyle{
 			IndexStyle:        indexStyle,
 			IndexLabels:       indexLabels,
@@ -34,6 +35,7 @@ func ResolvedToLegacy(rv *ResolvedV25) *ResolvedTheme {
 			RowHeight:         float64(rv.Layout.CandidateWindow.CandidateList.ItemHeight),
 			ItemPaddingLeft:   float64(rv.Layout.CandidateWindow.CandidateList.ItemPadding.Left),
 			ItemPaddingRight:  float64(rv.Layout.CandidateWindow.CandidateList.ItemPadding.Right),
+			ItemRadius:        float64(rv.Layout.CandidateWindow.CandidateList.ItemRadius),
 			IndexMarginRight:  float64(rv.Layout.CandidateWindow.CandidateList.Index.Gap),
 			CommentMarginLeft: float64(rv.Layout.CandidateWindow.CandidateList.Comment.Gap),
 			IndexFontWeight:   0,

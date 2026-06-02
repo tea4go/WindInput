@@ -39,6 +39,7 @@ type RenderConfig struct {
 	IndexFontWeight    int                    // Index number font weight (100-900), 0 = use global weight
 	ItemPaddingLeft    float64                // Left padding of each candidate item (px), 0 = default 8
 	ItemPaddingRight   float64                // Right padding of each candidate item (px), 0 = default 8
+	ItemRadius         float64                // Candidate item corner radius (px), 0 = default 4
 	WindowPaddingX     float64                // Horizontal window padding (px), 0 = default (use Padding)
 	WindowPaddingY     float64                // Vertical window padding (px), 0 = default (use Padding)
 	IndexMarginRight   float64                // Gap between index and candidate text (scaled px)
@@ -55,7 +56,8 @@ type RenderConfig struct {
 	ModeLabel          string                 // Temporary mode label (e.g. "临时拼音", "快捷输入"), empty = no label
 	ModeAccentColor    color.Color            // Inner glow border color for special modes, nil = no glow
 	PreeditMode        config.PreeditMode     // "top" (default) or "embedded" (inline before candidates); only effective when HidePreedit=false
-	IndexLabels        string                 // 10 custom label chars replacing default 1-9,0; empty = default
+	IndexLabels        string                 // 主题序号标签（来自 views.index.labels / 旧 layout）；空 = 默认 1-9,0
+	GlobalIndexLabels  string                 // 用户全局序号标签覆盖（config.UI.CandidateIndexLabels）；非空时覆盖 IndexLabels
 	CmdbarPrefix       string                 // 副作用 cmdbar 候选 (Actions 含 ActionEffect) 的前缀符号; 空 = 不显示前缀
 
 	// v2.5 候选窗背景图（nil = 仅纯色背景）
@@ -214,6 +216,8 @@ func (fc *fontCache) Close() {
 type Renderer struct {
 	config        RenderConfig
 	resolvedTheme *theme.ResolvedTheme
+	resolvedViews theme.ResolvedViews // 候选窗盒模型外观（P2 切片-0）：默认来自合成桥，主题提供 views 时来自 YAML
+	themeViews    *theme.Views        // 主题 YAML 提供的 views（已 merge 基线）；nil=用合成桥
 	TextBackendManager
 
 	// Base (unscaled) values for DPI recalculation
@@ -225,10 +229,6 @@ type Renderer struct {
 	// (旧 pprof 中合计 ~2.3 GB 累计). RenderCandidates 在 UI 单线程调用,
 	// UpdateLayeredWindow 同步消费 img, 之后下一帧才会写入 — 无并发竞争.
 	scratchPix []byte
-
-	// 背景图预合成缓存：按 (源图指针, w, h) 失效；避免每帧 scale 开销
-	bgCache    *image.RGBA
-	bgCacheSrc *image.RGBA
 }
 
 // acquireDrawContext 返回一个 gg.Context 与对应的 *image.RGBA, 二者共享
@@ -365,6 +365,7 @@ func (r *Renderer) SetTheme(resolved *theme.ResolvedTheme) {
 		return
 	}
 	r.resolvedTheme = resolved
+	r.themeViews = resolved.Views // 主题盒模型 views（nil=用合成桥）
 	// Update config colors from theme
 	colors := resolved.CandidateWindow
 	r.config.BackgroundColor = colors.BackgroundColor
@@ -382,6 +383,7 @@ func (r *Renderer) SetTheme(resolved *theme.ResolvedTheme) {
 	r.config.HasAccentBar = resolved.Style.HasAccentBar
 	r.config.IndexFontWeight = resolved.Style.IndexFontWeight
 	r.config.ItemPaddingLeft = resolved.Style.ItemPaddingLeft
+	r.config.ItemRadius = resolved.Style.ItemRadius
 	r.config.ItemPaddingRight = resolved.Style.ItemPaddingRight
 	r.config.AlwaysShowPager = resolved.Style.AlwaysShowPager
 	r.config.ShowPageNumber = resolved.Style.ShowPageNumber
@@ -456,30 +458,6 @@ func (r *Renderer) SetTheme(resolved *theme.ResolvedTheme) {
 	}
 }
 
-// drawBackgroundImage 在 dst 的 (x,y,w,h) 区域绘制 v2.5 背景图（如已配置）。
-// 为避免每帧重 scale，缓存当前 src + 尺寸下预合成的 bg buffer。
-// 缓存按 (BackgroundImage 指针, w, h) 失效。
-func (r *Renderer) drawBackgroundImage(dst *image.RGBA, x, y, w, h int) {
-	if r.config.BackgroundImage == nil || w <= 0 || h <= 0 {
-		return
-	}
-	if r.bgCache == nil || r.bgCacheSrc != r.config.BackgroundImage ||
-		r.bgCache.Bounds().Dx() != w || r.bgCache.Bounds().Dy() != h {
-		buf := image.NewRGBA(image.Rect(0, 0, w, h))
-		// 预填充 alpha=255 以让 blendOver 的圆角保护通过；renderer 调用方负责后续 mask
-		for i := 3; i < len(buf.Pix); i += 4 {
-			buf.Pix[i] = 255
-		}
-		theme.DrawBackground(buf, buf.Bounds(), r.config.BackgroundImage,
-			r.config.BackgroundMode, r.config.BackgroundSlice, r.config.BackgroundOpacity)
-		r.bgCache = buf
-		r.bgCacheSrc = r.config.BackgroundImage
-	}
-	// 把缓存 buffer 叠绘到 dst（blendOver 走 dst alpha gate 保护圆角）
-	theme.DrawBackground(dst, image.Rect(x, y, x+w, y+h), r.bgCache, "stretch",
-		theme.Padding{}, 1.0)
-}
-
 // getCommentColor returns the comment color from theme or default
 func (r *Renderer) getCommentColor() color.Color {
 	if r.resolvedTheme != nil {
@@ -507,32 +485,6 @@ func (r *Renderer) getModeIndicatorColors() (bgColor, textColor color.Color) {
 // GetLayout returns the current layout mode
 func (r *Renderer) GetLayout() config.CandidateLayout {
 	return r.config.Layout
-}
-
-// drawChevronLeft draws a left-pointing chevron (‹) at the given center position
-func (r *Renderer) drawChevronLeft(dc *gg.Context, cx, cy, size, lineWidth float64) {
-	halfH := size / 2
-	halfW := size * 0.35 // narrower for elegance
-	dc.SetLineWidth(lineWidth)
-	dc.SetLineCap(gg.LineCapRound)
-	dc.SetLineJoin(gg.LineJoinRound)
-	dc.MoveTo(cx+halfW, cy-halfH)
-	dc.LineTo(cx-halfW, cy)
-	dc.LineTo(cx+halfW, cy+halfH)
-	dc.Stroke()
-}
-
-// drawChevronRight draws a right-pointing chevron (›) at the given center position
-func (r *Renderer) drawChevronRight(dc *gg.Context, cx, cy, size, lineWidth float64) {
-	halfH := size / 2
-	halfW := size * 0.35
-	dc.SetLineWidth(lineWidth)
-	dc.SetLineCap(gg.LineCapRound)
-	dc.SetLineJoin(gg.LineJoinRound)
-	dc.MoveTo(cx-halfW, cy-halfH)
-	dc.LineTo(cx+halfW, cy)
-	dc.LineTo(cx-halfW, cy+halfH)
-	dc.Stroke()
 }
 
 func radians(degrees float64) float64 {
@@ -580,6 +532,12 @@ func (r *Renderer) RenderModeIndicator(mode string) *image.RGBA {
 	td.EndDraw()
 
 	return img
+}
+
+// SetGlobalIndexLabels 设置用户全局序号标签覆盖（config.UI.CandidateIndexLabels）。
+// 非空时在 build 中优先于主题 IndexLabels（见 effectiveIndexLabels）。
+func (r *Renderer) SetGlobalIndexLabels(labels string) {
+	r.config.GlobalIndexLabels = labels
 }
 
 // DrawDebugBanner draws a small anti-aliased green dot in the top-right area (debug variant only)

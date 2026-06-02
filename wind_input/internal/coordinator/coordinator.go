@@ -669,6 +669,8 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 		}
 		// Set hide preedit when inline preedit is enabled
 		c.uiManager.SetHidePreedit(cfg.UI.InlinePreedit)
+		// 用户全局序号标签覆盖
+		c.uiManager.SetCandidateIndexLabels(cfg.UI.CandidateIndexLabels)
 		// Set preedit display mode
 		c.uiManager.SetPreeditMode(cfg.UI.PreeditMode)
 		// Set status indicator config (旧字段兼容)

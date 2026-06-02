@@ -19,9 +19,10 @@ func (r *Renderer) buildPager(
 		return nil, nil, nil
 	}
 
-	pageFS := maxF(12*scale, cfg.IndexFontSize)
+	idxFS := r.resolvedViews.Index.FontSize
+	pageFS := maxF(12*scale, idxFS)
 	if isTextIndex {
-		pageFS = maxF(14*scale, cfg.IndexFontSize+2*scale)
+		pageFS = maxF(14*scale, idxFS+2*scale)
 	}
 	arrowSz := maxF(8*scale, pageFS*0.65)
 	arrowW := int(arrowSz + 6*scale*2 + 0.5)
@@ -30,16 +31,16 @@ func (r *Renderer) buildPager(
 	canDown := page < absTotal
 
 	mkBtn := func(glyph GlyphKind, enabled, hovered bool) *View {
-		clr := cfg.IndexBgColor
+		clr := r.resolvedViews.Index.BgColor
 		if !enabled {
-			clr = cfg.InputTextColor
+			clr = r.resolvedViews.PreeditBar.TextColor
 		}
 		b := &View{
 			FixedW: arrowW, FixedH: rowH,
 			Glyph: glyph, GlyphColor: clr, GlyphSize: arrowSz, GlyphLineWidth: lineW,
 		}
 		if hovered && enabled {
-			b.Background = Fill{Color: cfg.HoverBgColor}
+			b.Background = Fill{Color: r.resolvedViews.Item.HoverBg}
 			b.Border = Border{Radius: sc(4 * scale)}
 		}
 		return b
@@ -54,7 +55,7 @@ func (r *Renderer) buildPager(
 		}
 		children = append(children, &View{
 			Text:      txt,
-			TextStyle: TextStyle{FontSize: pageFS, Color: cfg.InputTextColor},
+			TextStyle: TextStyle{FontSize: pageFS, Color: r.resolvedViews.PreeditBar.TextColor},
 		})
 	}
 	d := mkBtn(GlyphChevronRight, canDown, hoverPageBtn == "down")
@@ -82,26 +83,28 @@ func (r *Renderer) buildVerticalCandidateTree(
 	sc := func(v float64) int { return int(v*scale + 0.5) }
 
 	isTextIndex := cfg.IndexStyle == "text"
-	padX := pickF(cfg.WindowPaddingX, cfg.Padding)
-	padY := pickF(cfg.WindowPaddingY, cfg.Padding)
-	indexMarginRight := pickF(cfg.IndexMarginRight*scale, 4*scale)
-	commentMarginLeft := pickF(cfg.CommentMarginLeft*scale, 8*scale)
-	itemPadR := pickF(cfg.ItemPaddingRight*scale, 8*scale)
+	// 外观取值改走 ResolvedViews（逻辑像素，single-scale）。
+	rv := &r.resolvedViews
+	padX := float64(rv.Window.PadLeft)
+	padY := float64(rv.Window.PadTop)
+	indexMarginRight := float64(rv.Text.MarginLeft)
+	commentMarginLeft := float64(rv.Comment.MarginLeft)
+	itemPadR := float64(rv.Item.PadRight)
 
-	indexRadius := maxF(11*scale, (cfg.IndexFontSize+8*scale)/2)
+	indexRadius := maxF(11*scale, (rv.Index.FontSize+8*scale)/2)
 	indexAreaW := int(2*indexRadius + 6*scale + 0.5)
 	if isTextIndex {
 		indexAreaW = sc(20 * scale)
 	}
-	commentSize := cfg.IndexFontSize
+	commentSize := rv.Index.FontSize
 	if isTextIndex {
-		commentSize = cfg.IndexFontSize + 2*scale
+		commentSize = rv.Index.FontSize + 2*scale
 	}
-	rowH := int(cfg.ItemHeight + 0.5)
-	commentColor := r.getCommentColor()
+	rowH := int(rv.ItemHeight + 0.5)
+	commentColor := r.resolvedViews.Comment.TextColor
 
 	// 长候选钳制：预量算自然宽，计算截断预算 targetW ≤ VerticalMaxWidth（默认 600*scale）。
-	maxItemW := pickF(cfg.VerticalMaxWidth, 600*scale)
+	maxItemW := rv.VerticalMaxWidth * scale
 	commentWidths := make([]float64, len(candidates))
 	maxNatural := 0.0
 	for i, cand := range candidates {
@@ -109,7 +112,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 		if cand.Index >= 0 {
 			lo = float64(indexAreaW) + indexMarginRight
 		}
-		tw := r.textDrawer.MeasureString(candidateDisplayText(cand, cfg.CmdbarPrefix), cfg.FontSize)
+		tw := r.textDrawer.MeasureString(candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize)
 		if cand.Comment != "" {
 			commentWidths[i] = r.textDrawer.MeasureString(cand.Comment, commentSize)
 		}
@@ -132,12 +135,12 @@ func (r *Renderer) buildVerticalCandidateTree(
 		children := make([]*View, 0, 3)
 
 		if cand.Index >= 0 {
-			label := indexLabel(cfg.IndexLabels, cand.Index, cand.IndexLabel)
+			label := indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel)
 			if isTextIndex {
 				children = append(children, &View{
 					FixedW:    indexAreaW,
 					Text:      label,
-					TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Weight: cfg.IndexFontWeight, Color: cfg.IndexColor},
+					TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: rv.Index.FontWeight, Color: r.resolvedViews.Index.TextColor},
 				})
 			} else {
 				d := int(2*indexRadius + 0.5)
@@ -150,14 +153,14 @@ func (r *Renderer) buildVerticalCandidateTree(
 					FixedW:     d,
 					FixedH:     d,
 					Margin:     Edges{Left: leftM, Right: rightM},
-					Background: Fill{Color: cfg.IndexBgColor},
+					Background: Fill{Color: r.resolvedViews.Index.BgColor},
 					Border:     Border{Radius: d / 2},
 					Layout:     LayoutStack,
 					Children: []*View{{
 						FixedW:    d,
 						FixedH:    d,
 						Text:      label,
-						TextStyle: TextStyle{FontSize: cfg.IndexFontSize, Weight: cfg.IndexFontWeight, Color: cfg.IndexColor, Align: AlignCenter},
+						TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: rv.Index.FontWeight, Color: r.resolvedViews.Index.TextColor, Align: AlignCenter},
 					}},
 				})
 			}
@@ -172,8 +175,8 @@ func (r *Renderer) buildVerticalCandidateTree(
 			availText -= commentMarginLeft + commentWidths[i]
 		}
 		textChild := &View{
-			Text:      r.truncateToWidth(candidateDisplayText(cand, cfg.CmdbarPrefix), cfg.FontSize, availText),
-			TextStyle: TextStyle{FontSize: cfg.FontSize, Color: cfg.TextColor},
+			Text:      r.truncateToWidth(candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize, availText),
+			TextStyle: TextStyle{FontSize: rv.Text.FontSize, Color: r.resolvedViews.Text.TextColor},
 		}
 		if len(children) > 0 {
 			textChild.Margin = Edges{Left: sc(indexMarginRight)}
@@ -199,16 +202,16 @@ func (r *Renderer) buildVerticalCandidateTree(
 			Children:   children,
 		}
 		if i == selectedIndex {
-			item.Background = Fill{Color: cfg.SelectedBgColor}
-			if cfg.HasAccentBar && cfg.AccentBarColor != nil {
-				barW := sc(3 * scale)
+			item.Background = Fill{Color: r.resolvedViews.Item.SelectedBg}
+			if cfg.HasAccentBar && r.resolvedViews.AccentBar.BgColor != nil {
+				barW := sc(float64(rv.AccentBarWidth))
 				item.Layers = []ImageLayer{{
-					Color: cfg.AccentBarColor, Z: -1, Anchor: "left",
-					OffsetX: sc(1 * scale), W: barW, H: int(cfg.ItemHeight*0.6 + 0.5), Radius: barW / 2,
+					Color: r.resolvedViews.AccentBar.BgColor, Z: -1, Anchor: "left",
+					OffsetX: sc(float64(rv.AccentBarOffset)), W: barW, H: int(rv.ItemHeight*rv.AccentBarHRatio + 0.5), Radius: barW / 2,
 				}}
 			}
 		} else if i == hoverIndex {
-			item.Background = Fill{Color: cfg.HoverBgColor}
+			item.Background = Fill{Color: r.resolvedViews.Item.HoverBg}
 		}
 		items = append(items, item)
 	}
@@ -217,7 +220,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 	// ---- band 列表 ----
 	bands := make([]*View, 0, 3)
 	if (input != "" || cfg.ModeLabel != "") && !cfg.HidePreedit {
-		inputH := int(maxF(30*scale, cfg.FontSize*1.5) + 0.5)
+		inputH := int(maxF(30*scale, rv.PreeditBar.FontSize*1.5) + 0.5)
 		bands = append(bands, r.buildPreeditBand(input, cursorPos, inputH, scale, sc))
 	}
 	bands = append(bands, list)
@@ -235,11 +238,11 @@ func (r *Renderer) buildVerticalCandidateTree(
 	window := &View{
 		Layout:     LayoutColumn,
 		CrossAlign: AlignCenter, // 让底部翻页行水平居中
-		Gap:        sc(4 * scale),
+		Gap:        sc(float64(rv.WindowGap)),
 		Padding:    Edges{Top: sc(padY), Right: sc(padX), Bottom: sc(padY), Left: sc(padX)},
-		Background: Fill{Color: cfg.BackgroundColor, Image: cfg.BackgroundImage, Mode: cfg.BackgroundMode, Slice: cfg.BackgroundSlice, Opacity: cfg.BackgroundOpacity},
-		Border:     r.windowBorder(int(cfg.CornerRadius+0.5), sc, scale),
-		Shadow:     &ViewShadow{OffsetX: sc(2 * scale), OffsetY: sc(2 * scale), Color: r.getShadowColor()},
+		Background: Fill{Color: r.resolvedViews.Window.BgColor, Image: cfg.BackgroundImage, Mode: cfg.BackgroundMode, Slice: cfg.BackgroundSlice, Opacity: cfg.BackgroundOpacity},
+		Border:     r.windowBorder(sc(float64(rv.Window.BorderRadius)), sc, scale),
+		Shadow:     &ViewShadow{OffsetX: sc(float64(rv.ShadowOffset)), OffsetY: sc(float64(rv.ShadowOffset)), Color: r.resolvedViews.ShadowColor},
 		Children:   bands,
 	}
 	return &candWindowTree{root: window, items: items, pagerUp: pagerUp, pagerDown: pagerDown}
