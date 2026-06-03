@@ -250,8 +250,9 @@ func (r *Renderer) buildVerticalCandidateTree(
 			CrossAlign: AlignCenter,
 			Stretch:    true, // 每行全宽
 			FixedH:     rowH,
-			Padding:    Edges{Right: itemPadR},
-			Children:   itemChildren,
+			// 上下 padding 真实生效（与横排一致）：对称时逐像素同旧版，非对称不再均摊。
+			Padding:  Edges{Top: scD(rv.Item.PadTop), Right: itemPadR, Bottom: scD(rv.Item.PadBottom)},
+			Children: itemChildren,
 		}
 		r.applyItemState(item, st, scale)             // P7-D：选中/悬停态背景（高亮位图/底色）+ 边框
 		r.appendThemeLayers(item, rv.Item.Layers, sc) // P7-C：候选项装饰层

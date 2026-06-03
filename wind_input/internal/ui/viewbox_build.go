@@ -358,10 +358,13 @@ func (r *Renderer) buildHorizontalCandidateTree(
 		item := &View{
 			Layout:     LayoutRow,
 			CrossAlign: AlignCenter,
-			Padding:    Edges{Left: itemPadLeft, Right: bgPadR},
-			FixedH:     rowH,
-			Border:     Border{Radius: rv.Item.BorderRadius.Scaled(scale)},
-			Children:   itemChildren,
+			// 上下 padding 作为真实内边距生效：内容带从 y+PadTop 起、高 lineH，PadBottom 留在下方。
+			// 配合 FixedH=rowH(=lineH+PadTop+PadBottom)，对称 padding 与旧版逐像素一致；
+			// 非对称时上下不再被均摊（修复"改上等于上下同时变"）。
+			Padding:  Edges{Top: scD(rv.Item.PadTop), Right: bgPadR, Bottom: scD(rv.Item.PadBottom), Left: itemPadLeft},
+			FixedH:   rowH,
+			Border:   Border{Radius: rv.Item.BorderRadius.Scaled(scale)},
+			Children: itemChildren,
 		}
 		r.applyItemState(item, st, scale)             // P7-D：选中/悬停态背景（高亮位图/底色）+ 边框
 		r.appendThemeLayers(item, rv.Item.Layers, sc) // P7-C：候选项装饰层（per-item 覆盖图）
