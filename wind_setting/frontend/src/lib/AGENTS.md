@@ -12,6 +12,7 @@
 |------|------|
 | `enums.ts` | 所有有限取值字符串常量（行为/模式枚举、按键名、组合键群、Wails 事件名等）的 TypeScript 定义；导出 `as const` 对象 + 联合类型 |
 | `utils.ts` | 样式类合并函数 `cn()`，使用 `clsx` + `tailwind-merge` 组合 CSS 类名，支持条件类名和 Tailwind 冲突解决 |
+| `configDiff.ts` | 配置增量 diff 纯函数 `diffConfigToItems(base, current)`：对加载快照与编辑中 formData 做 deep-diff，产出 `{key, value}` 列表供按-key 提交；点路径与后端 `resolveKeyPath` 对齐 |
 
 ## 常量清单（`enums.ts`）
 
