@@ -56,16 +56,17 @@ func TestMergeViews_PreservesIndependentWindows(t *testing.T) {
 	ov := Views{
 		Status:  &ViewNode{Color: "${text}"},
 		Tooltip: &ViewNode{Color: "${text}"},
+		Toast:   &ViewNode{Color: "${text}"},
 		Toolbar: &ToolbarViews{},
 		Menu:    &MenuViews{},
 	}
 	merged := mergeViews(base, ov)
-	if merged.Status == nil || merged.Tooltip == nil || merged.Toolbar == nil || merged.Menu == nil {
-		t.Errorf("mergeViews 应透传 4 个独立窗口字段, got Status=%v Tooltip=%v Toolbar=%v Menu=%v",
-			merged.Status, merged.Tooltip, merged.Toolbar, merged.Menu)
+	if merged.Status == nil || merged.Tooltip == nil || merged.Toast == nil || merged.Toolbar == nil || merged.Menu == nil {
+		t.Errorf("mergeViews 应透传 5 个独立窗口字段, got Status=%v Tooltip=%v Toast=%v Toolbar=%v Menu=%v",
+			merged.Status, merged.Tooltip, merged.Toast, merged.Toolbar, merged.Menu)
 	}
 	merged2 := mergeViews(base, Views{})
-	if merged2.Status != nil || merged2.Tooltip != nil || merged2.Toolbar != nil || merged2.Menu != nil {
+	if merged2.Status != nil || merged2.Tooltip != nil || merged2.Toast != nil || merged2.Toolbar != nil || merged2.Menu != nil {
 		t.Errorf("base/ov 均无独立窗口字段时结果应为 nil, got %+v", merged2)
 	}
 	if merged.Metrics == nil {

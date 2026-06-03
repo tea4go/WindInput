@@ -35,9 +35,9 @@ func TestGGClipOnPixmap(t *testing.T) {
 		t.Logf("诊断 PNG（肉眼确认四角是否被裁圆）: %s", out)
 	}
 
-	corner := alphaAt(img, 0, 0)        // 圆角外：(0.5,0.5) 距圆心(12,12)≈16.3 > 12
-	center := alphaAt(img, w/2, h/2)    // clip 内
-	edgeMid := alphaAt(img, w/2, 0)     // 顶边中点：在圆角矩形内（非角落），应被填充
+	corner := alphaAt(img, 0, 0)     // 圆角外：(0.5,0.5) 距圆心(12,12)≈16.3 > 12
+	center := alphaAt(img, w/2, h/2) // clip 内
+	edgeMid := alphaAt(img, w/2, 0)  // 顶边中点：在圆角矩形内（非角落），应被填充
 	t.Logf("alpha — 角落(0,0)=%d  顶边中点(%d,0)=%d  中心=%d", corner, w/2, edgeMid, center)
 
 	if center == 0 {

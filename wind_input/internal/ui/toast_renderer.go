@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/gogpu/gg"
 	"github.com/huanfeng/wind_input/pkg/theme"
 )
 
@@ -57,20 +56,34 @@ func levelAccent(level ToastLevel) color.Color {
 	return ToastAccentColor(level)
 }
 
-// getColors 返回背景 + 正文文本颜色。Toast 一律不透明（与系统通知一致，避免重要信息看不清）。
-func (r *ToastRenderer) getColors() (bg, text color.Color) {
+// resolveToastNode 计算 Toast 盒模型 RVNode（P8 切片5：几何+border+font+颜色）。
+// 颜色：views.toast token > Palette.Toast > 默认深灰底白字；bg 经 forceAlphaOpaque 强制不透明
+// （Toast 与系统通知一致，避免重要信息透出底层窗口）。几何/字号由 Render 按现状兜底。
+func (r *ToastRenderer) resolveToastNode() theme.RVNode {
+	node := theme.RVNode{
+		BgColor:   color.RGBA{R: 0x2B, G: 0x2B, B: 0x2B, A: 0xFF},
+		TextColor: color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+	}
 	r.mu.Lock()
 	rv := r.resolvedV25
 	r.mu.Unlock()
-
-	bg = color.RGBA{R: 0x2B, G: 0x2B, B: 0x2B, A: 0xFF}
-	text = color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 	if rv != nil {
-		// P5-6：toast 读自身 Palette.Toast（语义修正；与 Status/Tooltip 同为深灰底白字，forceAlphaOpaque 保证不透明）。
-		bg = forceAlphaOpaque(rv.Palette.Toast.Background)
-		text = rv.Palette.Toast.Text
+		var tn *theme.ViewNode
+		if rv.Views != nil {
+			tn = rv.Views.Toast
+		}
+		node = theme.ResolveToastViews(tn, rv.Palette)
 	}
-	return bg, text
+	node.BgColor = forceAlphaOpaque(node.BgColor)
+	return node
+}
+
+// scaledOr 返回 Dimension 缩放后的像素值；零值（未配）回退 def（逻辑像素）×scale。
+func scaledOr(d theme.Dimension, def, scale float64) int {
+	if v := d.Scaled(scale); v != 0 {
+		return v
+	}
+	return int(def * scale)
 }
 
 // forceAlphaOpaque 把任意颜色的 alpha 强制设为 0xFF，避免主题里 tooltip 背景带的轻微半透明
@@ -88,12 +101,12 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 	}
 
 	scale := GetDPIScale()
-	titleSize := 15.0 * scale
-	bodySize := 13.0 * scale
-	padding := 12.0 * scale
+	node := r.resolveToastNode()
+
+	titleSize := (15.0 + node.FontSize) * scale
+	bodySize := (13.0 + node.FontSize) * scale
 	lineSpacing := 4.0 * scale
 	titleGap := 6.0 * scale // 标题与正文之间额外间距
-	borderRadius := 6.0 * scale
 	// 左侧 accent 条参数：完全位于不透明背景内部, 不与圆角外缘相切, 避免反锯齿像素溢出到
 	// layered 窗口的透明区域产生"边缘透色"问题。
 	accentBarWidth := 4.0 * scale
@@ -101,17 +114,21 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 	// 文本左侧留白需绕开 accent 条 + 一小段呼吸空间。
 	textLeft := accentBarInset + accentBarWidth + 8.0*scale
 
+	// padding/radius：views.toast 未配则兜底现状（12 / 6）。padding.Left 固定 textLeft（为 accent 条留空间）。
+	padTop := scaledOr(node.PadTop, 12.0, scale)
+	padRight := scaledOr(node.PadRight, 12.0, scale)
+	padBottom := scaledOr(node.PadBottom, 12.0, scale)
+	radius := scaledOr(node.BorderRadius, 6.0, scale)
+
 	r.mu.Lock()
 	td := r.TextDrawer()
 	r.mu.Unlock()
-
-	bg, textColor := r.getColors()
 	accent := levelAccent(opts.Level)
 
-	// 计算可用内容宽度（左 textLeft + 右 padding 之间的可绘区域）。
+	// 计算可用内容宽度（左 textLeft + 右 padRight 之间的可绘区域）。
 	var innerMax float64
 	if maxContentPx > 0 {
-		innerMax = float64(maxContentPx) - textLeft - padding
+		innerMax = float64(maxContentPx) - textLeft - float64(padRight)
 		if innerMax < 80*scale {
 			innerMax = 80 * scale
 		}
@@ -149,55 +166,54 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 		return nil
 	}
 
-	width := contentWidth + textLeft + padding
+	width := contentWidth + textLeft + float64(padRight)
 	if width < 160*scale {
 		width = 160 * scale // 太窄不好看
 	}
 
-	// 计算总高度：title 行高 + titleGap + 正文 N 行 + lineSpacing 间距。
-	var height float64 = padding * 2
-	if title != "" {
-		height += titleSize
-		if len(bodyLines) > 0 {
-			height += titleGap
+	// 构建 View 树：root 列布局（圆角 bg + padding；padding.Left=textLeft 绕开 accent 条）。
+	border := Border{Radius: radius}
+	if node.BorderColor != nil {
+		border.Color = node.BorderColor
+		border.Width = node.BorderWidth.Scaled(scale)
+		if border.Width == 0 {
+			border.Width = int(1.0 * scale)
 		}
 	}
-	if len(bodyLines) > 0 {
-		height += bodySize*float64(len(bodyLines)) + lineSpacing*float64(len(bodyLines)-1)
+	root := &View{
+		Layout:     LayoutColumn,
+		Gap:        int(lineSpacing),
+		Padding:    Edges{Top: padTop, Right: padRight, Bottom: padBottom, Left: int(textLeft)},
+		Background: Fill{Color: node.BgColor},
+		Border:     border,
+		FixedW:     int(width),
+	}
+	if title != "" {
+		// 标题用 accent 颜色（level 运行时色），醒目。
+		tv := &View{Text: title, TextStyle: TextStyle{FontSize: titleSize, Color: accent, Weight: node.FontWeight, Family: node.FontFamily}}
+		if len(bodyLines) > 0 {
+			// 标题与正文额外间距：margin.Bottom + root.Gap(lineSpacing) = titleGap。
+			tv.Margin = Edges{Bottom: int(titleGap - lineSpacing)}
+		}
+		root.Children = append(root.Children, tv)
+	}
+	for _, line := range bodyLines {
+		root.Children = append(root.Children, &View{Text: line, TextStyle: TextStyle{FontSize: bodySize, Color: node.TextColor, Weight: node.FontWeight, Family: node.FontFamily}})
 	}
 
-	dc := gg.NewContext(int(width), int(height))
+	Layout(root, 0, 0, td)
+	w := root.Rect().Dx()
+	h := root.Rect().Dy()
+	dc, img := newSharedDrawContext(w, h)
+	PaintTree(root, dc, img, td)
 
-	// 1. 圆角背景（唯一与外侧透明区相邻的图层；它的反锯齿是 bg 色，融入桌面观感干净）
-	dc.SetColor(bg)
-	dc.DrawRoundedRectangle(0, 0, width, height, borderRadius)
-	dc.Fill()
-
-	// 2. 左侧 accent 条：用 Fill 而非 Stroke, 全部位于 bg 内部, 不接触圆角外缘 → 反锯齿
-	// 像素只与不透明 bg 叠加, 不会有"边缘透出底色"的观感。
-	barX := accentBarInset
-	barY := accentBarInset
-	barH := height - accentBarInset*2
+	// 左侧 accent 条（Fill，完全位于 bg 内部，不接触圆角外缘）。后处理：定位用 root 高度。
+	barH := float64(h) - accentBarInset*2
 	if barH > 0 {
 		dc.SetColor(accent)
-		dc.DrawRoundedRectangle(barX, barY, accentBarWidth, barH, accentBarWidth/2)
+		dc.DrawRoundedRectangle(accentBarInset, accentBarInset, accentBarWidth, barH, accentBarWidth/2)
 		dc.Fill()
 	}
-
-	img := dc.Image().(*image.RGBA)
-	td.BeginDraw(img)
-
-	y := padding
-	if title != "" {
-		// 标题用 accent 颜色，醒目；基线偏移 ≈ size * 0.8
-		td.DrawString(title, textLeft, y+titleSize*0.8, titleSize, accent)
-		y += titleSize + titleGap
-	}
-	for i, line := range bodyLines {
-		baseline := y + bodySize*0.8 + float64(i)*(bodySize+lineSpacing)
-		td.DrawString(line, textLeft, baseline, bodySize, textColor)
-	}
-	td.EndDraw()
 
 	DrawDebugBanner(img)
 	return img

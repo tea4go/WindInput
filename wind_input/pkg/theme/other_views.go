@@ -79,6 +79,27 @@ func ResolveTooltipViews(node *ViewNode, pal ResolvedPalette) RVNode {
 	return resolveViewNode(n, resolve, pal.Tooltip.Background, nil, pal.Tooltip.Text)
 }
 
+// ResolveToastViews 解析 views.toast 节点为渲染消费的 RVNode（P8 切片5）。
+// 颜色 token：${background}/${text} → Palette.Toast；默认底色/文字 = Palette.Toast。
+// 几何（padding/border 圆角/字号偏移）由 ui 侧按现状兜底；bg 不透明化在 ui 侧 forceAlphaOpaque。
+// background image/layers 本切片不消费（待 P8 切片6 共享位图基础设施）。
+func ResolveToastViews(node *ViewNode, pal ResolvedPalette) RVNode {
+	resolve := makeColorResolver(func(name string) color.Color {
+		switch name {
+		case "background":
+			return pal.Toast.Background
+		case "text":
+			return pal.Toast.Text
+		}
+		return nil
+	})
+	var n ViewNode
+	if node != nil {
+		n = *node
+	}
+	return resolveViewNode(n, resolve, pal.Toast.Background, nil, pal.Toast.Text)
+}
+
 // ResolveMenuViews 解析 views.menu（Root/Item/Separator）为渲染消费的 ResolvedMenuViews（P8 切片3）。
 // 颜色 token → Palette.PopupMenu 语义色；item 的 hover/disabled 走 ViewNode states patch
 // （hover 默认 HoverBg/HoverText、disabled 默认文字 Disabled）。

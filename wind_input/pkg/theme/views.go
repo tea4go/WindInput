@@ -110,6 +110,7 @@ type Views struct {
 	ModeLabel     ViewNode      `yaml:"mode_label,omitempty"` // 临时拼音等模式徽标（预编辑栏内）：font_size 相对偏移 + color
 	Status        *ViewNode     `yaml:"status,omitempty"`     // P4-A 状态泡（独立窗口，单节点）
 	Tooltip       *ViewNode     `yaml:"tooltip,omitempty"`    // P4-B Tooltip（独立窗口，单节点）
+	Toast         *ViewNode     `yaml:"toast,omitempty"`      // P8 Toast（独立窗口，单节点：bg/text/border/圆角/字号偏移）
 	Toolbar       *ToolbarViews `yaml:"toolbar,omitempty"`    // P4-C 工具栏
 	Menu          *MenuViews    `yaml:"menu,omitempty"`       // P4-D 弹出菜单
 	Metrics       *ViewMetrics  `yaml:"metrics,omitempty"`    // P6 候选窗列表级几何
@@ -451,6 +452,10 @@ func mergeViews(base, ov Views) Views {
 	out.Tooltip = base.Tooltip
 	if ov.Tooltip != nil {
 		out.Tooltip = ov.Tooltip
+	}
+	out.Toast = base.Toast
+	if ov.Toast != nil {
+		out.Toast = ov.Toast
 	}
 	out.Toolbar = base.Toolbar
 	if ov.Toolbar != nil {

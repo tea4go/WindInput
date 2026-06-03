@@ -53,6 +53,9 @@ views:
   tooltip:
     background: {color: "${background}"}
     color: "${text}"
+  toast:
+    background: {color: "${background}"}
+    color: "${text}"
   toolbar:
     background: {color: "${background}"}
     border: {color: "${border}"}
