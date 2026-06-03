@@ -18,7 +18,7 @@ func (m *PopupMenu) render() *image.RGBA {
 	height := m.height
 	hasChecked := m.hasChecked
 	hasChildren := m.hasChildren
-	rmv := m.resolveMenuColors()
+	rmv := m.resolveMenuViews()
 	td := m.textDrawer
 	baseFontSize := m.getMenuFontSize()
 	m.mu.Unlock()
@@ -29,14 +29,43 @@ func (m *PopupMenu) render() *image.RGBA {
 	mt := buildMenuTree(items, hoverIdx, submenuIdx, hasChecked, hasChildren, rmv, width, height, baseFontSize, itemHeightLogical, scale)
 	Layout(mt.root, 0, 0, td)
 	dc, img := newSharedDrawContext(width, height)
+
+	// 内圆角 clip：把 root 背景 + hover 满宽高亮裁剪到「边框内侧的圆角」，使首/末项 hover
+	// 不溢出圆角、也不覆盖圆角边框（保持满宽方块风格，不改 UI 自定义部分）。
+	// 代价：root 边框会被 clip 裁掉外半，故下方在 clip 之外重画完整圆角边框。
+	radius := rmv.Root.BorderRadius.Scaled(scale)
+	if radius == 0 {
+		radius = int(float64(menuCornerRadius) * scale)
+	}
+	bw := rmv.Root.BorderWidth.Scaled(scale)
+	if bw == 0 {
+		bw = 1
+	}
+	innerR := radius - bw
+	if innerR < 0 {
+		innerR = 0
+	}
+	dc.DrawRoundedRectangle(float64(bw), float64(bw), float64(width-2*bw), float64(height-2*bw), float64(innerR))
+	dc.Clip()
+
 	PaintTree(mt.root, dc, img, td)
 
-	// 后处理分隔线（矢量，定位用分隔项 Rect()）
+	// 后处理分隔线（矢量，定位用分隔项 Rect()；在 clip 内）
 	for _, sep := range mt.separators {
 		r := sep.Rect()
 		sepY := float64(r.Min.Y) + float64(r.Dy())/2
-		dc.SetColor(rmv.SeparatorColor)
+		dc.SetColor(rmv.Separator.BgColor)
 		dc.DrawLine(4*scale, sepY, float64(width)-4*scale, sepY)
+		dc.Stroke()
+	}
+
+	// 完整 root 圆角边框：在内圆角 clip 之外绘制，画在最上，圆角轮廓完整（与旧 paintShapes 边框等价）。
+	dc.ResetClip()
+	if bc := rmv.Root.BorderColor; bc != nil {
+		half := float64(bw) / 2
+		dc.SetColor(bc)
+		dc.SetLineWidth(float64(bw))
+		dc.DrawRoundedRectangle(half, half, float64(width)-2*half, float64(height)-2*half, float64(radius))
 		dc.Stroke()
 	}
 

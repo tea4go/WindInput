@@ -99,8 +99,9 @@ func TestDefaultThemeMenuParse(t *testing.T) {
 	if err := yaml.Unmarshal(data, &th); err != nil {
 		t.Fatalf("解析失败: %v", err)
 	}
-	if th.Views == nil || th.Views.Menu == nil || th.Views.Menu.Hover.Background.Color != "${hover_bg}" {
-		t.Fatal("default theme.yaml 应含 views.menu.hover.background")
+	if th.Views == nil || th.Views.Menu == nil || th.Views.Menu.Item.Hover == nil ||
+		th.Views.Menu.Item.Hover.Background.Color != "${hover_bg}" {
+		t.Fatal("default theme.yaml 应含 views.menu.item.hover.background")
 	}
 }
 
@@ -203,13 +204,17 @@ toolbar:
 func TestViews_MenuParse(t *testing.T) {
 	data := `
 menu:
-  background: {color: "${background}"}
-  color: "${text}"
-  separator: {color: "${separator}"}
-  disabled: "${disabled}"
-  hover:
-    background: {color: "${hover_bg}"}
-    color: "${hover_text}"
+  root:
+    background: {color: "${background}"}
+  item:
+    color: "${text}"
+    hover:
+      background: {color: "${hover_bg}"}
+      color: "${hover_text}"
+    disabled:
+      color: "${disabled}"
+  separator:
+    color: "${separator}"
 `
 	var v Views
 	if err := yaml.Unmarshal([]byte(data), &v); err != nil {
@@ -218,11 +223,11 @@ menu:
 	if v.Menu == nil {
 		t.Fatal("views.menu 应非 nil")
 	}
-	if v.Menu.Color != "${text}" || v.Menu.Disabled != "${disabled}" {
-		t.Errorf("menu text/disabled token 错误: %+v", v.Menu)
+	if v.Menu.Item.Color != "${text}" || v.Menu.Item.Disabled == nil || v.Menu.Item.Disabled.Color != "${disabled}" {
+		t.Errorf("menu item text/disabled token 错误: %+v", v.Menu)
 	}
-	if v.Menu.Hover.Background.Color != "${hover_bg}" || v.Menu.Hover.Color != "${hover_text}" {
-		t.Error("menu hover 覆盖缺失")
+	if v.Menu.Item.Hover == nil || v.Menu.Item.Hover.Background.Color != "${hover_bg}" || v.Menu.Item.Hover.Color != "${hover_text}" {
+		t.Error("menu item hover 覆盖缺失")
 	}
 }
 

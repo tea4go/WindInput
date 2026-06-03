@@ -70,11 +70,15 @@ views:
       icon: {color: "${settings_icon}"}
       hole: {color: "${settings_hole}"}
   menu:
-    background: {color: "${background}"}
-    border: {color: "${border}"}
-    color: "${text}"
-    separator: {color: "${separator}"}
-    disabled: "${disabled}"
-    hover:
-      background: {color: "${hover_bg}"}
-      color: "${hover_text}"
+    root:
+      background: {color: "${background}"}
+      border: {color: "${border}"}
+    item:
+      color: "${text}"
+      hover:
+        background: {color: "${hover_bg}"}
+        color: "${hover_text}"
+      disabled:
+        color: "${disabled}"
+    separator:
+      color: "${separator}"

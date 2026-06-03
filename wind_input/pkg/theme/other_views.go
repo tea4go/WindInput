@@ -78,3 +78,43 @@ func ResolveTooltipViews(node *ViewNode, pal ResolvedPalette) RVNode {
 	}
 	return resolveViewNode(n, resolve, pal.Tooltip.Background, nil, pal.Tooltip.Text)
 }
+
+// ResolveMenuViews 解析 views.menu（Root/Item/Separator）为渲染消费的 ResolvedMenuViews（P8 切片3）。
+// 颜色 token → Palette.PopupMenu 语义色；item 的 hover/disabled 走 ViewNode states patch
+// （hover 默认 HoverBg/HoverText、disabled 默认文字 Disabled）。
+// mv==nil（主题未配 views.menu）时各节点取 palette 默认色 + 零几何，由 ui 侧按现状兜底布局尺寸。
+// background image/layers 本切片不消费（待 P8 切片6 共享位图基础设施）。
+func ResolveMenuViews(mv *MenuViews, pal ResolvedPalette) ResolvedMenuViews {
+	pm := pal.PopupMenu
+	resolve := makeColorResolver(func(name string) color.Color {
+		switch name {
+		case "background":
+			return pm.Background
+		case "border":
+			return pm.Border
+		case "text":
+			return pm.Text
+		case "disabled":
+			return pm.Disabled
+		case "hover_bg":
+			return pm.HoverBg
+		case "hover_text":
+			return pm.HoverText
+		case "separator":
+			return pm.Separator
+		}
+		return nil
+	})
+	var root, item, sep ViewNode
+	if mv != nil {
+		root, item, sep = mv.Root, mv.Item, mv.Separator
+	}
+	out := ResolvedMenuViews{
+		Root:      resolveViewNode(root, resolve, pm.Background, pm.Border, nil),
+		Item:      resolveViewNode(item, resolve, nil, nil, pm.Text),
+		Separator: resolveViewNode(sep, resolve, pm.Separator, nil, nil),
+	}
+	out.Item.Hover = resolveState(item.Hover, pm.HoverBg, pm.HoverText, resolve)
+	out.Item.Disabled = resolveState(item.Disabled, nil, pm.Disabled, resolve)
+	return out
+}

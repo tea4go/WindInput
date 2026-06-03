@@ -269,27 +269,26 @@ type ResolvedToolbarViews struct {
 	SettingsBg, SettingsIcon, SettingsHole color.Color
 }
 
-// MenuViews 弹出菜单 YAML schema（P4-D）。7 色：背景/边框/文本/分隔/禁用 + hover 状态。
+// MenuViews 弹出菜单 YAML schema（P8：统一 ViewNode 骨架，取代 P4-D 扁平 7 色）。
+//   - root：菜单容器（背景/边框/上下 padding）
+//   - item：菜单项（左右 padding/字体/文字色 + hover/disabled patch）
+//   - separator：分隔线（用 color 作线色）
+//
+// 布局尺寸（行高/勾选列宽/箭头列宽/分隔高）仍由运行时常量决定，不在本 schema。
 type MenuViews struct {
-	Background ViewFill       `yaml:"background,omitempty"`
-	Border     ViewBorder     `yaml:"border,omitempty"`
-	Color      string         `yaml:"color,omitempty"`     // 普通文本
-	Separator  ViewFill       `yaml:"separator,omitempty"` // 分隔线色（用 .Color）
-	Disabled   string         `yaml:"disabled,omitempty"`  // 禁用文本
-	Hover      MenuHoverState `yaml:"hover,omitempty"`
+	Root      ViewNode `yaml:"root,omitempty"`
+	Item      ViewNode `yaml:"item,omitempty"`
+	Separator ViewNode `yaml:"separator,omitempty"`
 }
 
-// MenuHoverState 菜单项 hover 覆盖：背景 + 文本。
-type MenuHoverState struct {
-	Background ViewFill `yaml:"background,omitempty"`
-	Color      string   `yaml:"color,omitempty"`
-}
-
-// ResolvedMenuViews 菜单解析后扁平 7 色集（P4-D）。
+// ResolvedMenuViews 菜单解析后的盒模型 RVNode 集（P8）。
+//   - Root：容器 BgColor/BorderColor/Border*/Pad*
+//   - Item：TextColor/Pad*/Font* + Hover/Disabled（*RVState）
+//   - Separator：BgColor 作分隔线色
 type ResolvedMenuViews struct {
-	BgColor, BorderColor, TextColor             color.Color
-	DisabledColor, HoverBgColor, HoverTextColor color.Color
-	SeparatorColor                              color.Color
+	Root      RVNode
+	Item      RVNode
+	Separator RVNode
 }
 
 func intp(v int) *int { return &v }

@@ -13,64 +13,26 @@ import (
 	"github.com/huanfeng/wind_input/pkg/theme"
 )
 
-// resolveMenuColors 解析菜单 7 色：默认从 Palette.PopupMenu（P5），views.menu token 覆盖。
-func (m *PopupMenu) resolveMenuColors() theme.ResolvedMenuViews {
-	// 内置默认色（无主题时回退）
-	rmv := theme.ResolvedMenuViews{
-		BgColor:        color.RGBA{255, 255, 255, 255},
-		BorderColor:    color.RGBA{199, 199, 199, 255},
-		TextColor:      color.RGBA{0, 0, 0, 255},
-		DisabledColor:  color.RGBA{161, 161, 161, 255},
-		HoverBgColor:   color.RGBA{0, 120, 212, 255},
-		HoverTextColor: color.RGBA{255, 255, 255, 255},
-		SeparatorColor: color.RGBA{219, 219, 219, 255},
-	}
-	rv := m.resolvedV25
-	if rv == nil {
-		return rmv
-	}
-	pm := rv.Palette.PopupMenu
-	rmv = theme.ResolvedMenuViews{
-		BgColor: pm.Background, BorderColor: pm.Border, TextColor: pm.Text,
-		DisabledColor: pm.Disabled, HoverBgColor: pm.HoverBg,
-		HoverTextColor: pm.HoverText, SeparatorColor: pm.Separator,
-	}
-	if rv.Views == nil || rv.Views.Menu == nil {
-		return rmv
-	}
-	mv := rv.Views.Menu
-	res := func(name string) color.Color {
-		switch name {
-		case "background":
-			return pm.Background
-		case "border":
-			return pm.Border
-		case "text":
-			return pm.Text
-		case "disabled":
-			return pm.Disabled
-		case "hover_bg":
-			return pm.HoverBg
-		case "hover_text":
-			return pm.HoverText
-		case "separator":
-			return pm.Separator
+// resolveMenuViews 解析菜单盒模型 ResolvedMenuViews（P8 切片3）：默认从 Palette.PopupMenu（P5），
+// views.menu（Root/Item/Separator）覆盖几何+颜色，item 的 hover/disabled 走 ViewNode states。
+func (m *PopupMenu) resolveMenuViews() theme.ResolvedMenuViews {
+	if rv := m.resolvedV25; rv != nil {
+		var mv *theme.MenuViews
+		if rv.Views != nil {
+			mv = rv.Views.Menu
 		}
-		return nil
+		return theme.ResolveMenuViews(mv, rv.Palette)
 	}
-	set := func(dst *color.Color, s string) {
-		if c := resolveTokenColor(s, res); c != nil {
-			*dst = c
-		}
+	// 内置默认（无主题兜底，等价旧 7 色硬编码）
+	return theme.ResolvedMenuViews{
+		Root: theme.RVNode{BgColor: color.RGBA{255, 255, 255, 255}, BorderColor: color.RGBA{199, 199, 199, 255}},
+		Item: theme.RVNode{
+			TextColor: color.RGBA{0, 0, 0, 255},
+			Hover:     &theme.RVState{BgColor: color.RGBA{0, 120, 212, 255}, TextColor: color.RGBA{255, 255, 255, 255}},
+			Disabled:  &theme.RVState{TextColor: color.RGBA{161, 161, 161, 255}},
+		},
+		Separator: theme.RVNode{BgColor: color.RGBA{219, 219, 219, 255}},
 	}
-	set(&rmv.BgColor, mv.Background.Color)
-	set(&rmv.BorderColor, mv.Border.Color)
-	set(&rmv.TextColor, mv.Color)
-	set(&rmv.SeparatorColor, mv.Separator.Color)
-	set(&rmv.DisabledColor, mv.Disabled)
-	set(&rmv.HoverBgColor, mv.Hover.Background.Color)
-	set(&rmv.HoverTextColor, mv.Hover.Color)
-	return rmv
 }
 
 // menuTree 持有 root + 分隔项 View 引用（分隔线后处理定位用其 Rect()）。
@@ -83,11 +45,26 @@ type menuTree struct {
 // width/height 用预算值（与命中测试一致）。hoverIdx/submenuIdx 决定 hover 态。
 // 勾选✓/箭头▸/文本走 View 文本叶子；分隔项收集到 separators 供后处理画线。
 func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasChildren bool, rmv theme.ResolvedMenuViews, width, height int, baseFontSize float64, itemHeightLogical int, scale float64) *menuTree {
-	fontSize := baseFontSize * scale
+	fontSize := (baseFontSize + rmv.Item.FontSize) * scale
 	itemH := int(float64(itemHeightLogical) * scale)
 	sepH := int(float64(menuSeparatorHeight) * scale)
-	padY := int(float64(menuPaddingY) * scale)
-	padXHalf := int(float64(menuPaddingX) * scale / 2)
+	itemWeight := rmv.Item.FontWeight
+	itemFamily := rmv.Item.FontFamily
+
+	// root 上下 padding（views.menu.root 未配则兜底 menuPaddingY）
+	padTop := rmv.Root.PadTop.Scaled(scale)
+	padBottom := rmv.Root.PadBottom.Scaled(scale)
+	if padTop == 0 && padBottom == 0 {
+		p := int(float64(menuPaddingY) * scale)
+		padTop, padBottom = p, p
+	}
+	// item 左右 padding（views.menu.item 未配则兜底 menuPaddingX/2）
+	padL := rmv.Item.PadLeft.Scaled(scale)
+	padR := rmv.Item.PadRight.Scaled(scale)
+	if padL == 0 && padR == 0 {
+		p := int(float64(menuPaddingX) * scale / 2)
+		padL, padR = p, p
+	}
 	checkW := 0
 	if hasChecked {
 		checkW = int(float64(menuCheckMarkWidth) * scale)
@@ -96,15 +73,20 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 	if hasChildren {
 		arrowW = int(float64(menuArrowWidth) * scale)
 	}
-	radius := int(float64(menuCornerRadius) * scale)
+	// root 圆角半径（兜底 menuCornerRadius）。边框不在此画——由 render 配合「内圆角 clip」后处理绘制，
+	// 使 hover 满宽高亮裁到边框内侧、既不溢出圆角也不覆盖圆角边框（见 popup_menu_render.go）。
+	radius := rmv.Root.BorderRadius.Scaled(scale)
+	if radius == 0 {
+		radius = int(float64(menuCornerRadius) * scale)
+	}
 
 	root := &View{
 		FixedW:     width,
 		FixedH:     height,
 		Layout:     LayoutColumn,
-		Padding:    Edges{Top: padY, Bottom: padY},
-		Background: Fill{Color: rmv.BgColor},
-		Border:     Border{Radius: radius, Color: rmv.BorderColor, Width: 1},
+		Padding:    Edges{Top: padTop, Bottom: padBottom},
+		Background: Fill{Color: rmv.Root.BgColor},
+		Border:     Border{Radius: radius},
 	}
 	mt := &menuTree{root: root}
 
@@ -117,37 +99,43 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 			continue
 		}
 		isHovered := (i == hoverIdx && !item.Disabled) || (i == submenuIdx)
-		textColor := rmv.TextColor
+		textColor := rmv.Item.TextColor
 		switch {
 		case item.Disabled:
-			textColor = rmv.DisabledColor
+			if rmv.Item.Disabled != nil && rmv.Item.Disabled.TextColor != nil {
+				textColor = rmv.Item.Disabled.TextColor
+			}
 		case isHovered:
-			textColor = rmv.HoverTextColor
+			if rmv.Item.Hover != nil && rmv.Item.Hover.TextColor != nil {
+				textColor = rmv.Item.Hover.TextColor
+			}
 		}
 
+		// item 上下 padding 不独立生效：行高由 FixedH=itemH + CrossAlign center 决定。
+		// 仅左右 padding 来自 views.menu.item，规避候选项曾踩的"上下 padding 被 FixedH 均摊"坑（见 P8 设计文档）。
 		row := &View{
 			FixedH:     itemH,
 			Layout:     LayoutRow,
 			Stretch:    true,        // 撑满 root 宽（hover 满宽）
 			CrossAlign: AlignCenter, // check/text/arrow 在 itemH 内垂直居中
-			Padding:    Edges{Left: padXHalf, Right: padXHalf},
+			Padding:    Edges{Left: padL, Right: padR},
 		}
-		if isHovered {
-			row.Background = Fill{Color: rmv.HoverBgColor}
+		if isHovered && rmv.Item.Hover != nil && rmv.Item.Hover.BgColor != nil {
+			row.Background = Fill{Color: rmv.Item.Hover.BgColor}
 		}
 
 		if hasChecked {
 			check := &View{FixedW: checkW}
 			if item.Checked {
 				check.Text = "✓"
-				check.TextStyle = TextStyle{FontSize: fontSize, Color: textColor, Align: AlignCenter}
+				check.TextStyle = TextStyle{FontSize: fontSize, Color: textColor, Align: AlignCenter, Weight: itemWeight, Family: itemFamily}
 			}
 			row.Children = append(row.Children, check)
 		}
 		text := &View{
 			Text:      item.Text,
-			TextStyle: TextStyle{FontSize: fontSize, Color: textColor},
-			Margin:    Edges{Left: padXHalf},
+			TextStyle: TextStyle{FontSize: fontSize, Color: textColor, Weight: itemWeight, Family: itemFamily},
+			Margin:    Edges{Left: padL},
 			Grow:      true,
 		}
 		row.Children = append(row.Children, text)
@@ -155,7 +143,7 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 			arrow := &View{FixedW: arrowW}
 			if len(item.Children) > 0 {
 				arrow.Text = "▸"
-				arrow.TextStyle = TextStyle{FontSize: fontSize, Color: textColor, Align: AlignCenter}
+				arrow.TextStyle = TextStyle{FontSize: fontSize, Color: textColor, Align: AlignCenter, Weight: itemWeight, Family: itemFamily}
 			}
 			row.Children = append(row.Children, arrow)
 		}

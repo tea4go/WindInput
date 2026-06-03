@@ -21,20 +21,30 @@ func TestResolveMenuColors(t *testing.T) {
 		Separator:  color.RGBA{219, 219, 219, 255},
 	}
 	m := &PopupMenu{resolvedV25: &theme.ResolvedV25{Palette: theme.ResolvedPalette{PopupMenu: pm}}}
-	rmv := m.resolveMenuColors()
-	if rmv.BgColor != color.Color(pm.Background) || rmv.HoverBgColor != color.Color(pm.HoverBg) ||
-		rmv.DisabledColor != color.Color(pm.Disabled) || rmv.SeparatorColor != color.Color(pm.Separator) {
-		t.Errorf("menu 7 色映射错误: %+v", rmv)
+	rmv := m.resolveMenuViews()
+	if rmv.Root.BgColor != color.Color(pm.Background) || rmv.Root.BorderColor != color.Color(pm.Border) ||
+		rmv.Item.TextColor != color.Color(pm.Text) || rmv.Separator.BgColor != color.Color(pm.Separator) {
+		t.Errorf("menu 颜色映射错误: %+v", rmv)
+	}
+	if rmv.Item.Hover == nil || rmv.Item.Hover.BgColor != color.Color(pm.HoverBg) ||
+		rmv.Item.Hover.TextColor != color.Color(pm.HoverText) {
+		t.Errorf("menu hover 态映射错误: %+v", rmv.Item.Hover)
+	}
+	if rmv.Item.Disabled == nil || rmv.Item.Disabled.TextColor != color.Color(pm.Disabled) {
+		t.Errorf("menu disabled 态映射错误: %+v", rmv.Item.Disabled)
 	}
 }
 
 // TestBuildMenuTree_Geometry 验证菜单项布局 + hover/disabled 状态色 + 勾选/箭头 + 分隔项收集。
 func TestBuildMenuTree_Geometry(t *testing.T) {
 	rmv := theme.ResolvedMenuViews{
-		BgColor: color.RGBA{255, 255, 255, 255}, BorderColor: color.RGBA{1, 2, 3, 255},
-		TextColor: color.RGBA{0, 0, 0, 255}, DisabledColor: color.RGBA{161, 161, 161, 255},
-		HoverBgColor: color.RGBA{0, 120, 212, 255}, HoverTextColor: color.RGBA{255, 255, 255, 255},
-		SeparatorColor: color.RGBA{219, 219, 219, 255},
+		Root: theme.RVNode{BgColor: color.RGBA{255, 255, 255, 255}, BorderColor: color.RGBA{1, 2, 3, 255}},
+		Item: theme.RVNode{
+			TextColor: color.RGBA{0, 0, 0, 255},
+			Hover:     &theme.RVState{BgColor: color.RGBA{0, 120, 212, 255}, TextColor: color.RGBA{255, 255, 255, 255}},
+			Disabled:  &theme.RVState{TextColor: color.RGBA{161, 161, 161, 255}},
+		},
+		Separator: theme.RVNode{BgColor: color.RGBA{219, 219, 219, 255}},
 	}
 	items := []MenuItem{
 		{Text: "项目一", Checked: true},
