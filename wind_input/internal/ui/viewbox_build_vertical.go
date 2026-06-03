@@ -91,7 +91,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 	itemPadR := scD(rv.Item.PadRight)
 
 	// 圆圈序号直径 = 序号字号 + index 上下 padding（盒模型，无 max(11/18) 尺寸下限魔法）。
-	indexD := rv.Index.FontSize + float64(scD(rv.Index.PadTop)+scD(rv.Index.PadBottom))
+	indexD := rv.Index.FontSize + maxF(float64(scD(rv.Index.PadTop)+scD(rv.Index.PadBottom)), float64(scD(rv.Index.PadLeft)+scD(rv.Index.PadRight))) // 四边 padding 都参与，保持正圆
 	indexAreaW := int(indexD + 6*scale + 0.5)
 	if isTextIndex {
 		// 文本序号列宽按字形测量收紧：取最宽序号标签实际宽 + 小留白，紧凑且各行候选文字对齐。
@@ -105,7 +105,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 				}
 			}
 		}
-		indexAreaW = int(maxLabelW + 4*scale + 0.5)
+		indexAreaW = int(maxLabelW + float64(scD(rv.Index.PadLeft)+scD(rv.Index.PadRight)) + 0.5) // 文本序号列宽 = 最宽标签 + 左右 padding（取代 +4 魔法）
 	}
 	commentSize := rv.Comment.FontSize // 注释字号 = base + views.comment.font_size 偏移（无派生魔法）
 	// 行高 = 行内容自然高 + item 上下内边距（全由主题 item.padding 控制，无 max(32) 魔法）。
@@ -262,7 +262,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 	// ---- band 列表 ----
 	bands := make([]*View, 0, 3)
 	if (input != "" || cfg.ModeLabel != "") && !cfg.HidePreedit {
-		inputH := int(maxF(30*scale, rv.PreeditBar.FontSize*1.5) + 0.5)
+		inputH := int(rv.PreeditBar.FontSize+0.5) + scD(rv.PreeditBar.PadTop) + scD(rv.PreeditBar.PadBottom) // 条高=内容+preedit 上下 padding（无 max 魔法，横竖统一）
 		bands = append(bands, r.buildPreeditBand(input, cursorPos, inputH, scale, sc))
 	}
 	bands = append(bands, list)

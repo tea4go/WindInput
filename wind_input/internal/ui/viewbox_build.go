@@ -264,7 +264,8 @@ func (r *Renderer) buildHorizontalCandidateTree(
 	itemSpacing := scD(rv.ItemSpacing) // 间距全由主题 metrics.item_spacing 决定（文本序号模式的旧 +4 magic 已下沉到 msime 主题）
 	commentSize := rv.Comment.FontSize // 注释字号 = base + views.comment.font_size 偏移（无派生魔法）
 	// 圆圈序号直径 = 序号字号 + index 上下 padding（盒模型：背景=内容+padding；无 max(18) 下限魔法，全由主题 index.padding 控制）
-	indexSize := rv.Index.FontSize + float64(scD(rv.Index.PadTop)+scD(rv.Index.PadBottom))
+	// 圆直径 = 字号 + max(上下padding和, 左右padding和)：四边 padding 都参与（取较大轴），保持正圆
+	indexSize := rv.Index.FontSize + maxF(float64(scD(rv.Index.PadTop)+scD(rv.Index.PadBottom)), float64(scD(rv.Index.PadLeft)+scD(rv.Index.PadRight)))
 	// 行高 = 行内容自然高(最高元素：候选文字/序号/注释) + item 上下内边距。
 	// 全由主题 item.padding 控制（无 max(32, base*1.8) 派生魔法）；不想要高度就把 item 上下 padding 配 0。
 	lineH := rv.Text.FontSize
@@ -394,7 +395,7 @@ func (r *Renderer) buildHorizontalCandidateTree(
 	// ---- band 列表（preedit + 候选列表）----
 	bands := make([]*View, 0, 2)
 	if (input != "" || cfg.ModeLabel != "") && !cfg.HidePreedit && !isEmbedded {
-		inputH := int(maxF(24*scale, rv.PreeditBar.FontSize*1.3) + 0.5)
+		inputH := int(rv.PreeditBar.FontSize+0.5) + scD(rv.PreeditBar.PadTop) + scD(rv.PreeditBar.PadBottom) // 条高=内容+preedit 上下 padding（无 max 魔法）
 		bands = append(bands, r.buildPreeditBand(input, cursorPos, inputH, scale, sc))
 	}
 	bands = append(bands, list)

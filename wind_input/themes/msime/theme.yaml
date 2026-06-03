@@ -22,7 +22,7 @@ views:
     border: {radius: 8, width: 1px, color: "${border}"}   # 1px 发丝线：边框不随 DPI 加粗（匹配旧渲染器）
     background: {color: "${background}"}
   preedit_bar:
-    padding: {left: 8, right: 8}
+    padding: {top: 3, right: 8, bottom: 3, left: 8}   # 上下 3：预编辑条高 = 内容(字号18)+6 = 24
     background: {color: "${preedit_bg}"}
     color: "${preedit_text}"
   item:
@@ -32,7 +32,8 @@ views:
     hover: {background: {color: "${hover_bg}"}}
   index:
     color: "${index_text}"
-    font_size: 2                                   # 文本序号醒目大号(主候选+2)
+    font_size: 2
+    padding: {left: 2, right: 2}   # 文本序号列左右留白（取代旧 +4 魔法；左右 padding 现完全生效）                                   # 文本序号醒目大号(主候选+2)
   text:
     margin: {left: 4}
     color: "${text}"
