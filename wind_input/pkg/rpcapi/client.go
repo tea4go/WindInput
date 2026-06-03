@@ -539,16 +539,6 @@ func (c *Client) StatsGetDaily(from, to string) (*StatsGetDailyReply, error) {
 	return &reply, err
 }
 
-func (c *Client) StatsGetConfig() (*StatsConfigReply, error) {
-	var reply StatsConfigReply
-	err := c.call("Stats.GetConfig", &Empty{}, &reply)
-	return &reply, err
-}
-
-func (c *Client) StatsUpdateConfig(args StatsConfigUpdateArgs) error {
-	return c.call("Stats.UpdateConfig", &args, &Empty{})
-}
-
 func (c *Client) StatsClear() error {
 	return c.call("Stats.Clear", &Empty{}, &Empty{})
 }

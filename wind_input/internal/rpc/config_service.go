@@ -118,6 +118,13 @@ func (s *ConfigService) SetAll(args *rpcapi.ConfigSetAllArgs, reply *rpcapi.Conf
 	if err := json.Unmarshal(args.Config, newCfg); err != nil {
 		return fmt.Errorf("unmarshal config: %w", err)
 	}
+
+	// stats 配置由专用接口 Stats.UpdateConfig 独立管理，全局配置表单（前端 formData）
+	// 并不包含 stats 字段。反序列化时缺失的 *bool 会被当作 null，从而把服务端已有的
+	// track_english/enabled 覆盖为 nil（IsTrackEnglish() 又回退到默认 true），导致用户
+	// 在统计页关闭的设置被全局保存冲掉。这里强制保留服务端现有 stats，使其只受专用接口影响。
+	newCfg.Stats = s.cfg.Stats
+
 	config.ApplyConfigFallbacks(newCfg)
 
 	// 计算变更的 section

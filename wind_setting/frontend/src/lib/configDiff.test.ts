@@ -52,4 +52,21 @@ describe("diffConfigToItems", () => {
     const cur = { ui: { font_size: 18 } };
     expect(diffConfigToItems(base, cur)).toEqual([]);
   });
+
+  it("stats 段改动产出 stats.* 点路径 key", () => {
+    const base = { stats: { enabled: true, retain_days: 0, track_english: true } };
+    const cur = { stats: { enabled: true, retain_days: 0, track_english: false } };
+    expect(diffConfigToItems(base, cur)).toEqual([
+      { key: "stats.track_english", value: false },
+    ]);
+  });
+
+  it("stats 段多字段同改产出多条 item", () => {
+    const base = { stats: { enabled: true, retain_days: 0, track_english: true } };
+    const cur = { stats: { enabled: false, retain_days: 0, track_english: false } };
+    expect(diffConfigToItems(base, cur)).toEqual([
+      { key: "stats.enabled", value: false },
+      { key: "stats.track_english", value: false },
+    ]);
+  });
 });

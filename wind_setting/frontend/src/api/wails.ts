@@ -3,6 +3,7 @@
 // 导入 Wails 生成的绑定和模型
 import * as App from "../../wailsjs/go/main/App";
 import { main, rpcapi } from "../../wailsjs/go/models";
+import type { ConfigSetItem } from "../lib/configDiff";
 import {
   getDefaultConfig as getHTTPDefaultConfig,
   getDefaultTSFLogConfig as getHTTPTSFLogConfig,
@@ -272,8 +273,10 @@ export interface SaveConfigResult {
   requires_restart: boolean;
 }
 
-export async function saveConfig(cfg: Config): Promise<SaveConfigResult> {
-  return (await App.SaveConfig(cfg as any)) as any;
+export async function setConfigItems(
+  items: ConfigSetItem[],
+): Promise<SaveConfigResult> {
+  return (await App.SetConfigItems(items as any)) as any;
 }
 
 export async function getTSFLogConfig(): Promise<TSFLogConfig> {
@@ -1161,12 +1164,6 @@ export interface DailyStatItem {
   src: number[];
 }
 
-export interface StatsConfig {
-  enabled: boolean;
-  retain_days: number;
-  track_english: boolean;
-}
-
 export async function getStatsSummary(): Promise<StatsSummary> {
   return App.GetStatsSummary() as unknown as StatsSummary;
 }
@@ -1177,14 +1174,6 @@ export async function getDailyStats(
 ): Promise<DailyStatItem[]> {
   const result = await App.GetDailyStats(from, to);
   return (result as any)?.days || [];
-}
-
-export async function getStatsConfig(): Promise<StatsConfig> {
-  return App.GetStatsConfig() as unknown as StatsConfig;
-}
-
-export async function saveStatsConfig(cfg: StatsConfig): Promise<void> {
-  return App.SaveStatsConfig(cfg as any);
 }
 
 export async function clearStats(): Promise<void> {

@@ -18,6 +18,7 @@ import type {
   ConfigEvent,
 } from "./api/wails";
 import { getDefaultConfig, getDefaultTSFLogConfig } from "./api/settings";
+import { diffConfigToItems } from "./lib/configDiff";
 import { Sonner } from "@/components/ui/sonner";
 import { provideToast } from "./composables/useToast";
 import { useConfirm } from "./composables/useConfirm";
@@ -275,6 +276,14 @@ function mergeWithDefaults(cfg: any): Config {
     },
     advanced: { ...defaults.advanced, ...cfg.advanced },
     s2t: { ...defaults.s2t, ...cfg.s2t },
+    // stats 段逐字段 ?? 兜底（而非 spread）：后端 *bool(enabled/track_english)
+    // 未设时序列化为 null，简单 spread 会用 null 覆盖默认 true，丢失默认语义。
+    // 切勿为“统一风格”改回 { ...defaults.stats, ...cfg.stats }。
+    stats: {
+      enabled: cfg.stats?.enabled ?? defaults.stats.enabled,
+      retain_days: cfg.stats?.retain_days ?? defaults.stats.retain_days,
+      track_english: cfg.stats?.track_english ?? defaults.stats.track_english,
+    },
   };
 }
 
@@ -329,9 +338,18 @@ async function saveConfig() {
 
   try {
     if (isWailsEnv.value) {
-      await wailsApi.saveConfig(formData.value as any);
+      const items = diffConfigToItems(config.value, formData.value);
+      if (items.length === 0) {
+        toast("当前无改动");
+        return;
+      }
+      const reply = await wailsApi.setConfigItems(items);
       await wailsApi.saveTSFLogConfig(tsfLogConfig.value);
-      toast("保存成功");
+      toast(
+        reply.requires_restart
+          ? "保存成功（部分设置需重启生效）"
+          : "保存成功",
+      );
       config.value = JSON.parse(JSON.stringify(formData.value));
       savedTSFLogConfig.value = JSON.parse(JSON.stringify(tsfLogConfig.value));
       rebuildEngines(formData.value);
@@ -843,7 +861,7 @@ onUnmounted(() => {
           :activeTab="activeTab"
         />
 
-        <StatsPage v-show="activeTab === 'stats'" :isWailsEnv="isWailsEnv" />
+        <StatsPage v-show="activeTab === 'stats'" :isWailsEnv="isWailsEnv" :formData="formData" />
 
         <AdvancedPage
           v-show="activeTab === 'advanced'"

@@ -343,6 +343,39 @@ func TestConfigSetAll(t *testing.T) {
 	}
 }
 
+// TestConfigSetAll_PreservesStats 防回归：全局保存（SetAll）提交的 formData 不含 stats 字段，
+// 反序列化后 stats 的 *bool 为 nil（JSON null）。SetAll 必须保留服务端现有 stats，
+// 否则会把用户在统计页关闭的 track_english=false 冲回默认 true。
+func TestConfigSetAll_PreservesStats(t *testing.T) {
+	cfg := config.SystemDefaultConfig()
+	enabled := true
+	track := false
+	cfg.Stats.Enabled = &enabled
+	cfg.Stats.TrackEnglish = &track // 用户在统计页关闭了英文统计
+	svc := newTestConfigService(cfg)
+
+	// 模拟前端全局保存：formData 不含 stats，序列化到 config.Config 时 Stats 的 *bool 为 nil
+	frontendCfg := config.SystemDefaultConfig()
+	frontendCfg.Stats = config.StatsConfig{} // Enabled/TrackEnglish = nil → JSON null
+	frontendCfg.UI.FontSize = 22             // 同时修改一个全局表单字段
+	data, _ := json.Marshal(frontendCfg)
+
+	var reply rpcapi.ConfigSetAllReply
+	if err := svc.SetAll(&rpcapi.ConfigSetAllArgs{Config: data}, &reply); err != nil {
+		t.Fatalf("SetAll: %v", err)
+	}
+
+	if cfg.UI.FontSize != 22 {
+		t.Errorf("全局表单字段未生效：font_size want 22, got %v", cfg.UI.FontSize)
+	}
+	if cfg.Stats.IsTrackEnglish() != false {
+		t.Errorf("track_english 被全局保存覆盖：want false, got %v", cfg.Stats.IsTrackEnglish())
+	}
+	if cfg.Stats.IsEnabled() != true {
+		t.Errorf("stats.enabled 被全局保存覆盖：want true, got %v", cfg.Stats.IsEnabled())
+	}
+}
+
 func TestConfigReset_ToDefault(t *testing.T) {
 	def := config.SystemDefaultConfig()
 	cfg := config.SystemDefaultConfig()
@@ -370,5 +403,27 @@ func TestConfigSetActiveSchema(t *testing.T) {
 	}
 	if cfg.Schema.Active != "pinyin" {
 		t.Errorf("expected active=pinyin, got %q", cfg.Schema.Active)
+	}
+}
+
+// TestConfigSet_StatsTrackEnglish 验证 stats 配置改走通用 Config.Set（按 key）后，
+// *bool 字段经 setNestedKey/setSectionFromMap 往返正确：设 false 得 false，
+// 且未改的其它 stats 字段（enabled）保留默认。这是 stats 并入全局保存的核心保证。
+func TestConfigSet_StatsTrackEnglish(t *testing.T) {
+	cfg := config.SystemDefaultConfig() // 默认 track_english/enabled 均为 nil→true 语义
+	svc := newTestConfigService(cfg)
+
+	var reply rpcapi.ConfigSetReply
+	if err := svc.Set(&rpcapi.ConfigSetArgs{
+		Items: []rpcapi.ConfigSetItem{{Key: "stats.track_english", Value: false}},
+	}, &reply); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	if cfg.Stats.IsTrackEnglish() != false {
+		t.Errorf("track_english 应为 false，got %v", cfg.Stats.IsTrackEnglish())
+	}
+	if cfg.Stats.IsEnabled() != true {
+		t.Errorf("未改的 enabled 应保留默认 true，got %v", cfg.Stats.IsEnabled())
 	}
 }

@@ -213,6 +213,13 @@ export interface AdvancedConfig {
   perf_sampling: boolean | null; // *bool: null 表示未设置（视为 false）
 }
 
+// 统计配置
+export interface StatsConfig {
+  enabled: boolean;
+  retain_days: number;
+  track_english: boolean;
+}
+
 export interface TSFLogConfig {
   mode: string;
   level: string;
@@ -236,6 +243,7 @@ export interface Config {
   input: InputConfig;
   advanced: AdvancedConfig;
   s2t?: S2TConfig;
+  stats: StatsConfig;
 }
 
 // 状态类型
@@ -475,6 +483,11 @@ export function getDefaultConfig(): Config {
     s2t: {
       enabled: false,
       variant: "s2t",
+    },
+    stats: {
+      enabled: true,
+      retain_days: 0,
+      track_english: true,
     },
   };
 }

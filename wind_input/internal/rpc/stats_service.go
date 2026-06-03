@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/huanfeng/wind_input/internal/store"
-	"github.com/huanfeng/wind_input/pkg/config"
 	"github.com/huanfeng/wind_input/pkg/rpcapi"
 )
 
@@ -276,52 +275,6 @@ func (s *StatsService) GetDaily(args *rpcapi.StatsGetDailyArgs, reply *rpcapi.St
 		}
 	}
 
-	return nil
-}
-
-// GetConfig 获取统计配置
-func (s *StatsService) GetConfig(args *rpcapi.Empty, reply *rpcapi.StatsConfigReply) error {
-	if s.server == nil || s.server.cfg == nil {
-		// 返回默认值
-		reply.Enabled = true
-		reply.RetainDays = 0
-		reply.TrackEnglish = true
-		return nil
-	}
-	s.server.cfgMu.RLock()
-	stats := s.server.cfg.Stats
-	s.server.cfgMu.RUnlock()
-	reply.Enabled = stats.IsEnabled()
-	reply.RetainDays = stats.RetainDays
-	reply.TrackEnglish = stats.IsTrackEnglish()
-	return nil
-}
-
-// UpdateConfig 更新统计配置（写锁内完成 snapshot+持久化+ApplyConfigUpdate 增量热更新）
-func (s *StatsService) UpdateConfig(args *rpcapi.StatsConfigUpdateArgs, reply *rpcapi.Empty) error {
-	if s.server == nil || s.server.cfg == nil {
-		return fmt.Errorf("config not available")
-	}
-	s.server.cfgMu.Lock()
-	defer s.server.cfgMu.Unlock()
-
-	oldCfg := *s.server.cfg
-	newCfg := deepCopyConfig(s.server.cfg)
-	newCfg.Stats.Enabled = &args.Enabled
-	newCfg.Stats.RetainDays = args.RetainDays
-	newCfg.Stats.TrackEnglish = &args.TrackEnglish
-	config.ApplyConfigFallbacks(newCfg)
-
-	if err := config.Save(newCfg); err != nil {
-		return err
-	}
-
-	if s.server.configReloader != nil {
-		// 调用方已持有 cfgMu 写锁，符合 ApplyConfigUpdate 的契约
-		if _, err := s.server.configReloader.ApplyConfigUpdate(&oldCfg, newCfg, map[string]bool{"stats": true}); err != nil {
-			s.logger.Error("ApplyConfigUpdate failed", "error", err)
-		}
-	}
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/huanfeng/wind_input/pkg/config"
+	"github.com/huanfeng/wind_input/pkg/rpcapi"
 )
 
 // SaveConfigResult 保存配置的结果（RequiresRestart=true 表示 advanced 变更需重启生效）
@@ -28,16 +29,12 @@ func (a *App) GetConfig() (*config.Config, error) {
 	return &cfg, nil
 }
 
-// SaveConfig 保存配置，返回是否需要重启
-func (a *App) SaveConfig(cfg *config.Config) (*SaveConfigResult, error) {
+// SetConfigItems 按 key 增量保存配置项，返回是否需要重启
+func (a *App) SetConfigItems(items []rpcapi.ConfigSetItem) (*SaveConfigResult, error) {
 	if a.rpcClient == nil {
 		return nil, fmt.Errorf("RPC client not initialized")
 	}
-	data, err := json.Marshal(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal config: %w", err)
-	}
-	reply, err := a.rpcClient.ConfigSetAll(data)
+	reply, err := a.rpcClient.ConfigSet(items)
 	if err != nil {
 		return nil, err
 	}

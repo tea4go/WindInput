@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import * as wailsApi from "../api/wails";
-import type { StatsSummary, DailyStatItem, StatsConfig } from "../api/wails";
+import type { StatsSummary, DailyStatItem } from "../api/wails";
+import type { Config } from "../api/settings";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -16,6 +17,7 @@ import { useConfirm } from "../composables/useConfirm";
 
 const props = defineProps<{
   isWailsEnv: boolean;
+  formData: Config;
 }>();
 
 const { toast } = provideToast();
@@ -24,11 +26,6 @@ const { confirm } = useConfirm();
 const loading = ref(true);
 const summary = ref<StatsSummary | null>(null);
 const heatmapData = ref<DailyStatItem[]>([]);
-const statsConfig = ref<StatsConfig>({
-  enabled: true,
-  retain_days: 0,
-  track_english: true,
-});
 const clearBeforeDays = ref("");
 const tooltip = ref({
   visible: false,
@@ -304,16 +301,8 @@ const clearBeforeOptions = [
 async function loadData() {
   loading.value = true;
   try {
-    const [s, cfg] = await Promise.all([
-      wailsApi.getStatsSummary(),
-      wailsApi.getStatsConfig(),
-    ]);
+    const s = await wailsApi.getStatsSummary();
     summary.value = s;
-    statsConfig.value = {
-      enabled: cfg.enabled ?? true,
-      retain_days: 0,
-      track_english: cfg.track_english ?? true,
-    };
 
     // 加载近6个月的热力图数据
     const today = new Date();
@@ -342,31 +331,6 @@ async function refreshStats() {
   } catch (e) {
     console.error("刷新统计数据失败", e);
   }
-}
-
-async function saveConfig() {
-  try {
-    const cfg = {
-      enabled: !!statsConfig.value.enabled,
-      retain_days: 0,
-      track_english: !!statsConfig.value.track_english,
-    };
-    statsConfig.value = cfg;
-    await wailsApi.saveStatsConfig(cfg);
-    toast("统计设置已保存");
-  } catch (e: any) {
-    toast(e.message || "保存失败", "error");
-  }
-}
-
-async function handleStatsEnabledChange(checked: boolean) {
-  statsConfig.value.enabled = checked;
-  await saveConfig();
-}
-
-async function handleTrackEnglishChange(checked: boolean) {
-  statsConfig.value.track_english = checked;
-  await saveConfig();
 }
 
 async function handleClearOldStats() {
@@ -666,8 +630,8 @@ onUnmounted(() => {
           </div>
           <div class="setting-control">
             <Switch
-              :checked="statsConfig.enabled"
-              @update:checked="handleStatsEnabledChange"
+              :checked="props.formData.stats.enabled"
+              @update:checked="(v: boolean) => (props.formData.stats.enabled = v)"
             />
           </div>
         </div>
@@ -677,8 +641,8 @@ onUnmounted(() => {
           </div>
           <div class="setting-control">
             <Switch
-              :checked="statsConfig.track_english"
-              @update:checked="handleTrackEnglishChange"
+              :checked="props.formData.stats.track_english"
+              @update:checked="(v: boolean) => (props.formData.stats.track_english = v)"
             />
           </div>
         </div>

@@ -29,7 +29,7 @@
 | 分组 | 函数 |
 |------|------|
 | Schema 方案管理 | `getAvailableSchemas`、`getSchemaConfig`、`saveSchemaConfig`、`switchActiveSchema`、`getEnabledSchemasWithDictStats` |
-| 配置管理 | `getConfig`、`saveConfig`、`reloadConfig`、`getTSFLogConfig`、`saveTSFLogConfig` |
+| 配置管理 | `getConfig`、`setConfigItems`（按 key 增量保存，替代原整份 `saveConfig`）、`reloadConfig`、`getTSFLogConfig`、`saveTSFLogConfig`（stats 配置已并入全局 `setConfigItems`，不再有独立的 stats RPC） |
 | 短语管理 | `getPhraseList`、`addPhrase(code, text, position, weight)`、`updatePhrase`、`removePhrase(code, text)`、`removePhrases`、`setPhraseEnabled(code, text, enabled)`、`resetPhrasesToDefault`、`validatePhraseValue`、`importPhrases`、`exportPhrases`、`pickExePath`、`pickAnyPath` (2026-05-16 schema 简化: 系统/用户短语合并为单一 `PhraseItem`, 删除原 `name`/`texts`/`type` 字段, `text` 自描述分类) |
 | 用户词库（当前方案） | `getUserDict`、`addUserWord`、`removeUserWord`、`searchUserDict`、`getUserDictStats`、`reloadUserDict`、`getUserDictSchemaID`、`switchUserDictSchema`、`importUserDict`、`exportUserDict` |
 | 用户词库（按方案） | `getUserDictBySchema`、`addUserWordForSchema`、`removeUserWordForSchema`、`searchUserDictBySchema`、`importUserDictForSchema`、`exportUserDictForSchema` |

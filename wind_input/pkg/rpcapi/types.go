@@ -650,20 +650,6 @@ type StatsSummaryReply struct {
 	MaxSpeed        int     `json:"max_speed"`     // 历史最快速度（字/分钟）
 }
 
-// StatsConfigReply 统计配置响应
-type StatsConfigReply struct {
-	Enabled      bool `json:"enabled"`
-	RetainDays   int  `json:"retain_days"`
-	TrackEnglish bool `json:"track_english"`
-}
-
-// StatsConfigUpdateArgs 更新统计配置请求
-type StatsConfigUpdateArgs struct {
-	Enabled      bool `json:"enabled"`
-	RetainDays   int  `json:"retain_days"`
-	TrackEnglish bool `json:"track_english"`
-}
-
 // StatsPruneArgs 清理指定天数之前的统计数据
 type StatsPruneArgs struct {
 	Days int `json:"days"`

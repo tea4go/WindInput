@@ -11,7 +11,7 @@
 |------|------|
 | `main.go` | 程序入口：解析 `--page` 参数，初始化 Wails App，注册 Go 绑定 |
 | `app.go` | `App` 结构体定义及生命周期（startup/shutdown），初始化各编辑器和文件监控 |
-| `app_config.go` | 配置读写 API：`GetConfig`、`SaveConfig`、`ReloadConfig`、`CheckConfigModified` |
+| `app_config.go` | 配置读写 API：`GetConfig`、`SetConfigItems`（按 key 增量保存）、`ReloadConfig`、`CheckConfigModified` |
 | `app_dict.go` | 词库管理 API：短语（Phrase）、用户词库（UserDict）、Shadow 规则（pin+delete 架构），含导入/导出 |
 | `app_schema.go` | 输入方案管理 API：`GetAvailableSchemas`、`GetSchemaConfig` 等方案相关操作 |
 | `app_service.go` | 服务控制 API：`CheckServiceRunning`、`NotifyReload`、主题管理、文件变化检测 |

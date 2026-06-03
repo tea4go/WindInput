@@ -12,16 +12,6 @@ func (a *App) GetDailyStats(from, to string) (*rpcapi.StatsGetDailyReply, error)
 	return a.rpcClient.StatsGetDaily(from, to)
 }
 
-// GetStatsConfig 获取统计配置
-func (a *App) GetStatsConfig() (*rpcapi.StatsConfigReply, error) {
-	return a.rpcClient.StatsGetConfig()
-}
-
-// SaveStatsConfig 保存统计配置
-func (a *App) SaveStatsConfig(cfg rpcapi.StatsConfigUpdateArgs) error {
-	return a.rpcClient.StatsUpdateConfig(cfg)
-}
-
 // ClearStats 清空统计数据
 func (a *App) ClearStats() error {
 	return a.rpcClient.StatsClear()

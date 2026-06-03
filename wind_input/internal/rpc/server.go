@@ -243,8 +243,6 @@ func (s *Server) Start() error {
 	statsSvc := &StatsService{store: s.store, logger: s.logger, statCollector: s.statCollector, server: s, broadcaster: s.broadcaster}
 	RegisterMethod(s.router, "Stats.GetSummary", statsSvc.GetSummary)
 	RegisterMethod(s.router, "Stats.GetDaily", statsSvc.GetDaily)
-	RegisterMethod(s.router, "Stats.GetConfig", statsSvc.GetConfig)
-	RegisterMethod(s.router, "Stats.UpdateConfig", statsSvc.UpdateConfig)
 	RegisterMethod(s.router, "Stats.Clear", statsSvc.Clear)
 	RegisterMethod(s.router, "Stats.Prune", statsSvc.Prune)
 
