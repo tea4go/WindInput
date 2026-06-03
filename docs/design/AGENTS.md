@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-20 | Updated: 2026-04-20 -->
+<!-- Generated: 2026-04-20 | Updated: 2026-06-03 -->
 
 # design/ - 活跃设计与技术方案文档
 
@@ -25,6 +25,7 @@
 | `macos-imkit-plan.md` | **PR-A 实战手册**: macOS IMKit `.app` 工程目录结构 / Swift 类骨架 / Info.plist 模板 / 6 个开发里程碑 / 验证步骤 / 风险清单 |
 | `enum-constraint.md` | 枚举与魔法字符串约束 SSOT (跨模块共享) |
 | `theme-view-architecture.md` | 主题渲染架构演进：从固定化渲染到统一 View 盒模型（margin/padding/background/border/layers/states + Text 排版），具名 View + 可换 token palette + 整数 z 层级 + 通用 Image/资源表；含 P0-P4 分阶段与迁移 |
+| `settings-incremental-save.md` | 设置端全局保存重构：快照 diff + 按 key 最小化提交（`Config.Set`）。根治「全局保存整份覆盖、formData 不含 stats 导致 null 冲掉 track_english」的 bug；独立段（stats/dict）天然隔离 |
 
 ## 文件分类
 
