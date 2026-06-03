@@ -246,16 +246,29 @@ prepare_data() {
     done
     cd - >/dev/null
 
-    # 主题
+    # 主题 (对齐 build_all.ps1 ~608): 普通主题目录复制 theme.yaml + 同目录资源 (背景图等);
+    # 下划线前缀目录 (_layouts / _palettes) 是 v2.5 共享零件, 整目录递归复制。均排除 *.md。
+    # 注意: v2.5 主题 (theme.yaml 里 layout:/palette: 引用零件名) 缺了 _layouts/_palettes 会
+    # 加载失败 (日志 "主题非 v2.5 格式无法解析"), 候选窗渲染异常。
     if [[ -d "$REPO_DIR/wind_input/themes" ]]; then
-        info "复制主题..."
+        info "复制主题 (含 v2.5 共享零件 _layouts/_palettes)..."
         mkdir -p "$data/themes"
         for theme_dir in "$REPO_DIR/wind_input/themes"/*/; do
-            [[ -f "$theme_dir/theme.yaml" ]] || continue
             local name
             name=$(basename "$theme_dir")
+            if [[ "$name" == _* ]]; then
+                # v2.5 共享零件: 整目录递归复制 (保留相对路径, 排除 *.md)
+                mkdir -p "$data/themes/$name"
+                ( cd "$theme_dir" && find . -type f ! -name '*.md' -print0 | while IFS= read -r -d '' rel; do
+                    mkdir -p "$data/themes/$name/$(dirname "$rel")"
+                    cp -f "$rel" "$data/themes/$name/$rel"
+                done )
+                continue
+            fi
+            # 普通主题: theme.yaml 必须存在, 复制 theme.yaml + 同目录资源 (非递归, 排除 *.md)
+            [[ -f "$theme_dir/theme.yaml" ]] || continue
             mkdir -p "$data/themes/$name"
-            cp -f "$theme_dir/theme.yaml" "$data/themes/$name/"
+            find "$theme_dir" -maxdepth 1 -type f ! -name '*.md' -exec cp -f {} "$data/themes/$name/" \;
         done
     fi
 }
