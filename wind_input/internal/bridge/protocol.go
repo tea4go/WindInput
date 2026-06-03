@@ -114,7 +114,10 @@ type MessageHandler interface {
 	HandleCaretPending()
 	HandleFocusLost()
 	HandleCompositionTerminated()
-	HandleFocusGained(processID uint32) *StatusUpdateData
+	// HandleFocusGained: inputScopeMask 是焦点控件的 TSF InputScope bitmask
+	// （bit N = 枚举值 N 存在，如 IS_PASSWORD=31）。Go 据此决策密码框强制英文等。
+	// darwin 等暂未实现 InputScope 探测的平台传 0。
+	HandleFocusGained(processID uint32, inputScopeMask uint64) *StatusUpdateData
 	HandleIMEDeactivated()
 	HandleIMEActivated(processID uint32) *StatusUpdateData
 	// HandleToggleMode toggles the input mode. Returns the resulting full status

@@ -375,7 +375,7 @@ func (s *Server) handleClient(conn net.Conn, clientID int) uint32 {
 
 		// Activation 两段式第二段：handler 调用 + push, 不受 isAsync 影响。
 		if isActivation {
-			s.runActivationHandlerAndPush(header, clientID, processID)
+			s.runActivationHandlerAndPush(header, payload, clientID, processID)
 		}
 	}
 

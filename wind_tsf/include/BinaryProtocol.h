@@ -305,13 +305,17 @@ struct IMEActivatedPayload
 };
 static_assert(sizeof(IMEActivatedPayload) == 8, "IMEActivatedPayload must be 8 bytes");
 
-// CMD_FOCUS_GAINED extended payload (28 bytes = CaretPayload + clientToken)
+// CMD_FOCUS_GAINED extended payload (36 bytes = CaretPayload + clientToken + inputScopeMask)
 struct FocusGainedPayload
 {
-    CaretPayload caret;       // 20 bytes: caret position
-    uint64_t     clientToken; // 8 bytes: per-instance token
+    CaretPayload caret;          // 20 bytes: caret position
+    uint64_t     clientToken;    // 8 bytes: per-instance token
+    // 焦点控件的 TSF InputScope 集合，按位图编码：bit N 置位表示 InputScope 枚举值 N 存在
+    // （如 IS_PASSWORD=31 → bit 31）。枚举值 < 0 或 >= 64 的项被忽略。Go 端据此决策
+    // 密码框强制英文等行为（见 coordinator 的 inputScope 常量）。0 表示未知/默认（IS_DEFAULT）。
+    uint64_t     inputScopeMask; // 8 bytes: InputScope bitmask
 };
-static_assert(sizeof(FocusGainedPayload) == 28, "FocusGainedPayload must be 28 bytes");
+static_assert(sizeof(FocusGainedPayload) == 36, "FocusGainedPayload must be 36 bytes");
 
 // Input stats payload (from C++ to Go, async)
 // Counts of characters typed in English mode (not intercepted by Go)

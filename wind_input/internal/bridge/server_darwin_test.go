@@ -63,7 +63,7 @@ func (h *fakeHandler) HandleFocusLost() {
 	h.mu.Unlock()
 }
 func (h *fakeHandler) HandleCompositionTerminated() {}
-func (h *fakeHandler) HandleFocusGained(processID uint32) *StatusUpdateData {
+func (h *fakeHandler) HandleFocusGained(processID uint32, inputScopeMask uint64) *StatusUpdateData {
 	h.mu.Lock()
 	h.focusGained = processID
 	h.mu.Unlock()

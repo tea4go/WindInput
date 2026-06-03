@@ -94,9 +94,9 @@ func (d *DeferredHandler) HandleCompositionTerminated() {
 	}
 }
 
-func (d *DeferredHandler) HandleFocusGained(processID uint32) *StatusUpdateData {
+func (d *DeferredHandler) HandleFocusGained(processID uint32, inputScopeMask uint64) *StatusUpdateData {
 	if h := d.getHandler(); h != nil {
-		return h.HandleFocusGained(processID)
+		return h.HandleFocusGained(processID, inputScopeMask)
 	}
 	d.logger.Debug("Service initializing, returning loading status for FocusGained", "processID", processID)
 	return d.loadingStatus()

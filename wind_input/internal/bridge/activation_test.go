@@ -41,7 +41,7 @@ func (f *fakeMessageHandler) HandleCaretUpdate(CaretData) error           { retu
 func (f *fakeMessageHandler) HandleCaretPending()                         {}
 func (f *fakeMessageHandler) HandleFocusLost()                            {}
 func (f *fakeMessageHandler) HandleCompositionTerminated()                {}
-func (f *fakeMessageHandler) HandleFocusGained(processID uint32) *StatusUpdateData {
+func (f *fakeMessageHandler) HandleFocusGained(processID uint32, inputScopeMask uint64) *StatusUpdateData {
 	f.focusGainedCalls.Add(1)
 	f.lastFocusGainedID.Store(processID)
 	return f.focusGainedReturn
@@ -187,7 +187,7 @@ func TestRunActivationHandlerAndPush_IMEActivatedEncodesAndPushes(t *testing.T) 
 	pc, _ := installFakePushClient(s, pid, token)
 
 	header := &ipc.IpcHeader{Command: ipc.CmdIMEActivated}
-	s.runActivationHandlerAndPush(header, 1, pid)
+	s.runActivationHandlerAndPush(header, nil, 1, pid)
 
 	if got := h.imeActivatedCalls.Load(); got != 1 {
 		t.Fatalf("HandleIMEActivated 应被调用 1 次, got=%d", got)
@@ -238,7 +238,7 @@ func TestRunActivationHandlerAndPush_FocusGainedEncodesAndPushes(t *testing.T) {
 	pc, _ := installFakePushClient(s, pid, 0)
 
 	header := &ipc.IpcHeader{Command: ipc.CmdFocusGained}
-	s.runActivationHandlerAndPush(header, 1, pid)
+	s.runActivationHandlerAndPush(header, nil, 1, pid)
 
 	if got := h.focusGainedCalls.Load(); got != 1 {
 		t.Fatalf("HandleFocusGained 应被调用 1 次, got=%d", got)
@@ -267,7 +267,7 @@ func TestRunActivationHandlerAndPush_NilStatusDoesNotPush(t *testing.T) {
 	pc, _ := installFakePushClient(s, pid, 0)
 
 	header := &ipc.IpcHeader{Command: ipc.CmdIMEActivated}
-	s.runActivationHandlerAndPush(header, 1, pid)
+	s.runActivationHandlerAndPush(header, nil, 1, pid)
 
 	// handler 应当被调过 (验证不是因为路径完全没走), 但 outbound 应为空。
 	if got := h.imeActivatedCalls.Load(); got != 1 {

@@ -116,7 +116,7 @@ func TestHandleFocusGained_MuReleasedBeforePush(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		c.HandleFocusGained(0)
+		c.HandleFocusGained(0, 0)
 	}()
 
 	// 等待 push 开始（此时按修复后的逻辑，c.mu 应已解锁）

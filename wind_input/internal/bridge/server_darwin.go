@@ -340,7 +340,8 @@ func (s *Server) dispatchFrame(conn net.Conn, id connID, header *ipc.IpcHeader, 
 		if len(payload) >= 4 {
 			pid = binary.LittleEndian.Uint32(payload[0:4])
 		}
-		_ = s.handler.HandleFocusGained(pid)
+		// inputScopeMask 传 0：macOS 端尚未实现 InputScope/密码框探测（后续在 forwarder 补充）。
+		_ = s.handler.HandleFocusGained(pid, 0)
 		s.focusMu.Lock()
 		s.focusedClients[id] = true
 		s.focusMu.Unlock()

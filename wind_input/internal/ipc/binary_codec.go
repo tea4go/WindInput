@@ -153,6 +153,21 @@ func (c *BinaryCodec) DecodeCaretPayload(buf []byte) (*CaretPayload, error) {
 	return payload, nil
 }
 
+// DecodeFocusGainedInputScope 从 FocusGainedPayload 中解码 InputScope bitmask。
+// 布局（见 BinaryProtocol.h::FocusGainedPayload，36 字节）：
+//
+//	[0:20]  CaretPayload
+//	[20:28] clientToken (uint64)
+//	[28:36] inputScopeMask (uint64) —— bit N 表示 InputScope 枚举值 N 存在
+//
+// 旧版 C++（28 字节，无 mask）或截断载荷返回 0，向后兼容（视为 IS_DEFAULT/未知）。
+func (c *BinaryCodec) DecodeFocusGainedInputScope(buf []byte) uint64 {
+	if len(buf) < 36 {
+		return 0
+	}
+	return binary.LittleEndian.Uint64(buf[28:36])
+}
+
 // ============================================================================
 // Downstream payload encoding (Go -> C++)
 // ============================================================================

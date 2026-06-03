@@ -303,8 +303,18 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 	// Preserve original key for English mode (uppercase letters should stay uppercase)
 	key := data.Key
 
+	// 敏感字段（密码/隐私）抑制：把 chineseMode/fullWidth 视为关闭，让输入走英文半角直通，
+	// 但**不改变** c.chineseMode（图标仍显示当前模式，与主流输入法一致）。
+	// 非敏感字段时局部值与字段一致，行为不变。下方输入分支统一用这两个局部变量判定。
+	chineseMode := c.chineseMode
+	fullWidth := c.fullWidth
+	if c.sensitiveFieldActive {
+		chineseMode = false
+		fullWidth = false
+	}
+
 	// English mode: pass through or full-width convert
-	if !c.chineseMode {
+	if !chineseMode {
 		// IME 英文模式自动配对 (仅 darwin 生效; Windows 英文配对由 C++ TSF 层处理,
 		// englishModeAutoPairInGo=false 时 handleEnglishModeAutoPair 直接返回 nil)。
 		// 仅 !fullWidth、单字符标点才尝试; 非配对字符返回 nil → 维持下方透传。
@@ -313,7 +323,7 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		// 注意: 英文分支在通用 Shift 符号解析 (下方 ~L400 `shiftedKeyMap`) 之前就返回,
 		// 故这里必须自行应用 shiftedKeyMap —— 否则 Shift+9 拿到的是 "9" 而非 "(",
 		// 括号/花括号/尖括号等 Shift 类配对永远命中不了 (macOS keyCodeToKeyName 不含 Shift)。
-		if !c.fullWidth {
+		if !fullWidth {
 			pairCh := key
 			if hasShift && len(pairCh) == 1 {
 				if shifted, ok := shiftedKeyMap[pairCh[0]]; ok {
@@ -326,7 +336,7 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 				}
 			}
 		}
-		if c.fullWidth {
+		if fullWidth {
 			// 全角模式下，拦截可打印字符并转为全角输出
 			// 空格键特殊处理（data.Key 为 "space" 而非 " "）
 			if uint32(data.KeyCode) == ipc.VK_SPACE {

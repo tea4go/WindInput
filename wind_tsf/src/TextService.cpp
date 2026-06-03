@@ -8,6 +8,130 @@
 #include "HostWindow.h"
 #include <vector>
 #include <ShellScalingApi.h>
+#include <InputScope.h> // ITfInputScope / InputScope 枚举
+
+// GUID_PROP_INPUTSCOPE 在 SDK 头中仅为 EXTERN_C 声明，其字节定义需某个 TU 启用 INITGUID
+// 才会生成；直接引用会产生 LNK2019。这里本地定义该 GUID 值（与 inputscope.h 一致），
+// 避免引入 <initguid.h> 把本文件所有 GUID 实体化而与已链接定义冲突。
+static const GUID kGuidPropInputScope =
+    { 0x1713dd5a, 0x68e7, 0x4a5b, { 0x9a, 0xf6, 0x59, 0x2a, 0x59, 0x5c, 0x77, 0x8d } };
+
+// InputScope bit 常量（与 Go 端、inputscope.h 一致）
+static const UINT64 kScopeBitPassword = 1ULL << 31; // IS_PASSWORD
+
+// TSF 标准 compartment GUID（本地定义，避免链接 TSF GUID 静态库产生 LNK2019）。
+// 宿主（含 Chromium 系浏览器密码框）会在 context 上置 KEYBOARD_DISABLED 表示"禁用输入法"；
+// 这是比 InputScope 更可靠的密码框信号（小狼毫/Weasel 即用此判定），且无痕普通框不会置位。
+static const GUID kGuidCompartmentKeyboardDisabled =
+    { 0x71a5b253, 0x1951, 0x466b, { 0x9f, 0xbc, 0x9c, 0x88, 0x08, 0xfa, 0x84, 0xf2 } };
+
+// EditSession for reading the focused context's TSF InputScope set.
+// 用于识别密码框等语义控件：GetInputScopes 返回的枚举值按位编码为 bitmask
+// （bit N 表示枚举值 N 存在，如 IS_PASSWORD=31 → bit 31），交由 Go 端决策。
+// 需要读锁：InputScope 属性值通过 ITfReadOnlyProperty::GetValue 读取，必须在
+// 编辑会话的 read cookie 下进行。同步读锁在 OnSetFocus 期间通常可获得（与
+// CCaretEditSession 一致）；获取失败时返回 0（视为默认/未知，行为同既有逻辑）。
+class CQueryInputScopeEditSession : public ITfEditSession
+{
+public:
+    CQueryInputScopeEditSession(ITfContext* pContext, UINT64* pMaskOut)
+        : _refCount(1), _pContext(pContext), _pMaskOut(pMaskOut)
+    {
+        if (_pContext)
+            _pContext->AddRef();
+        if (_pMaskOut)
+            *_pMaskOut = 0;
+    }
+
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppvObj) override
+    {
+        if (ppvObj == nullptr)
+            return E_INVALIDARG;
+        *ppvObj = nullptr;
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_ITfEditSession))
+            *ppvObj = static_cast<ITfEditSession*>(this);
+        if (*ppvObj)
+        {
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&_refCount); }
+    STDMETHODIMP_(ULONG) Release() override
+    {
+        LONG cr = InterlockedDecrement(&_refCount);
+        if (cr == 0)
+            delete this;
+        return cr;
+    }
+
+    STDMETHODIMP DoEditSession(TfEditCookie ec) override
+    {
+        if (_pContext == nullptr || _pMaskOut == nullptr)
+            return E_FAIL;
+
+        ITfReadOnlyProperty* pProp = nullptr;
+        if (FAILED(_pContext->GetAppProperty(kGuidPropInputScope, &pProp)) || pProp == nullptr)
+            return S_OK;
+
+        // 在两处 range 读取并合并 InputScope：
+        //  - selection（光标/选区所在内容 range）：宿主常把 IS_PASSWORD 等设在内容 range 上
+        //  - 文档起点空 range：兜底，反映文档级提示（如 IS_PRIVATE）
+        // 某些宿主（Chromium 系浏览器）两者不一致，故都读，避免漏掉 IS_PASSWORD。
+        ITfRange* ranges[2] = { nullptr, nullptr };
+        TF_SELECTION sel = {};
+        ULONG fetched = 0;
+        if (SUCCEEDED(_pContext->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &sel, &fetched)) && fetched > 0)
+            ranges[0] = sel.range; // 持有引用
+        ITfRange* pStart = nullptr;
+        if (SUCCEEDED(_pContext->GetStart(ec, &pStart)))
+            ranges[1] = pStart;
+
+        for (int r = 0; r < 2; ++r)
+        {
+            if (ranges[r] == nullptr)
+                continue;
+            VARIANT var;
+            VariantInit(&var);
+            if (SUCCEEDED(pProp->GetValue(ec, ranges[r], &var)) && var.vt == VT_UNKNOWN && var.punkVal != nullptr)
+            {
+                ITfInputScope* pInputScope = nullptr;
+                if (SUCCEEDED(var.punkVal->QueryInterface(IID_ITfInputScope, reinterpret_cast<void**>(&pInputScope))) && pInputScope != nullptr)
+                {
+                    InputScope* pScopes = nullptr;
+                    UINT count = 0;
+                    if (SUCCEEDED(pInputScope->GetInputScopes(&pScopes, &count)) && pScopes != nullptr)
+                    {
+                        for (UINT i = 0; i < count; ++i)
+                        {
+                            int v = static_cast<int>(pScopes[i]);
+                            if (v >= 0 && v < 64)
+                                *_pMaskOut |= (1ULL << v);
+                        }
+                        CoTaskMemFree(pScopes);
+                    }
+                    pInputScope->Release();
+                }
+            }
+            VariantClear(&var);
+        }
+
+        for (int r = 0; r < 2; ++r)
+            if (ranges[r] != nullptr)
+                ranges[r]->Release();
+        pProp->Release();
+        return S_OK;
+    }
+
+private:
+    ~CQueryInputScopeEditSession() { SafeRelease(_pContext); }
+
+    LONG _refCount;
+    ITfContext* _pContext;
+    UINT64* _pMaskOut;
+};
 
 // EditSession for ending composition
 // NOTE: This class takes ownership of the composition pointer passed to it.
@@ -1752,6 +1876,17 @@ STDAPI CTextService::OnSetFocus(ITfDocumentMgr* pDocMgrFocus, ITfDocumentMgr* pD
         _hasTextInputContext = _DocMgrHasEditableContext(pDocMgrFocus, &docMgrDynFlags);
         WIND_LOG_DEBUG_FMT(L"OnSetFocus: hasTextCtx=%d focusSession=%llu", _hasTextInputContext, _focusSessionId);
 
+        // 读取焦点控件的 InputScope（密码框/邮箱/URL 等语义），随 focus_gained 上报给 Go 决策。
+        // 仅对真正有可编辑上下文的文档查询，避免对无文本控件的 DocMgr 多跑一次同步读锁。
+        UINT64 inputScopeMask = _hasTextInputContext ? _QueryInputScopeMask(pDocMgrFocus) : 0;
+
+        // 密码框信号（Weasel/小狼毫做法）：宿主在 context 上置 GUID_COMPARTMENT_KEYBOARD_DISABLED
+        // 表示"此控件禁用输入法"。Chromium 系浏览器密码框会置位，而无痕模式普通可编辑框不会，
+        // 因此能精确区分密码框与隐私字段。置位则补 IS_PASSWORD 位让 Go 抑制中文。
+        // InputScope 原始位（IS_PRIVATE/IS_SEARCH 等）仍随 mask 上报，留作 Go 端将来扩展判断。
+        if (_hasTextInputContext && _IsFocusKeyboardDisabled(pDocMgrFocus))
+            inputScopeMask |= kScopeBitPassword;
+
         // Get caret position for toolbar placement (separate concern from _hasTextInputContext)
         LONG caretX = 0, caretY = 0, caretHeight = 0;
         if (!GetCaretPosition(&caretX, &caretY, &caretHeight) && _hasLastKnownCaretPos)
@@ -1807,7 +1942,7 @@ STDAPI CTextService::OnSetFocus(ITfDocumentMgr* pDocMgrFocus, ITfDocumentMgr* pD
         // Lazy connect: 服务在 TSF 加载之后才启动也能覆盖（SendFocusGained 内部已处理）。
         else if (_pIPCClient != nullptr)
         {
-            if (_pIPCClient->SendFocusGained(caretX, caretY, caretHeight))
+            if (_pIPCClient->SendFocusGained(caretX, caretY, caretHeight, inputScopeMask))
             {
                 WIND_LOG_DEBUG_FMT(L"FocusGained sent (async) focusSession=%llu", _focusSessionId);
                 _needsFocusRecovery = FALSE;
@@ -3053,6 +3188,73 @@ BOOL CTextService::RefreshTextInputContext()
         }
     }
     return _hasTextInputContext;
+}
+
+// 读取焦点文档的 TSF InputScope 集合，编码为 bitmask（bit N = 枚举值 N 存在）。
+// 失败/无 InputScope 时返回 0（视为 IS_DEFAULT/未知）。详见 CQueryInputScopeEditSession。
+UINT64 CTextService::_QueryInputScopeMask(ITfDocumentMgr* pDocMgr)
+{
+    if (pDocMgr == nullptr)
+        return 0;
+
+    ITfContext* pCtx = nullptr;
+    if (FAILED(pDocMgr->GetTop(&pCtx)) || pCtx == nullptr)
+        return 0;
+
+    UINT64 mask = 0;
+    CQueryInputScopeEditSession* pES = new CQueryInputScopeEditSession(pCtx, &mask);
+    if (pES != nullptr)
+    {
+        HRESULT hrSession = S_OK;
+        HRESULT hr = pCtx->RequestEditSession(_tfClientId, pES, TF_ES_SYNC | TF_ES_READ, &hrSession);
+        if (FAILED(hr) || FAILED(hrSession))
+        {
+            WIND_LOG_DEBUG_FMT(L"_QueryInputScopeMask: RequestEditSession hr=0x%08X hrSession=0x%08X", hr, hrSession);
+        }
+        pES->Release();
+    }
+
+    pCtx->Release();
+    WIND_LOG_DEBUG_FMT(L"_QueryInputScopeMask: mask=0x%016llX", (unsigned long long)mask);
+    return mask;
+}
+
+// 读取焦点 context 上某个 bool 型 compartment（VT_I4），并打诊断日志。未设置时返回 false。
+static bool ReadContextCompartmentBool(ITfContext* pContext, REFGUID guid, const wchar_t* name)
+{
+    bool value = false;
+    ITfCompartmentMgr* pCompMgr = nullptr;
+    if (SUCCEEDED(pContext->QueryInterface(IID_ITfCompartmentMgr, reinterpret_cast<void**>(&pCompMgr))) && pCompMgr != nullptr)
+    {
+        ITfCompartment* pComp = nullptr;
+        if (SUCCEEDED(pCompMgr->GetCompartment(guid, &pComp)) && pComp != nullptr)
+        {
+            VARIANT var;
+            VariantInit(&var);
+            if (SUCCEEDED(pComp->GetValue(&var)) && var.vt == VT_I4)
+                value = (var.lVal != 0);
+            VariantClear(&var);
+            pComp->Release();
+        }
+        pCompMgr->Release();
+    }
+    WIND_LOG_DEBUG_FMT(L"compartment %s = %d", name, value ? 1 : 0);
+    return value;
+}
+
+// 判断焦点 context 是否被宿主标记为"禁用输入法"（GUID_COMPARTMENT_KEYBOARD_DISABLED）。
+// 这是 Weasel/小狼毫采用的密码框判定信号：Chromium 系浏览器密码框会置位它，而无痕模式
+// 的普通可编辑框不会，因此能精确区分密码框与隐私字段，无需 UIA。
+bool CTextService::_IsFocusKeyboardDisabled(ITfDocumentMgr* pDocMgr)
+{
+    if (pDocMgr == nullptr)
+        return false;
+    ITfContext* pContext = nullptr;
+    if (FAILED(pDocMgr->GetTop(&pContext)) || pContext == nullptr)
+        return false;
+    bool disabled = ReadContextCompartmentBool(pContext, kGuidCompartmentKeyboardDisabled, L"KEYBOARD_DISABLED");
+    pContext->Release();
+    return disabled;
 }
 
 BOOL CTextService::_DocMgrHasEditableContext(ITfDocumentMgr* pDocMgr, DWORD* pDynFlagsOut)

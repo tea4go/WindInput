@@ -311,7 +311,7 @@ func (s *Server) applyFocusGainedCaret(payload []byte, clientID int) {
 //     单 goroutine 串行天然保证顺序，免去额外锁。
 //  2. C++ 端已经收到 Ack 后可继续派发新命令；它们会在 handleClient 下一轮 ReadHeader
 //     时排队读取，对 C++ 端体感无影响。
-func (s *Server) runActivationHandlerAndPush(header *ipc.IpcHeader, clientID int, processID uint32) {
+func (s *Server) runActivationHandlerAndPush(header *ipc.IpcHeader, payload []byte, clientID int, processID uint32) {
 	t0 := time.Now()
 	defer func() {
 		if r := recover(); r != nil {
@@ -334,7 +334,10 @@ func (s *Server) runActivationHandlerAndPush(header *ipc.IpcHeader, clientID int
 	case ipc.CmdIMEActivated:
 		status = s.handler.HandleIMEActivated(processID)
 	case ipc.CmdFocusGained:
-		status = s.handler.HandleFocusGained(processID)
+		// payload 即原 FocusGained 命令载荷（与 processRequest 同一 goroutine 串行，未被复用）。
+		// 末尾 8 字节是 InputScope bitmask，用于密码框强制英文等决策。
+		inputScopeMask := s.codec.DecodeFocusGainedInputScope(payload)
+		status = s.handler.HandleFocusGained(processID, inputScopeMask)
 	default:
 		s.logger.Error("runActivationHandlerAndPush: unexpected command", "command", fmt.Sprintf("0x%04X", header.Command))
 		return

@@ -298,6 +298,14 @@ private:
     // Optional pDynFlagsOut receives dwDynamicFlags from TF_STATUS (0 if unavailable).
     BOOL _DocMgrHasEditableContext(ITfDocumentMgr* pDocMgr, DWORD* pDynFlagsOut = nullptr);
 
+    // 读取焦点文档的 TSF InputScope 集合并编码为 bitmask（bit N = 枚举值 N 存在）。
+    // 失败或无 InputScope 时返回 0。随 focus_gained 上报给 Go 端做密码框等决策。
+    UINT64 _QueryInputScopeMask(ITfDocumentMgr* pDocMgr);
+
+    // 判断焦点 context 是否被宿主置 GUID_COMPARTMENT_KEYBOARD_DISABLED（禁用输入法）。
+    // Weasel/小狼毫用此判定密码框：Chromium 密码框置位、无痕普通框不置位，精确区分。
+    bool _IsFocusKeyboardDisabled(ITfDocumentMgr* pDocMgr);
+
     // ITfTextEditSink registration
     DWORD _dwTextEditSinkCookie;
     ITfContext* _pTextEditSinkContext;  // Context we registered the sink on

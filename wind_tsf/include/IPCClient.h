@@ -131,8 +131,8 @@ public:
     // Send focus lost notification
     BOOL SendFocusLost();
 
-    // Send focus gained notification (with optional caret position)
-    BOOL SendFocusGained(int caretX = 0, int caretY = 0, int caretHeight = 0);
+    // Send focus gained notification (with optional caret position and InputScope bitmask)
+    BOOL SendFocusGained(int caretX = 0, int caretY = 0, int caretHeight = 0, UINT64 inputScopeMask = 0);
 
     // Send composition unexpectedly terminated notification
     // (e.g., user clicked in input field to change cursor position)

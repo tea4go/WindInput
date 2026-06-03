@@ -2,6 +2,7 @@
 package coordinator
 
 import (
+	"fmt"
 	"runtime"
 	"runtime/debug"
 	"time"
@@ -319,6 +320,12 @@ func (c *Coordinator) updateHostRenderState() {
 // 当前 clientID，但同 PID 兄弟实例（另一 tab）仍在 focusedClients 中。此时跳过
 // IME 失活，工具栏与输入状态保留；待用户在兄弟实例上继续输入即可无缝衔接。
 func (c *Coordinator) HandleFocusLost() {
+	// 焦点彻底丢失（如点到按钮/桌面）：清除敏感字段抑制。聚焦到另一控件由
+	// HandleFocusGained 重新评估。
+	c.mu.Lock()
+	c.clearSensitiveFieldNoLock()
+	c.mu.Unlock()
+
 	if c.bridgeServer != nil {
 		c.muLockTraceWait("HandleFocusLost/peek")
 		pid := c.activeProcessID
@@ -393,6 +400,59 @@ func (c *Coordinator) HandleFocusLost() {
 	c.pendingReplay = false
 	c.caretValid = false // 焦点切换后坐标失效，下次新 composition 需重新等待真实坐标
 	c.clearState()
+}
+
+// TSF InputScope 枚举值（见 Windows SDK inputscope.h）。C++ 端把焦点控件的 InputScope
+// 集合编码为 bitmask（bit N = 枚举值 N 存在）随 focus_gained 上报，这里按位判定。
+const (
+	inputScopePassword        = 31 // IS_PASSWORD
+	inputScopeNumericPassword = 63 // IS_NUMERIC_PASSWORD
+)
+
+// inputScopeHas 判断 InputScope bitmask 是否包含指定枚举值。
+func inputScopeHas(mask uint64, scope uint) bool {
+	if scope >= 64 {
+		return false
+	}
+	return mask&(uint64(1)<<scope) != 0
+}
+
+// isSensitiveInputScope 判断焦点控件是否属于"应抑制中文（只输英文）"的敏感输入域。
+//
+// 只认 IS_PASSWORD / IS_NUMERIC_PASSWORD 位。注意 Chromium 系浏览器对 <input type=password>
+// 只下发 IS_PRIVATE 而非 IS_PASSWORD，且无痕模式下所有字段也都是 IS_PRIVATE（二者信号相同，
+// 无法用 InputScope 区分）。因此 C++ 端在读到 IS_PRIVATE 时用 UI Automation 的 IsPassword
+// 二次确认，**确为密码框才补置 IS_PASSWORD 位**再上报——所以这里不直接判 IS_PRIVATE，
+// 既能识别浏览器密码框，又不会误伤无痕/autocomplete=off 的普通中文输入框。
+// IS_SEARCH(50) 等同样不在此列——中文搜索须保持中文。
+func isSensitiveInputScope(mask uint64) bool {
+	return inputScopeHas(mask, inputScopePassword) ||
+		inputScopeHas(mask, inputScopeNumericPassword)
+}
+
+// applyPasswordFieldPolicyNoLock 依据焦点控件的 InputScope 设置敏感字段输入抑制。
+// 调用方必须持有 c.mu。进入敏感（密码/隐私，见 isSensitiveInputScope）控件时置位
+// sensitiveFieldActive，使输入侧按英文半角直通；**不改变** chineseMode（图标不变）。
+// 首次进入时清空可能残留的中文合成，避免被带进敏感字段。聚焦非敏感控件时清除标志。
+func (c *Coordinator) applyPasswordFieldPolicyNoLock(inputScopeMask uint64) {
+	// 诊断：记录收到的 InputScope bitmask（纯元数据，不含输入内容）
+	c.logger.Debug("Apply password field policy", "inputScopeMask", fmt.Sprintf("0x%016X", inputScopeMask))
+	sensitive := isSensitiveInputScope(inputScopeMask)
+	if sensitive && !c.sensitiveFieldActive {
+		// 首次进入敏感字段：清掉残留的拼音/五笔合成，确保不会把候选/编码带进去
+		c.clearState()
+		c.hideUI()
+		c.logger.Debug("Sensitive field focused, suppressing Chinese input (mode unchanged)")
+	} else if !sensitive && c.sensitiveFieldActive {
+		c.logger.Debug("Left sensitive field, restoring normal input")
+	}
+	c.sensitiveFieldActive = sensitive
+}
+
+// clearSensitiveFieldNoLock 清除敏感字段输入抑制（焦点彻底丢失时调用）。
+// 调用方必须持有 c.mu。幂等。
+func (c *Coordinator) clearSensitiveFieldNoLock() {
+	c.sensitiveFieldActive = false
 }
 
 // shouldDeferClearForReplay 判定是否处于"打字驱动焦点切换"竞态。
@@ -587,8 +647,11 @@ func (c *Coordinator) getCompiledHotkeys() (keyDownHotkeys, keyUpHotkeys []uint3
 	return c.cachedKeyDownHotkeys, c.cachedKeyUpHotkeys
 }
 
-// HandleFocusGained handles focus gained events and returns current status
-func (c *Coordinator) HandleFocusGained(processID uint32) *bridge.StatusUpdateData {
+// HandleFocusGained handles focus gained events and returns current status.
+// inputScopeMask 是焦点控件的 TSF InputScope bitmask（bit N = 枚举值 N 存在，
+// 见 BinaryProtocol.h / coordinator 的 inputScope* 常量）。据此实现密码框强制英文：
+// 进入 IS_PASSWORD 控件时切英文并记忆原模式，聚焦非密码控件时恢复。
+func (c *Coordinator) HandleFocusGained(processID uint32, inputScopeMask uint64) *bridge.StatusUpdateData {
 	// 保存变更前的 PID，用于后续检测同 PID 内部 DocMgr 切换（如 Explorer XamlIsland）。
 	prevActiveProcessID := c.activeProcessID
 	if processID != 0 {
@@ -618,6 +681,10 @@ func (c *Coordinator) HandleFocusGained(processID uint32) *bridge.StatusUpdateDa
 	// This ensures composition state is consistent
 	c.muLockTraceWait("HandleFocusGained")
 	c.lastOutputWasDigit = false
+
+	// 密码框自动英文：在清理输入/构建状态之前应用，使后续 hideUI/状态构建/工具栏同步
+	// 都基于已切换好的模式（强制英文时图标自然显示"英"）。
+	c.applyPasswordFieldPolicyNoLock(inputScopeMask)
 
 	// Excel/WPS 重放：满足"同 PID + 时间窗 + 仍有 buffer"时，保留状态并向新文档
 	// 推送 update_composition，让 IME 在新 ITfDocumentMgr 上重新建立 composition。

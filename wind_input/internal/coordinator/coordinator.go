@@ -195,6 +195,13 @@ type Coordinator struct {
 	chineseMode bool // true = Chinese, false = English
 	capsLockOn  bool // CapsLock state (authority source)
 
+	// 敏感字段（密码/隐私）输入抑制：焦点进入 IS_PASSWORD/IS_PRIVATE 等控件时，
+	// 按英文半角直通处理输入，但**不改变** chineseMode（图标仍显示当前模式，与主流
+	// 输入法一致）。离开该字段时清除标志即可，无需存/恢复模式。
+	// 详见 handle_lifecycle.go 中 applyPasswordFieldPolicyNoLock，输入侧消费点在
+	// handle_key_event.go（按 sensitiveFieldActive 把 chineseMode/fullWidth 视为关闭）。
+	sensitiveFieldActive bool
+
 	// Full-width and punctuation state
 	fullWidth          bool // true = full-width, false = half-width
 	chinesePunctuation bool // true = Chinese punctuation, false = English punctuation

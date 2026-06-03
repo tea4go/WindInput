@@ -36,7 +36,7 @@
 |------|-------------|
 | `endpoint_windows.go` | `BridgePipeName` / `PushPipeName` Named Pipe 路径常量 |
 | `server.go` | Named Pipe 服务端 (go-winio overlapped I/O; net.Conn 接口统一读写); Server struct 含 windows.Handle / push handle map / focus token 等 Win 特有字段; handleClient 对 `CmdIMEActivated`/`CmdFocusGained` 走「先 Ack 后处理」两段式 (processRequest 立即返回 Ack 释放 C++ 同步等待, 第二段同 goroutine 调 `runActivationHandlerAndPush` 经 push pipe 推状态) |
-| `server_handler.go` | 消息分发: 解码二进制消息并路由到 MessageHandler 各方法 (Win 端 Server method); `runActivationHandlerAndPush`/`applyFocusGainedCaret` 实现 activation 异步化第二段; `PushActivationStatusToActiveClient` 把完整状态以 `CmdActivationStatusPush` 推回 C++ |
+| `server_handler.go` | 消息分发: 解码二进制消息并路由到 MessageHandler 各方法 (Win 端 Server method); `runActivationHandlerAndPush`(收 payload, FocusGained 时解出 InputScope bitmask 传给 `HandleFocusGained`)/`applyFocusGainedCaret` 实现 activation 异步化第二段; `PushActivationStatusToActiveClient` 把完整状态以 `CmdActivationStatusPush` 推回 C++ |
 | `server_push.go` | Push 管道管理 (per-client outbound channel + 单 writer goroutine + phase-2 死链监听; 所有 push 仅触达 active client); `PushActivationStatusToActiveClient` 用于 activation 异步化的状态回包 (含 hotkeys + hostRenderAvail) |
 | `host_render.go` | `HostRenderManager`: 白名单进程的宿主渲染状态; 通过 `OpenProcess`/`QueryFullProcessImageNameW` 识别进程名称 |
 | `shared_memory.go` | `SharedMemory`: 命名共享内存 + 命名事件; `WriteFrame` RGBA→BGRA 转换写入; AppContainer 低完整性标记 (`S:(ML;;NW;;;LW)`) 支持 UWP |

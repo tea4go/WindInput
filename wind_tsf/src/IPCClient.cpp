@@ -696,7 +696,7 @@ BOOL CIPCClient::SendCompositionTerminated()
     return _SendBinaryMessage(CMD_COMPOSITION_TERMINATED, nullptr, 0, true /* async */);
 }
 
-BOOL CIPCClient::SendFocusGained(int caretX, int caretY, int caretHeight)
+BOOL CIPCClient::SendFocusGained(int caretX, int caretY, int caretHeight, UINT64 inputScopeMask)
 {
     if (!_ShouldAttemptOperation())
     {
@@ -708,13 +708,14 @@ BOOL CIPCClient::SendFocusGained(int caretX, int caretY, int caretHeight)
         return FALSE;
     }
 
-    _LogDebug(L"Sending focus_gained (async) with caret: x=%d, y=%d, h=%d, token=0x%016llX", caretX, caretY, caretHeight, (unsigned long long)_clientToken);
+    _LogDebug(L"Sending focus_gained (async) with caret: x=%d, y=%d, h=%d, inputScope=0x%016llX, token=0x%016llX", caretX, caretY, caretHeight, (unsigned long long)inputScopeMask, (unsigned long long)_clientToken);
 
     FocusGainedPayload payload = {};
     payload.caret.x = caretX;
     payload.caret.y = caretY;
     payload.caret.height = caretHeight;
     payload.clientToken = _clientToken;
+    payload.inputScopeMask = inputScopeMask;
 
     // 异步化（见 BinaryProtocol.h::CMD_ACTIVATION_STATUS_PUSH 注释）：
     // Go 端 server.go::handleClient 收到 FOCUS_GAINED 立即回 Ack，HandleFocusGained
