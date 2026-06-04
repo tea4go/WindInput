@@ -216,8 +216,8 @@ func (w *ToolbarWindow) Create() error {
 	style := uint32(WS_POPUP)
 
 	// Initial size - match toolbarBaseWidth/Height in toolbar_renderer.go
-	w.width = ScaleIntForDPI(116)
-	w.height = ScaleIntForDPI(30)
+	w.width = ScaleIntForDPI(toolbarBaseWidth)
+	w.height = ScaleIntForDPI(toolbarBaseHeight)
 
 	hwnd, _, err := procCreateWindowExW.Call(
 		uintptr(exStyle),
@@ -544,8 +544,8 @@ func (w *ToolbarWindow) Destroy() {
 func (w *ToolbarWindow) handleDPIChanged() {
 	// Recalculate toolbar size with new DPI
 	w.mu.Lock()
-	w.width = ScaleIntForDPI(116)
-	w.height = ScaleIntForDPI(30)
+	w.width = ScaleIntForDPI(toolbarBaseWidth)
+	w.height = ScaleIntForDPI(toolbarBaseHeight)
 	w.mu.Unlock()
 
 	// Re-render with the new DPI scale

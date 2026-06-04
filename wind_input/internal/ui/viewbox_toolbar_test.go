@@ -75,3 +75,63 @@ func TestBuildToolbarTree_Geometry(t *testing.T) {
 		t.Errorf("settings 框左缘应 90, got %d", tt2.settings.Rect().Min.X)
 	}
 }
+
+// TestToolbarGeometry_SingleSource 守护 L1：命中/边界/尺寸均从一次 buildToolbarTree+Layout 派生，
+// 且与旧线性公式逐项等价（scale=1：grip=10, button=26, pad=2, H=30）。
+func TestToolbarGeometry_SingleSource(t *testing.T) {
+	m := fixedMeasurer{charW: 10}
+	tt := buildToolbarTree(ToolbarState{ChineseMode: true}, theme.ResolvedToolbarViews{}, 1.0)
+	Layout(tt.root, 0, 0, m)
+
+	// content 矩形（GetButtonBounds 语义）= 旧 GetButtonBounds 公式
+	type rectWant struct {
+		name             string
+		v                *View
+		minX, minY, w, h int
+	}
+	for _, c := range []rectWant{
+		{"grip", tt.grip, 0, 0, 10, 30},
+		{"mode", tt.mode, 12, 2, 22, 26},
+		{"width", tt.width, 38, 2, 22, 26},
+		{"punct", tt.punct, 64, 2, 22, 26},
+		{"settings", tt.settings, 90, 2, 22, 26},
+	} {
+		r := c.v.Rect()
+		if r.Min.X != c.minX || r.Min.Y != c.minY || r.Dx() != c.w || r.Dy() != c.h {
+			t.Errorf("%s content=(%d,%d,%d,%d), 期望(%d,%d,%d,%d)",
+				c.name, r.Min.X, r.Min.Y, r.Dx(), r.Dy(), c.minX, c.minY, c.w, c.h)
+		}
+	}
+
+	// 命中带（HitTest 语义）= margin 盒：与旧 x-分段一致、满高 [0,30)、首尾相接平铺
+	type bandWant struct {
+		name       string
+		v          *View
+		minX, maxX int
+	}
+	prevMax := 0
+	for _, b := range []bandWant{
+		{"grip", tt.grip, 0, 10},
+		{"mode", tt.mode, 10, 36},
+		{"width", tt.width, 36, 62},
+		{"punct", tt.punct, 62, 88},
+		{"settings", tt.settings, 88, 114},
+	} {
+		hb := viewOuterRect(b.v)
+		if hb.Min.X != b.minX || hb.Max.X != b.maxX {
+			t.Errorf("%s 命中带 x=[%d,%d), 期望[%d,%d)", b.name, hb.Min.X, hb.Max.X, b.minX, b.maxX)
+		}
+		if hb.Min.Y != 0 || hb.Max.Y != 30 {
+			t.Errorf("%s 命中带应满高[0,30), got[%d,%d)", b.name, hb.Min.Y, hb.Max.Y)
+		}
+		if hb.Min.X != prevMax {
+			t.Errorf("%s 命中带应与前带相接：期望 Min.X=%d, got %d", b.name, prevMax, hb.Min.X)
+		}
+		prevMax = hb.Max.X
+	}
+
+	// 整条尺寸（GetToolbarSize 语义）
+	if sz := tt.root.Rect().Size(); sz.X != 116 || sz.Y != 30 {
+		t.Errorf("整条尺寸应 116x30, got %dx%d", sz.X, sz.Y)
+	}
+}

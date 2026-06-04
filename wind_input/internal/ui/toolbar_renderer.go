@@ -164,73 +164,77 @@ func (r *ToolbarRenderer) paintGear(dc *gg.Context, rect image.Rectangle, scale 
 	dc.Fill()
 }
 
-// HitTest determines which part of the toolbar was clicked
-func (r *ToolbarRenderer) HitTest(x, y, width, height int) ToolbarHitResult {
+// toolbarHit 是一个按钮的命中带（kind + margin 盒；LayoutRow 使各 margin 盒首尾相接，平铺整条满高）。
+type toolbarHit struct {
+	kind ToolbarHitResult
+	rect image.Rectangle
+}
+
+// toolbarGeometry 是工具栏几何的单一真相源：一次 buildToolbarTree+Layout 的派生结果。
+type toolbarGeometry struct {
+	size   image.Point                          // 整条尺寸（GetToolbarSize）
+	bounds map[ToolbarHitResult]image.Rectangle // 各按钮 content 矩形（GetButtonBounds）
+	hits   []toolbarHit                         // 各按钮 margin 盒，按 x 顺序（HitTest）
+}
+
+// viewOuterRect 返回 View 的 margin 盒（content 矩形外扩自身 Margin）。
+func viewOuterRect(v *View) image.Rectangle {
+	r := v.Rect()
+	return image.Rect(
+		r.Min.X-v.Margin.Left, r.Min.Y-v.Margin.Top,
+		r.Max.X+v.Margin.Right, r.Max.Y+v.Margin.Bottom,
+	)
+}
+
+// computeGeometry 用零 state/零色构建工具栏 View 树并 Layout，派生几何——命中/边界/尺寸的唯一来源。
+// 几何与 state/颜色无关（按钮 FixedW 固定、mode 文字不影响布局），故按需计算、无需缓存。
+func (r *ToolbarRenderer) computeGeometry() toolbarGeometry {
 	scale := GetDPIScale()
-
-	// Check grip area
-	gripW := int(gripWidth * scale)
-	if x < gripW {
-		return HitGrip
+	tt := buildToolbarTree(ToolbarState{}, theme.ResolvedToolbarViews{}, scale)
+	Layout(tt.root, 0, 0, r.TextDrawer())
+	return toolbarGeometry{
+		size: tt.root.Rect().Size(),
+		bounds: map[ToolbarHitResult]image.Rectangle{
+			HitGrip:           tt.grip.Rect(),
+			HitModeButton:     tt.mode.Rect(),
+			HitWidthButton:    tt.width.Rect(),
+			HitPunctButton:    tt.punct.Rect(),
+			HitSettingsButton: tt.settings.Rect(),
+		},
+		hits: []toolbarHit{
+			{HitGrip, viewOuterRect(tt.grip)},
+			{HitModeButton, viewOuterRect(tt.mode)},
+			{HitWidthButton, viewOuterRect(tt.width)},
+			{HitPunctButton, viewOuterRect(tt.punct)},
+			{HitSettingsButton, viewOuterRect(tt.settings)},
+		},
 	}
+}
 
-	// Check buttons
-	buttonW := int(buttonWidth * scale)
-	buttonX := gripW
-
-	// Mode button
-	if x >= buttonX && x < buttonX+buttonW {
-		return HitModeButton
+// HitTest determines which part of the toolbar was clicked（查 Layout 派生的命中带，无独立公式）。
+func (r *ToolbarRenderer) HitTest(x, y, width, height int) ToolbarHitResult {
+	pt := image.Pt(x, y)
+	for _, h := range r.computeGeometry().hits {
+		if pt.In(h.rect) {
+			return h.kind
+		}
 	}
-	buttonX += buttonW
-
-	// Width button
-	if x >= buttonX && x < buttonX+buttonW {
-		return HitWidthButton
-	}
-	buttonX += buttonW
-
-	// Punctuation button
-	if x >= buttonX && x < buttonX+buttonW {
-		return HitPunctButton
-	}
-	buttonX += buttonW
-
-	// Settings button
-	if x >= buttonX && x < buttonX+buttonW {
-		return HitSettingsButton
-	}
-
 	return HitNone
 }
 
-// GetButtonBounds returns the bounds of a specific button
+// GetButtonBounds returns the bounds of a specific button（查 Layout 派生的 content 矩形）。
 func (r *ToolbarRenderer) GetButtonBounds(button ToolbarHitResult) (x, y, w, h int) {
-	scale := GetDPIScale()
-	height := int(toolbarBaseHeight * scale)
-	gripW := int(gripWidth * scale)
-	buttonW := int(buttonWidth * scale)
-	padding := int(buttonPadding * scale)
-
-	switch button {
-	case HitGrip:
-		return 0, 0, gripW, height
-	case HitModeButton:
-		return gripW + padding, padding, buttonW - padding*2, height - padding*2
-	case HitWidthButton:
-		return gripW + buttonW + padding, padding, buttonW - padding*2, height - padding*2
-	case HitPunctButton:
-		return gripW + buttonW*2 + padding, padding, buttonW - padding*2, height - padding*2
-	case HitSettingsButton:
-		return gripW + buttonW*3 + padding, padding, buttonW - padding*2, height - padding*2
+	rect, ok := r.computeGeometry().bounds[button]
+	if !ok {
+		return 0, 0, 0, 0
 	}
-	return 0, 0, 0, 0
+	return rect.Min.X, rect.Min.Y, rect.Dx(), rect.Dy()
 }
 
-// GetToolbarSize returns the toolbar size
+// GetToolbarSize returns the toolbar size（Layout 后 root 尺寸）。
 func (r *ToolbarRenderer) GetToolbarSize() (width, height int) {
-	scale := GetDPIScale()
-	return int(toolbarBaseWidth * scale), int(toolbarBaseHeight * scale)
+	sz := r.computeGeometry().size
+	return sz.X, sz.Y
 }
 
 // CreateModeIndicatorColor returns the color for mode indicator
