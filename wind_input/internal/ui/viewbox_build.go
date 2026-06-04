@@ -163,48 +163,85 @@ func stateBg(st *theme.RVNode) color.Color {
 	return nil
 }
 
-// elementTextState 取元素在当前选中/悬停下的有效文字色与字重（P7-D）：
-// 元素自身 selected/hover patch 提供则覆盖，否则用基态（默认与普通态一致）。
-func elementTextState(n theme.RVNode, selected, hover bool) (color.Color, int) {
-	c, w := n.TextColor, n.FontWeight
-	if st := itemStateFor(n, selected, hover); st != nil {
-		if st.TextColor != nil {
-			c = st.TextColor
-		}
-		if st.FontWeight != 0 {
-			w = st.FontWeight
-		}
-	}
-	return c, w
-}
-
-// elementFill 取元素在当前选中/悬停下的有效背景填充（P7-D）：state 的底色/位图覆盖基态。
-func (r *Renderer) elementFill(n theme.RVNode, selected, hover bool) Fill {
-	bg, img := n.BgColor, n.BgImage
-	if st := itemStateFor(n, selected, hover); st != nil {
-		if st.BgColor != nil {
-			bg = st.BgColor
-		}
-		if st.BgImage != nil {
-			img = st.BgImage
-		}
-	}
-	return r.fillFor(bg, img)
-}
-
-// applyItemState 把状态 patch 应用到候选项 View：背景（高亮位图优先于底色）+ 边框覆盖（P7-D）。
-// 文字色/字重在行内构建文本 cell 时单独应用（整行统一），不在此处理。
-func (r *Renderer) applyItemState(item *View, st *theme.RVNode, scale float64) {
+// effectiveNode 是候选元素状态的**统一**扁平器（架构统一核心）：把基态 RVNode ⊕ 当前激活
+// 状态（selected 优先 hover）合并为一个有效节点，供 index/text/comment/item 同一套消费
+// （背景/边框/文字色/字重/字体族）。状态非零字段覆盖基态；未配状态=基态（零回归）。
+// 字号不随状态变（决策：避免选中/悬停改变行高的几何连锁）。
+func effectiveNode(n theme.RVNode, selected, hover bool) theme.RVNode {
+	st := itemStateFor(n, selected, hover)
 	if st == nil {
-		return
+		return n
 	}
-	item.Background = r.fillFor(st.BgColor, st.BgImage) // 高亮位图（Fill.Image）优先于底色
+	out := n
+	if st.BgColor != nil {
+		out.BgColor = st.BgColor
+	}
+	if st.BgImage != nil {
+		out.BgImage = st.BgImage
+	}
 	if st.BorderColor != nil {
-		item.Border.Color = st.BorderColor
+		out.BorderColor = st.BorderColor
 	}
-	// V3-D：BorderWidth 由 *Dimension 改 Dimension，零值=未设（沿用基态边框宽）。
 	if st.BorderWidth != (theme.Dimension{}) {
-		item.Border.Width = st.BorderWidth.Scaled(scale)
+		out.BorderWidth = st.BorderWidth
+	}
+	if st.BorderRadius != (theme.Dimension{}) {
+		out.BorderRadius = st.BorderRadius
+	}
+	if st.TextColor != nil {
+		out.TextColor = st.TextColor
+	}
+	if st.FontWeight != 0 {
+		out.FontWeight = st.FontWeight
+	}
+	if st.FontFamily != "" {
+		out.FontFamily = st.FontFamily
+	}
+	return out
+}
+
+// applyNodeBox 把有效节点的背景 + 边框应用到 View——**仅配置了才设**，未配=不动（纯文本/无框，零回归）。
+// index/text/comment/item 统一经此上盒模型；padding 由各自构建处控制（item 行内边距含 rail 逻辑，不在此覆盖）。
+func (r *Renderer) applyNodeBox(v *View, eff theme.RVNode, scale float64) {
+	if eff.BgColor != nil || eff.BgImage != nil {
+		v.Background = r.fillFor(eff.BgColor, eff.BgImage) // 高亮位图优先于底色
+	}
+	if eff.BorderColor != nil || eff.BorderWidth != (theme.Dimension{}) || eff.BorderRadius != (theme.Dimension{}) {
+		v.Border = Border{Color: eff.BorderColor, Width: eff.BorderWidth.Scaled(scale), Radius: eff.BorderRadius.Scaled(scale)}
+	}
+}
+
+// styleLeaf 用有效节点构建带样式的文本叶子（字号/字重/字体族/色 + 背景/边框/padding 统一来自 eff）。
+// 候选文字、注释、文本序号走它；序号圆圈因形状特殊单独构建但样式同源（effectiveNode）。
+func (r *Renderer) styleLeaf(eff theme.RVNode, text string, scale float64, align Align, margin Edges) *View {
+	v := &View{
+		Text:      text,
+		TextStyle: TextStyle{FontSize: eff.FontSize, Weight: eff.FontWeight, Family: eff.FontFamily, Color: eff.TextColor, Align: align},
+		Margin:    margin,
+	}
+	r.applyNodeBox(v, eff, scale)
+	return v
+}
+
+// buildIndexCircle 构建圆圈序号 View（样式统一来自有效节点 eff）：直径 d 的圆（圆角默认 d/2，
+// eff.BorderRadius 非零则覆盖），背景/边框来自 eff，居中序号文字用 eff 字体/色。两 builder 共用。
+func (r *Renderer) buildIndexCircle(eff theme.RVNode, label string, d int, scale float64) *View {
+	radius := d / 2
+	if eff.BorderRadius != (theme.Dimension{}) {
+		radius = eff.BorderRadius.Scaled(scale)
+	}
+	return &View{
+		FixedW:     d,
+		FixedH:     d,
+		Background: r.fillFor(eff.BgColor, eff.BgImage),
+		Border:     Border{Radius: radius, Color: eff.BorderColor, Width: eff.BorderWidth.Scaled(scale)},
+		Layout:     LayoutStack,
+		Children: []*View{{
+			FixedW:    d,
+			FixedH:    d,
+			Text:      label,
+			TextStyle: TextStyle{FontSize: eff.FontSize, Weight: eff.FontWeight, Family: eff.FontFamily, Color: eff.TextColor, Align: AlignCenter},
+		}},
 	}
 }
 
@@ -287,72 +324,43 @@ func (r *Renderer) buildHorizontalCandidateTree(
 	for i, cand := range candidates {
 		children := make([]*View, 0, 3)
 
-		// P7-D：选中/悬停态只重着色/加粗**候选文字**；序号、注释各用自身配色（独立，避免误伤蓝圆白数字序号）。
-		st := itemStateFor(rv.Item, i == selectedIndex, i == hoverIndex)
-		textColor, textWeight := rv.Text.TextColor, rv.Text.FontWeight
-		if st != nil {
-			if st.TextColor != nil {
-				textColor = st.TextColor
-			}
-			if st.FontWeight != 0 {
-				textWeight = st.FontWeight
-			}
-		}
-
-		// 序号/注释各自的选中态（独立于候选文字；未配置=与普通态一致）
+		// 架构统一（默认/选中/悬停 × 背景/边框/字体/颜色）：每个元素经 effectiveNode 取
+		// 「基态 ⊕ 当前激活状态」的有效外观，再统一经 styleLeaf/applyNodeBox 上盒模型。
 		sel, hov := i == selectedIndex, i == hoverIndex
-		idxColor, idxWeight := elementTextState(rv.Index, sel, hov)
-		cmtColor, cmtWeight := elementTextState(rv.Comment, sel, hov)
+		effIdx := effectiveNode(rv.Index, sel, hov)
+		effText := effectiveNode(rv.Text, sel, hov)
+		effCmt := effectiveNode(rv.Comment, sel, hov)
+		effItem := effectiveNode(rv.Item, sel, hov)
 
 		if cand.Index >= 0 {
 			label := indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel)
 			if isTextIndex {
-				children = append(children, &View{
-					Text:      label,
-					TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: idxWeight, Family: rv.Index.FontFamily, Color: idxColor},
-				})
+				// 文本序号：accent 底色是圆圈模式专属，文本模式无背景（保留 color/font/border）。
+				effIdxText := effIdx
+				effIdxText.BgColor, effIdxText.BgImage = nil, nil
+				children = append(children, r.styleLeaf(effIdxText, label, scale, AlignStart, Edges{}))
 			} else {
-				d := int(indexSize + 0.5)
-				children = append(children, &View{
-					FixedW:     d,
-					FixedH:     d,
-					Background: r.elementFill(rv.Index, sel, hov), // P7-C/D：序号背景可带图、可随选中态变
-					Border:     Border{Radius: d / 2},
-					Layout:     LayoutStack,
-					Children: []*View{{
-						FixedW:    d,
-						FixedH:    d,
-						Text:      label,
-						TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: idxWeight, Family: rv.Index.FontFamily, Color: idxColor, Align: AlignCenter},
-					}},
-				})
+				children = append(children, r.buildIndexCircle(effIdx, label, int(indexSize+0.5), scale))
 			}
 		}
 
-		// 候选文字
-		textChild := &View{
-			Text:      candidateDisplayText(cand, cfg.CmdbarPrefix),
-			TextStyle: TextStyle{FontSize: rv.Text.FontSize, Weight: textWeight, Family: rv.Text.FontFamily, Color: textColor},
-		}
+		// 候选文字（颜色/字重来自 text 自身状态：选中默认 selection_text，与旧 item.selected 等价）。
+		textMargin := Edges{}
 		if len(children) > 0 {
-			textChild.Margin = Edges{Left: indexMarginRight}
+			textMargin = Edges{Left: indexMarginRight}
 		}
-		children = append(children, textChild)
+		children = append(children, r.styleLeaf(effText, candidateDisplayText(cand, cfg.CmdbarPrefix), scale, AlignStart, textMargin))
 
 		// 注释
 		if cand.Comment != "" {
-			children = append(children, &View{
-				Text:      cand.Comment,
-				TextStyle: TextStyle{FontSize: commentSize, Weight: cmtWeight, Family: rv.Comment.FontFamily, Color: cmtColor},
-				Margin:    Edges{Left: commentMarginLeft},
-			})
+			children = append(children, r.styleLeaf(effCmt, cand.Comment, scale, AlignStart, Edges{Left: commentMarginLeft}))
 		}
 
 		// 强调条占位元素：rail 存在时占据原左内边距宽度（内容位置不变），并承载强调条；
 		// 无强调条主题沿用左内边距。
 		itemChildren := children
 		itemPadLeft := bgPadL
-		if rail := r.buildAccentRail(bgPadL, i == selectedIndex, rowH, scale); rail != nil {
+		if rail := r.buildAccentRail(bgPadL, sel, rowH, scale); rail != nil {
 			itemPadLeft = 0
 			itemChildren = append([]*View{rail}, children...)
 		}
@@ -364,10 +372,9 @@ func (r *Renderer) buildHorizontalCandidateTree(
 			// 非对称时上下不再被均摊（修复"改上等于上下同时变"）。
 			Padding:  Edges{Top: scD(rv.Item.PadTop), Right: bgPadR, Bottom: scD(rv.Item.PadBottom), Left: itemPadLeft},
 			FixedH:   rowH,
-			Border:   Border{Radius: rv.Item.BorderRadius.Scaled(scale)},
 			Children: itemChildren,
 		}
-		r.applyItemState(item, st, scale)             // P7-D：选中/悬停态背景（高亮位图/底色）+ 边框
+		r.applyNodeBox(item, effItem, scale)          // 统一：item 行背景 + 边框（含选中/悬停态）
 		r.appendThemeLayers(item, rv.Item.Layers, sc) // P7-C：候选项装饰层（per-item 覆盖图）
 		items = append(items, item)
 	}

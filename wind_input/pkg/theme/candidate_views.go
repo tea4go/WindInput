@@ -123,8 +123,11 @@ func ResolveCandidateViews(views Views, pal ResolvedPalette) ResolvedViews {
 	rv.Item.Selected = resolveState(views.Item.Selected, tk("selection"), tk("selection_text"), resolve)
 	rv.Item.Hover = resolveState(views.Item.Hover, tk("hover"), nil, resolve)
 	rv.Item.Disabled = resolveState(views.Item.Disabled, nil, nil, resolve)
-	// P7-D：序号/注释也各自支持选中/悬停态（View 模型对称）。无 palette 默认 → 未配置即返回 nil，
-	// 渲染沿用各元素基态（默认与普通态一致）；主题可用 views.index.selected / views.comment.selected 独立配。
+	// 架构统一：候选文字/序号/注释各自支持选中/悬停态（View 模型对称，渲染统一经 effectiveNode 消费）。
+	// 候选文字选中态默认文字色 = selection_text（与旧 item.selected 着色候选文字等价，零回归；消除
+	// item→text 颜色耦合）；悬停态无默认。序号/注释无 palette 默认 → 未配即 nil、沿用基态。
+	rv.Text.Selected = resolveState(views.Text.Selected, nil, tk("selection_text"), resolve)
+	rv.Text.Hover = resolveState(views.Text.Hover, nil, nil, resolve)
 	rv.Index.Selected = resolveState(views.Index.Selected, nil, nil, resolve)
 	rv.Index.Hover = resolveState(views.Index.Hover, nil, nil, resolve)
 	rv.Comment.Selected = resolveState(views.Comment.Selected, nil, nil, resolve)

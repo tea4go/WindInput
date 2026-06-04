@@ -194,29 +194,22 @@ func (r *Renderer) buildVerticalCandidateTree(
 	for i, cand := range candidates {
 		children := make([]*View, 0, 3)
 
-		// P7-D：候选文字用 item 选中态着色/加粗；序号、注释各自独立支持选中态（与横排一致）。
+		// 架构统一：与横排同一套 effectiveNode + styleLeaf + buildIndexCircle。
 		sel, hov := i == selectedIndex, i == hoverIndex
-		st := itemStateFor(rv.Item, sel, hov)
-		textColor, textWeight := rv.Text.TextColor, rv.Text.FontWeight
-		if st != nil {
-			if st.TextColor != nil {
-				textColor = st.TextColor
-			}
-			if st.FontWeight != 0 {
-				textWeight = st.FontWeight
-			}
-		}
-		idxColor, idxWeight := elementTextState(rv.Index, sel, hov)
-		cmtColor, cmtWeight := elementTextState(rv.Comment, sel, hov)
+		effIdx := effectiveNode(rv.Index, sel, hov)
+		effText := effectiveNode(rv.Text, sel, hov)
+		effCmt := effectiveNode(rv.Comment, sel, hov)
+		effItem := effectiveNode(rv.Item, sel, hov)
 
 		if cand.Index >= 0 {
 			label := indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel)
 			if isTextIndex {
-				children = append(children, &View{
-					FixedW:    indexAreaW,
-					Text:      label,
-					TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: idxWeight, Family: rv.Index.FontFamily, Color: idxColor},
-				})
+				// 文本序号：accent 底色是圆圈模式专属，文本模式无背景（保留 color/font/border）。
+				effIdxText := effIdx
+				effIdxText.BgColor, effIdxText.BgImage = nil, nil
+				idx := r.styleLeaf(effIdxText, label, scale, AlignStart, Edges{})
+				idx.FixedW = indexAreaW
+				children = append(children, idx)
 			} else {
 				d := int(indexD + 0.5)
 				leftM := sc(3 * scale)
@@ -224,20 +217,9 @@ func (r *Renderer) buildVerticalCandidateTree(
 				if rightM < 0 {
 					rightM = 0
 				}
-				children = append(children, &View{
-					FixedW:     d,
-					FixedH:     d,
-					Margin:     Edges{Left: leftM, Right: rightM},
-					Background: r.elementFill(rv.Index, sel, hov), // P7-C/D：序号背景可带图、可随选中态变
-					Border:     Border{Radius: d / 2},
-					Layout:     LayoutStack,
-					Children: []*View{{
-						FixedW:    d,
-						FixedH:    d,
-						Text:      label,
-						TextStyle: TextStyle{FontSize: rv.Index.FontSize, Weight: idxWeight, Family: rv.Index.FontFamily, Color: idxColor, Align: AlignCenter},
-					}},
-				})
+				circle := r.buildIndexCircle(effIdx, label, d, scale)
+				circle.Margin = Edges{Left: leftM, Right: rightM}
+				children = append(children, circle)
 			}
 		}
 
@@ -249,29 +231,21 @@ func (r *Renderer) buildVerticalCandidateTree(
 		if commentWidths[i] > 0 {
 			availText -= float64(commentMarginLeft) + commentWidths[i]
 		}
-		textChild := &View{
-			Text:      r.truncateToWidth(candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize, availText, rv.Text.FontFamily),
-			TextStyle: TextStyle{FontSize: rv.Text.FontSize, Weight: textWeight, Family: rv.Text.FontFamily, Color: textColor},
+		textMargin := Edges{Left: indexMarginRight}
+		if len(children) == 0 {
+			textMargin = Edges{Left: sc(8 * scale)} // 无序号时靠左
 		}
-		if len(children) > 0 {
-			textChild.Margin = Edges{Left: indexMarginRight}
-		} else {
-			textChild.Margin = Edges{Left: sc(8 * scale)} // 无序号时靠左
-		}
-		children = append(children, textChild)
+		textStr := r.truncateToWidth(candidateDisplayText(cand, cfg.CmdbarPrefix), rv.Text.FontSize, availText, rv.Text.FontFamily)
+		children = append(children, r.styleLeaf(effText, textStr, scale, AlignStart, textMargin))
 
 		if cand.Comment != "" {
-			children = append(children, &View{
-				Text:      cand.Comment,
-				TextStyle: TextStyle{FontSize: commentSize, Weight: cmtWeight, Family: rv.Comment.FontFamily, Color: cmtColor},
-				Margin:    Edges{Left: commentMarginLeft},
-			})
+			children = append(children, r.styleLeaf(effCmt, cand.Comment, scale, AlignStart, Edges{Left: commentMarginLeft}))
 		}
 
 		// 强调条占位元素：rail 在所有行占据左留白（保持列对齐），仅选中行绘制强调条；
 		// 内容（序号/文字）排在 rail 右侧。无强调条主题不加 rail（railFixedW=0，内容靠左）。
 		itemChildren := children
-		if rail := r.buildAccentRail(railW, i == selectedIndex, rowH, scale); rail != nil {
+		if rail := r.buildAccentRail(railW, sel, rowH, scale); rail != nil {
 			itemChildren = append([]*View{rail}, children...)
 		}
 		item := &View{
@@ -280,12 +254,10 @@ func (r *Renderer) buildVerticalCandidateTree(
 			Stretch:    true, // 每行全宽
 			FixedH:     rowH,
 			// 上下 padding 真实生效（与横排一致）：对称时逐像素同旧版，非对称不再均摊。
-			Padding: Edges{Top: scD(rv.Item.PadTop), Right: itemPadR, Bottom: scD(rv.Item.PadBottom)},
-			// 候选项圆角（与横排一致；原竖排漏设导致横竖排圆角不同）。
-			Border:   Border{Radius: rv.Item.BorderRadius.Scaled(scale)},
+			Padding:  Edges{Top: scD(rv.Item.PadTop), Right: itemPadR, Bottom: scD(rv.Item.PadBottom)},
 			Children: itemChildren,
 		}
-		r.applyItemState(item, st, scale)             // P7-D：选中/悬停态背景（高亮位图/底色）+ 边框
+		r.applyNodeBox(item, effItem, scale)          // 统一：item 行背景 + 边框（含选中/悬停态）
 		r.appendThemeLayers(item, rv.Item.Layers, sc) // P7-C：候选项装饰层
 		items = append(items, item)
 	}

@@ -41,6 +41,7 @@ bg=#FFFFFFFF surface=#F0F0F0FF border=#C8C8C8FF text=#1E1E1EFF textDim=#646464FF
   border: radius=0dp width=0dp color=nil
   bg=nil text=#1E1E1EFF
   font: size=0.0 weight=0 family=""
+  selected: bg=nil text=#1E1E1EFF border=nil bw=nil fw=0
 [comment]
   margin: 0dp 0dp 0dp 6dp
   padding: 0dp 0dp 0dp 0dp
