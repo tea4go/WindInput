@@ -21,6 +21,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import SchemaRenderer from "@/components/SchemaRenderer.vue";
+import ThemeImportModal from "@/components/ThemeImportModal.vue";
 import {
   themeExtraSchema,
   candidateWindowSchema,
@@ -44,7 +45,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   themeSelect: [themeName: string];
   themeStyleChange: [themeStyle: string];
+  themeImported: [themeName: string];
 }>();
+
+const themeImportOpen = ref(false);
+
+function onThemeImported(themeName: string) {
+  themeImportOpen.value = false;
+  emit("themeImported", themeName);
+}
 
 const themeSelectOpen = ref(false);
 const themeDropdownRef = ref<HTMLElement | null>(null);
@@ -197,7 +206,12 @@ onUnmounted(() => {
 
     <!-- 主题选择 -->
     <div class="settings-card" v-if="isWailsEnv">
-      <div class="card-title">主题</div>
+      <div class="card-title card-title-row">
+        <span>主题</span>
+        <Button variant="outline" size="sm" @click="themeImportOpen = true">
+          导入主题
+        </Button>
+      </div>
       <div class="setting-item align-start" data-search-anchor="ui.theme">
         <div class="setting-info">
           <label>主题选择</label>
@@ -652,6 +666,12 @@ onUnmounted(() => {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <ThemeImportModal
+      :open="themeImportOpen"
+      @update:open="themeImportOpen = $event"
+      @imported="onThemeImported"
+    />
   </section>
 </template>
 
@@ -848,5 +868,11 @@ onUnmounted(() => {
 }
 .setting-item-disabled .range-control input[type="range"] {
   cursor: not-allowed;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 </style>

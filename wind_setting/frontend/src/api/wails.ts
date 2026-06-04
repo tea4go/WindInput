@@ -1000,6 +1000,32 @@ export async function getAvailableThemes(): Promise<ThemeInfo[]> {
   return App.GetAvailableThemes();
 }
 
+export interface ImportThemeResult {
+  success: boolean;
+  cancelled: boolean;
+  theme_name: string;
+  conflict: boolean;
+  error_msg: string;
+}
+
+export async function importThemeFromFile(
+  force: boolean,
+): Promise<ImportThemeResult> {
+  return (window as any).go.main.App.ImportThemeFromFile(
+    force,
+  ) as ImportThemeResult;
+}
+
+export async function importThemeFromText(
+  yamlContent: string,
+  force: boolean,
+): Promise<ImportThemeResult> {
+  return (window as any).go.main.App.ImportThemeFromText(
+    yamlContent,
+    force,
+  ) as ImportThemeResult;
+}
+
 export async function getThemePreview(
   themeName: string,
   themeStyle: string = "system",

@@ -644,6 +644,12 @@ async function onThemeSelect(themeName: string) {
   await loadThemePreview(themeName);
 }
 
+async function onThemeImported(themeName: string) {
+  await loadThemes();
+  formData.value.ui.theme = themeName;
+  await loadThemePreview(themeName);
+}
+
 async function onThemeStyleChange(_themeStyle: string) {
   // Reload preview to show the correct light/dark variant
   if (formData.value.ui.theme) {
@@ -871,6 +877,7 @@ onUnmounted(() => {
           :systemFonts="systemFonts"
           @themeSelect="onThemeSelect"
           @themeStyleChange="onThemeStyleChange"
+          @themeImported="onThemeImported"
         />
 
         <DictionaryPage
