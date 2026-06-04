@@ -13,8 +13,8 @@ import (
 // 从候选窗 Renderer 的 imageForRef/fillFor/appendThemeLayers 抽出（原 P7-C 实现）。
 //
 // resources 表（ref→path/dataURI）不由 imageResolver 持有，而是各调用方按帧传入
-// （来自各自 ResolvedV25.Resources）——因为 resources 的权威来源是各窗口的 resolvedV25
-// （候选窗测试亦直接写 resolvedV25 而不经 SetTheme）；imageResolver 只持解码缓存，
+// （来自各自 ResolvedV3.Resources）——因为 resources 的权威来源是各窗口的 resolvedV3
+// （候选窗测试亦直接写 resolvedV3 而不经 SetTheme）；imageResolver 只持解码缓存，
 // 换主题时由调用方 SetTheme 触发 reset() 清缓存（ref 解码结果按主题失效）。
 //
 // 自带 mutex 使其并发安全：候选窗单线程使用（无竞争，锁近乎零成本），其它窗口的

@@ -42,7 +42,7 @@ type Theme struct {
 }
 
 // HasV3Schema 返回 true 表示该 Theme 提供了 v3 颜色块（colors）。
-// 无 colors 块的主题（如 emptyTheme 兜底）解析为 nil resolvedV25。
+// 无 colors 块的主题（如 emptyTheme 兜底）解析为 nil resolvedV3。
 func (t *Theme) HasV3Schema() bool {
 	return t.Colors != nil
 }

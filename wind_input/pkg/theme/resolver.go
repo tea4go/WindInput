@@ -8,13 +8,13 @@ import (
 	"strings"
 )
 
-// ResolveV25 把（已 base 合并的）v3 Theme 解析为 ResolvedV25。
+// ResolveV3 把（已 base 合并的）v3 Theme 解析为 ResolvedV3。
 // 调用方应先用 HasV3Schema() 判定。themeFileDir 用于解析背景图相对路径（self theme.yaml 所在目录）。
 //
 // v3-C：t.Colors 已是 base 链合并后的内联块（loadThemeFileWithDir 做 deepMergeTheme），
 // 此处只负责**求值**（derive / token 递归求值 / 变体选取），不再做外链加载或 overrides。
 // V3-D：layout/density 几何机制已删，其它窗口几何由 views 节点或 internal/ui 内置常量承载。
-func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*ResolvedV25, error) {
+func (m *Manager) ResolveV3(t *Theme, isDark bool, themeFileDir string) (*ResolvedV3, error) {
 	// 1. colors 块（已是合并后的内联 schema）。
 	palette := t.Colors
 	if palette == nil {
@@ -27,11 +27,11 @@ func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*Resol
 		return nil, fmt.Errorf("palette 派生失败: %w", err)
 	}
 
-	rv := &ResolvedV25{
+	rv := &ResolvedV3{
 		Meta:    t.Meta,
 		Palette: fullPalette,
 	}
-	// 5. views（v2.6 P6 阶段2c）：defaultViews 基线 ⊕ 主题 views（mergeViews 逐字段覆盖），
+	// 5. views（P6 阶段2c）：defaultViews 基线 ⊕ 主题 views（mergeViews 逐字段覆盖），
 	// rv.Views 始终非 nil。候选窗渲染器直接消费此结果（ResolveCandidateViews），合成桥退役中。
 	// 独立窗口（Status/Tooltip/Toolbar/Menu）按各自字段指针判空，基线不含这些字段，故无 views
 	// 块的主题仍回退到 palette 默认（零回归）。
@@ -45,7 +45,7 @@ func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*Resol
 	} else {
 		rv.Views = &base
 	}
-	// 6. behavior（v2.6 P6）：defaultBehavior 基线 ⊕ 主题 behavior（非 nil 字段覆盖）。
+	// 6. behavior（P6）：defaultBehavior 基线 ⊕ 主题 behavior（非 nil 字段覆盖）。
 	// 用户 override 不在此处——它在 ui/config 层注入（nil=跟随主题）。
 	rv.Behavior = mergeBehavior(defaultBehavior(), t.Behavior)
 
@@ -55,7 +55,7 @@ func (m *Manager) ResolveV25(t *Theme, isDark bool, themeFileDir string) (*Resol
 		return nil, fmt.Errorf("主题 %q 加载期校验失败: %w", t.Meta.Name, err)
 	}
 
-	// 7. resources（v2.6 P7-C，D5）：名→绝对路径/data URI；相对路径相对 theme.yaml 目录解析。
+	// 7. resources（P7-C，D5）：名→绝对路径/data URI；相对路径相对 theme.yaml 目录解析。
 	// 渲染器据此把 ViewImage.ref 解码为位图（一次性缓存）。
 	if len(t.Resources) > 0 {
 		res := make(map[string]string, len(t.Resources))

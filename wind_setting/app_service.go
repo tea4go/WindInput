@@ -252,7 +252,7 @@ func (a *App) GetAvailableThemes() ([]ThemeInfo, error) {
 // GetThemePreview 获取主题预览数据（颜色配置）
 // themeStyle 参数：传入 "system"/"light"/"dark" 以选择对应变体预览
 //
-// v2.5 主题经 ResolvedV25 统一消费；layout/palette 派生与背景图（如有）
+// v3 主题经 ResolvedV3 统一消费；颜色派生与背景图（如有）
 // 均会在此正确解析。
 func (a *App) GetThemePreview(themeName string, themeStyle string) (map[string]interface{}, error) {
 	// 用轻量 Manager 避免 NewManager 的 default 主题双重 resolve
@@ -278,12 +278,12 @@ func (a *App) GetThemePreview(themeName string, themeStyle string) (map[string]i
 	}
 
 	t := themeManager.GetCurrentTheme()
-	rv := themeManager.GetResolvedV25()
+	rv := themeManager.GetResolvedV3()
 	if t == nil || rv == nil {
-		return nil, fmt.Errorf("theme not found or not v2.5")
+		return nil, fmt.Errorf("theme not found or not v3")
 	}
 
-	// 把 color.Color 转为 #RRGGBBAA 字符串供前端消费（P5：直接读 ResolvedV25.Palette/Layout）
+	// 把 color.Color 转为 #RRGGBBAA 字符串供前端消费（直接读 ResolvedV3.Palette token）
 	pal := rv.Palette
 	// hexTok 优先取 v3 colors token，缺失回退便捷语义色（default 多为转发、走 fallback；
 	// msime 等有特有色则命中 token，保证预览与渲染一致）。

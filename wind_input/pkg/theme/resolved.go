@@ -2,15 +2,15 @@ package theme
 
 import "image/color"
 
-// ResolvedV25 是 v2.5 schema 解析后的最终形态，所有引用已展开、所有缺省字段已派生填充。
+// ResolvedV3 是 v3 schema 解析后的最终形态，所有引用已展开、所有缺省字段已派生填充。
 // P5 起为渲染层唯一解析结果来源（adapter/ResolvedTheme/v2 已退役）。
-type ResolvedV25 struct {
+type ResolvedV3 struct {
 	Meta     ThemeMeta
 	Palette  ResolvedPalette
-	Views    *Views           // 盒模型 View 外观（v2.6 P2）；nil=主题未提供 views，渲染器用合成桥
-	Behavior ResolvedBehavior // 行为配置（v2.6 P6）：defaultBehavior ⊕ 主题 behavior（用户 override 在 ui/config 层）
+	Views    *Views           // 盒模型 View 外观（P2）；nil=主题未提供 views，渲染器用合成桥
+	Behavior ResolvedBehavior // 行为配置（P6）：defaultBehavior ⊕ 主题 behavior（用户 override 在 ui/config 层）
 
-	// Resources 图片资源注册表（v2.6 P7-C）：名→绝对路径 / data: URI（相对路径已按 theme 目录解析）。
+	// Resources 图片资源注册表（P7-C）：名→绝对路径 / data: URI（相对路径已按 theme 目录解析）。
 	// 渲染器据此把 ViewImage.ref 解码为位图（一次性缓存，非每帧）。
 	Resources map[string]string
 }

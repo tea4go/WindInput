@@ -4,16 +4,16 @@ import "testing"
 
 // TestFallbackToDefaultWhenNotV3 守护回归（2026-06-04）：用户选中旧 v2.5/v2.6 主题
 // （无 colors 块，如 D:\UserData 下的旧 jidian-classic）时，LoadTheme 应**自动整体回退内置
-// default**（不兼容旧主题，用户决策）——否则 resolvedV25=nil 会让候选窗拿到 0 尺寸几何，
+// default**（不兼容旧主题，用户决策）——否则 resolvedV3=nil 会让候选窗拿到 0 尺寸几何，
 // gg.NewPixmapFromBuffer panic「width and height must be > 0」，候选窗彻底消失。
 func TestFallbackToDefaultWhenNotV3(t *testing.T) {
 	m := &Manager{themeDirs: bitmapTestThemeDirs(t)}
 	if err := m.LoadTheme("legacy-v26"); err != nil {
 		t.Fatalf("LoadTheme(legacy-v26): %v", err)
 	}
-	rv := m.GetResolvedV25()
+	rv := m.GetResolvedV3()
 	if rv == nil {
-		t.Fatal("不合法主题应整体回退 default，resolvedV25 不应为 nil（候选窗会 0 尺寸 panic）")
+		t.Fatal("不合法主题应整体回退 default，resolvedV3 不应为 nil（候选窗会 0 尺寸 panic）")
 	}
 	if rv.Palette.Bg == nil {
 		t.Error("回退后 palette 应有效（Bg 非 nil）")

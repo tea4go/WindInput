@@ -136,7 +136,7 @@ func (f *darwinForwarder) refreshThemeIfNeeded() {
 	}
 	darkChanged := f.themeMgr.SetDarkMode(dark)
 	if nameChanged || darkChanged {
-		f.renderer.SetTheme(f.themeMgr.GetResolvedV25())
+		f.renderer.SetTheme(f.themeMgr.GetResolvedV3())
 		f.logger.Info("darwin forwarder 主题已应用", "theme", f.lastTheme, "dark", dark)
 	}
 }
@@ -306,7 +306,7 @@ func (f *darwinForwarder) tooltipColors() (bg, fg string) {
 	if f.themeMgr == nil {
 		return "", ""
 	}
-	rt := f.themeMgr.GetResolvedV25()
+	rt := f.themeMgr.GetResolvedV3()
 	if rt == nil {
 		return "", ""
 	}
@@ -364,7 +364,7 @@ func (f *darwinForwarder) statusColors() (bg, fg string) {
 	var bgC color.Color = color.RGBA{60, 60, 60, 240}
 	var fgC color.Color = color.RGBA{255, 255, 255, 255}
 	if f.themeMgr != nil {
-		if rt := f.themeMgr.GetResolvedV25(); rt != nil {
+		if rt := f.themeMgr.GetResolvedV3(); rt != nil {
 			// v3：status 配色扁平进 Tokens；缺省时保留内置默认（不覆盖为全透明）。
 			if c := rt.Palette.Tokens["status_bg"]; c != nil {
 				bgC = c
@@ -418,7 +418,7 @@ func (f *darwinForwarder) toastColors() (bg, fg string) {
 	var bgC color.Color = color.RGBA{0x2B, 0x2B, 0x2B, 0xFF}
 	var fgC color.Color = color.RGBA{0xFF, 0xFF, 0xFF, 0xFF}
 	if f.themeMgr != nil {
-		if rt := f.themeMgr.GetResolvedV25(); rt != nil {
+		if rt := f.themeMgr.GetResolvedV3(); rt != nil {
 			// v3：Toast 沿用 tooltip 调色板（Tokens）；缺省时保留内置深色默认。
 			if c := rt.Palette.Tokens["tooltip_bg"]; c != nil {
 				bgC = forceOpaqueColor(c)

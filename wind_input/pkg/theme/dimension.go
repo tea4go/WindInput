@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Dimension 是带单位的几何尺寸（v2.6 单位扩展）。
+// Dimension 是带单位的几何尺寸。
 //
 // 两种单位：
 //   - dp（密度无关像素，默认）：随 DPI scale 缩放，适合间距/圆角/字号等"物理尺寸感一致"的量。

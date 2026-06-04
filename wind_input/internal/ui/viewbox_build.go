@@ -1,6 +1,6 @@
 package ui
 
-// 从 RenderConfig + 候选数据构建候选窗的盒模型 View 树（v2.6 P1）。
+// 从 RenderConfig + 候选数据构建候选窗的盒模型 View 树（P1）。
 //
 // 本文件是"固定骨架 + 统一 View"思路的落地：旧渲染器里逐元素硬编码的 magic number，
 // 在这里被翻译成各 View 的 margin/padding/border/fixed-size。引擎（viewbox.go/_paint.go）

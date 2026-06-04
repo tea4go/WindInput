@@ -91,30 +91,30 @@ func TestBehavior_YAMLParse(t *testing.T) {
 	}
 }
 
-func TestResolveV25_BehaviorDefault(t *testing.T) {
+func TestResolveV3_BehaviorDefault(t *testing.T) {
 	tmp, cleanup := setupTestThemes(t)
 	defer cleanup()
 	m := makeTestManager(tmp)
 	th := loadMerged(t, m, "test-base")
-	rv, err := m.ResolveV25(th, false, tmp)
+	rv, err := m.ResolveV3(th, false, tmp)
 	if err != nil {
-		t.Fatalf("ResolveV25: %v", err)
+		t.Fatalf("ResolveV3: %v", err)
 	}
 	if rv.Behavior != defaultBehavior() {
 		t.Errorf("未提供 behavior 时应为 defaultBehavior, got %+v", rv.Behavior)
 	}
 }
 
-func TestResolveV25_BehaviorOverride(t *testing.T) {
+func TestResolveV3_BehaviorOverride(t *testing.T) {
 	tmp, cleanup := setupTestThemes(t)
 	defer cleanup()
 	m := makeTestManager(tmp)
 	fs := 20
 	th := loadMerged(t, m, "test-base")
 	th.Behavior = &Behavior{FontSize: &fs}
-	rv, err := m.ResolveV25(th, false, tmp)
+	rv, err := m.ResolveV3(th, false, tmp)
 	if err != nil {
-		t.Fatalf("ResolveV25: %v", err)
+		t.Fatalf("ResolveV3: %v", err)
 	}
 	if rv.Behavior.FontSize != 20 {
 		t.Errorf("主题 behavior.font_size 应覆盖为 20, got %d", rv.Behavior.FontSize)

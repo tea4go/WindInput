@@ -50,7 +50,7 @@ func makeTestManager(themesDir string) *Manager {
 	return &Manager{themeDirs: []string{themesDir}}
 }
 
-// loadMerged 加载并 base 合并一个主题，返回合并后的 raw Theme（供测试直接 ResolveV25）。
+// loadMerged 加载并 base 合并一个主题，返回合并后的 raw Theme（供测试直接 ResolveV3）。
 func loadMerged(t *testing.T, m *Manager, name string) *Theme {
 	t.Helper()
 	th, _, err := m.loadThemeFileWithDir(name)
@@ -60,7 +60,7 @@ func loadMerged(t *testing.T, m *Manager, name string) *Theme {
 	return th
 }
 
-func TestResolveV25_Inherited(t *testing.T) {
+func TestResolveV3_Inherited(t *testing.T) {
 	tmp, cleanup := setupTestThemes(t)
 	defer cleanup()
 	m := makeTestManager(tmp)
@@ -74,9 +74,9 @@ base: test-base
 	_ = os.WriteFile(filepath.Join(dir, "theme.yaml"), []byte(derived), 0o644)
 
 	th := loadMerged(t, m, "derived")
-	r, err := m.ResolveV25(th, false, dir)
+	r, err := m.ResolveV3(th, false, dir)
 	if err != nil {
-		t.Fatalf("ResolveV25: %v", err)
+		t.Fatalf("ResolveV3: %v", err)
 	}
 	// views 继承（V3-D：layout 几何块已删，改用 views 继承验证）：派生主题仅自带 behavior，
 	// item 圆角应从 base 的 views.item.border.radius=7 继承。
@@ -95,13 +95,13 @@ base: test-base
 	}
 }
 
-func TestResolveV25_DarkMode(t *testing.T) {
+func TestResolveV3_DarkMode(t *testing.T) {
 	tmp, cleanup := setupTestThemes(t)
 	defer cleanup()
 	m := makeTestManager(tmp)
 
 	th := loadMerged(t, m, "test-base")
-	r, err := m.ResolveV25(th, true, tmp)
+	r, err := m.ResolveV3(th, true, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestResolveV25_DarkMode(t *testing.T) {
 	}
 }
 
-func TestResolveV25_UnknownBase(t *testing.T) {
+func TestResolveV3_UnknownBase(t *testing.T) {
 	tmp, cleanup := setupTestThemes(t)
 	defer cleanup()
 	m := makeTestManager(tmp)
@@ -157,9 +157,9 @@ colors:
 
 	// base 自身：accent = 旧 primary。
 	bth := loadMerged(t, m, "io-base")
-	br, err := m.ResolveV25(bth, false, bdir)
+	br, err := m.ResolveV3(bth, false, bdir)
 	if err != nil {
-		t.Fatalf("ResolveV25 base: %v", err)
+		t.Fatalf("ResolveV3 base: %v", err)
 	}
 	if got := ColorToHexRGB(br.Palette.Accent); got != "#4285F4" {
 		t.Fatalf("base accent want #4285F4, got %s", got)
@@ -167,9 +167,9 @@ colors:
 
 	// 派生：accent 必须 = 新 primary #FF0000（证明 derive 在合并后基于新 primary 重跑）。
 	dth := loadMerged(t, m, "io-derived")
-	dr, err := m.ResolveV25(dth, false, ddir)
+	dr, err := m.ResolveV3(dth, false, ddir)
 	if err != nil {
-		t.Fatalf("ResolveV25 derived: %v", err)
+		t.Fatalf("ResolveV3 derived: %v", err)
 	}
 	if got := ColorToHexRGB(dr.Palette.Accent); got != "#FF0000" {
 		t.Errorf("派生主题只换 primary，accent 应基于新 primary 重新派生为 #FF0000, got %s "+

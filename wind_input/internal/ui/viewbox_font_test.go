@@ -73,7 +73,7 @@ func TestRefreshResolvedViews_RelativeFont(t *testing.T) {
 	v.Text.FontSize = ip(2)   // 主候选 +2
 	v.Text.FontWeight = ip(700)
 	v.Index.FontSize = ip(-6) // 序号 -6
-	r.resolvedV25 = &theme.ResolvedV25{Palette: themePathPalette(), Behavior: theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600}}
+	r.resolvedV3 = &theme.ResolvedV3{Palette: themePathPalette(), Behavior: theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600}}
 	r.themeViews = &v
 	r.refreshResolvedViews()
 

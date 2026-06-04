@@ -16,7 +16,7 @@ import (
 // resolveMenuViews 解析菜单盒模型 ResolvedMenuViews（P8 切片3）：默认从 Palette token，
 // views.menu（Root/Item/Separator）覆盖几何+颜色，item 的 hover/disabled 走递归 RVNode patch（V3-D）。
 func (m *PopupMenu) resolveMenuViews() theme.ResolvedMenuViews {
-	if rv := m.resolvedV25; rv != nil {
+	if rv := m.resolvedV3; rv != nil {
 		var mv *theme.MenuViews
 		if rv.Views != nil {
 			mv = rv.Views.Menu

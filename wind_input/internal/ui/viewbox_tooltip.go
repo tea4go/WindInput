@@ -22,7 +22,7 @@ func (w *TooltipWindow) resolveTooltipNode() theme.RVNode {
 		BgColor:   color.RGBA{60, 60, 60, 240},
 		TextColor: color.RGBA{255, 255, 255, 255},
 	}
-	if rv := w.resolvedV25; rv != nil {
+	if rv := w.resolvedV3; rv != nil {
 		var tn *theme.ViewNode
 		if rv.Views != nil {
 			tn = rv.Views.Tooltip

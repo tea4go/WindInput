@@ -28,7 +28,7 @@ type TooltipWindow struct {
 	trackingMouse bool
 	leaveBlocked  bool // 右键菜单显示期间抑制 WM_MOUSELEAVE 隐藏
 	text          string
-	resolvedV25   *theme.ResolvedV25
+	resolvedV3    *theme.ResolvedV3
 	onRightClick  func(text string, x, y int)
 	imgRes        imageResolver // P8 切片6：背景图/layers 解码缓存（与候选窗共享基础设施）
 
@@ -114,11 +114,11 @@ func (w *TooltipWindow) SuppressLeave(suppress bool) {
 	w.leaveBlocked = suppress
 }
 
-// SetTheme sets the theme for the tooltip window（P5：吃 ResolvedV25，颜色源 Palette.Tooltip）
-func (w *TooltipWindow) SetTheme(rv *theme.ResolvedV25) {
+// SetTheme sets the theme for the tooltip window（P5：吃 ResolvedV3，颜色源 Palette.Tooltip）
+func (w *TooltipWindow) SetTheme(rv *theme.ResolvedV3) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.resolvedV25 = rv
+	w.resolvedV3 = rv
 	w.imgRes.reset() // 换主题清空位图缓存（ref 解码结果按主题失效）
 }
 
@@ -341,8 +341,8 @@ func (w *TooltipWindow) render(text string, maxContentWidth float64) *image.RGBA
 	td := w.TextDrawer()
 	node := w.resolveTooltipNode()
 	var resources map[string]string
-	if w.resolvedV25 != nil {
-		resources = w.resolvedV25.Resources
+	if w.resolvedV3 != nil {
+		resources = w.resolvedV3.Resources
 	}
 	w.mu.Unlock()
 

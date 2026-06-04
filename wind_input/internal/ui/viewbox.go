@@ -1,7 +1,7 @@
 package ui
 
-// 盒模型 View 渲染引擎（v2.6 主题架构 P1）。
-// 设计见 docs/design/theme-view-architecture.md。
+// 盒模型 View 渲染引擎（主题架构 P1）。
+// 设计见 docs/design/archive/theme-view-architecture.md。
 //
 // 本文件实现引擎的"布局层"：measure（量算各 View 的边框盒尺寸）与 arrange（分配坐标）。
 // 布局层不依赖任何图形/字体后端——文本度量通过 TextMeasurer 接口注入，故可纯断言单测。

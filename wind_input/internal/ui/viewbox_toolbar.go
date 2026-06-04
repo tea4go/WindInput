@@ -31,7 +31,7 @@ func (r *ToolbarRenderer) resolveToolbarViews() theme.ResolvedToolbarViews {
 		SettingsIcon:  color.RGBA{122, 102, 184, 255},
 		SettingsHole:  color.RGBA{230, 234, 239, 255},
 	}
-	rv := r.resolvedV25
+	rv := r.resolvedV3
 	if rv == nil {
 		return rtv
 	}

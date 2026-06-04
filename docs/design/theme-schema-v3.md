@@ -92,7 +92,7 @@ colors:                       # 扁平、可互引 ${}、值为 LightDark<color>
 - **删全部 6 组嵌套窗口组**：candidate_window / popup_menu / tooltip / status / toast / **toolbar** 取消，颜色**全部扁平进 colors token**（colors 形态纯扁平、无混合嵌套）。toolbar 的 13 色迁为 `toolbar_*` 前缀 token（如 `toolbar_grip`/`toolbar_mode_cn_bg`/`toolbar_settings_icon`…）；toolbar 的**几何/L1+L2 重构仍延后**，本次仅迁颜色来源。
 - **ResolvedPalette 新形态**：保留顶层语义便捷字段（`Bg/Text/Accent…`）+ 新增 `Tokens map[string]color.Color`（全部解析后 token）；删 5 个 `Resolved*Palette` 组（candidate/menu/tooltip/status/toast），**保留 `ResolvedToolbarPalette`**（从 `Tokens["toolbar_*"]` 填充，使 `viewbox_toolbar` 消费最小改动）。token resolver（`candidate_views`/`other_views`）统一查 `Tokens`。
 - **节点 token 引用**：候选窗转发色改引顶层语义（`${bg}/${accent}/${selection}/${hover}/${selection_text}…`）；其它窗口特有色引功能 token（`${tooltip_bg}`/`${status_bg}`/`${menu_hover_bg}`…）。
-- **回归判据**：本切片**只改颜色来源、不改颜色值**——`TestV26GoldenSnapshot` 必须逐字节不变（候选窗 + status/tooltip/toast/menu 均在快照内；toolbar 不在快照，其颜色不变由编译 + `viewbox_toolbar_test` 守护）。
+- **回归判据**：本切片**只改颜色来源、不改颜色值**——`TestV3GoldenSnapshot` 必须逐字节不变（候选窗 + status/tooltip/toast/menu 均在快照内；toolbar 不在快照，其颜色不变由编译 + `viewbox_toolbar_test` 守护）。
 
 ## resources（图片提供者，与 colors 同构）
 
@@ -345,7 +345,7 @@ views:  { candidate: { item: { border: { radius: 8 } } } }  # 局部覆盖
 11. **加载期校验 fail fast**：${token} 可达且无环、image.ref 存在、base 链无环；失败报错不渲染。
 12. **behavior = 哲学Y**：主题推荐默认 + `config.UI` 用户覆盖层（补全 pager/page_number/vertical_max_width 的 FollowTheme 覆盖）。判据 = "是否需独立用户覆盖、跨主题保持"。
 13. **可补能力延后**：v3 只对齐现状渲染（item 基底色/border、preedit border、footer align、gradient 渲染均 schema 占位、渲染later），不在结构改造里夹带。
-14. **冻结治理**：`theme-v26-freeze-report.md` 顶部标注"v3 起取代"；v3 全部切片完成后产出 `theme-v3-freeze-report.md` 重新冻结。
+14. **冻结治理**：`archive/theme-v26-freeze-report.md` 顶部标注"v3 起取代"；v3 全部切片完成后产出 `theme-v3-freeze-report.md` 重新冻结。
 
 ---
 

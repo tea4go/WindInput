@@ -24,7 +24,7 @@ func TestResolveToolbarViews_BaseAndMode(t *testing.T) {
 		SettingsIcon:     color.RGBA{122, 102, 184, 255},
 		SettingsHole:     color.RGBA{230, 234, 239, 255},
 	}
-	r := &ToolbarRenderer{resolvedV25: &theme.ResolvedV25{Palette: theme.ResolvedPalette{Toolbar: tb}}}
+	r := &ToolbarRenderer{resolvedV3: &theme.ResolvedV3{Palette: theme.ResolvedPalette{Toolbar: tb}}}
 	rtv := r.resolveToolbarViews()
 	if rtv.ButtonBg != color.Color(tb.FullWidthOffBg) {
 		t.Error("button base bg 应=FullWidthOffBg")

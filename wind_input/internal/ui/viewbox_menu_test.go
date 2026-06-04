@@ -27,7 +27,7 @@ func TestResolveMenuColors(t *testing.T) {
 		"menu_hover_text": hoverText,
 		"menu_separator":  separator,
 	}
-	m := &PopupMenu{resolvedV25: &theme.ResolvedV25{Palette: theme.ResolvedPalette{Tokens: tokens}}}
+	m := &PopupMenu{resolvedV3: &theme.ResolvedV3{Palette: theme.ResolvedPalette{Tokens: tokens}}}
 	rmv := m.resolveMenuViews()
 	if rmv.Root.BgColor != color.Color(bg) || rmv.Root.BorderColor != color.Color(border) ||
 		rmv.Item.TextColor != color.Color(text) || rmv.Separator.BgColor != color.Color(separator) {

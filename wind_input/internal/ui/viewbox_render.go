@@ -15,10 +15,10 @@ import (
 // 基线、几何+颜色权威）；字号/行高/竖排宽是运行时值（用户全局字号派生 + DPI scale），在此回填。
 // 无主题（仅测试路径会出现：未调 SetTheme）时不改 r.resolvedViews，由测试自行预填。
 func (r *Renderer) refreshResolvedViews() {
-	if r.resolvedV25 == nil || r.themeViews == nil {
+	if r.resolvedV3 == nil || r.themeViews == nil {
 		return
 	}
-	r.resolvedViews = theme.ResolveCandidateViews(*r.themeViews, r.resolvedV25.Palette)
+	r.resolvedViews = theme.ResolveCandidateViews(*r.themeViews, r.resolvedV3.Palette)
 	// P7-B：主题 views 显式字号（逻辑像素，ResolveCandidateViews 填入）优先并 ×DPI scale；
 	// 未写（0）则回退运行时派生（用户全局字号 + DPI，已含 scale）。
 	scale := GetDPIScale()
@@ -36,7 +36,7 @@ func (r *Renderer) refreshResolvedViews() {
 	// 竖排最大宽（哲学Y 双层覆盖）：
 	//   1. r.config.VerticalMaxWidth>0：运行时强制覆盖（目前仅测试设置），最高优先；
 	//   2. 否则 verticalMaxWidthFollowTheme ? 主题 behavior.vertical_max_width : config.UI 用户值。
-	themeVMW := float64(r.resolvedV25.Behavior.VerticalMaxWidth)
+	themeVMW := float64(r.resolvedV3.Behavior.VerticalMaxWidth)
 	effVMW := themeVMW
 	if !r.verticalMaxWidthFollowTheme && r.userVerticalMaxWidth > 0 {
 		effVMW = r.userVerticalMaxWidth

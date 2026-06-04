@@ -13,8 +13,8 @@ import (
 // v3golden_test.go — v3 重构的**回归基准脚手架**（V3-0）。
 //
 // 判据（贯穿 V3-0~V3-4）：每个切片后，v3 主题渲染产物（解析后的渲染消费形态）必须逐项
-// 等于 v2.6 基线。本测试对内置主题 default/msime × light/dark 产出确定性快照，存为
-// testdata/golden_v26/*.txt（首次运行落盘 baseline）。后续 v3 改造跑同一快照逐字节对比。
+// 等于既有基线。本测试对内置主题 default/msime × light/dark 产出确定性快照，存为
+// testdata/golden_v3/*.txt（首次运行落盘 baseline）。后续 v3 改造跑同一快照逐字节对比。
 //
 // 落盘/更新基线：设环境变量 UPDATE_GOLDEN=1 重跑（结构调整后用，须人工核对 diff 中的「值」未变）。
 //
@@ -77,7 +77,7 @@ func dumpRVNode(b *strings.Builder, name string, n RVNode) {
 	dumpRVState(b, "  ", "disabled", n.Disabled)
 }
 
-func snapshotResolvedV25(rv *ResolvedV25) string {
+func snapshotResolvedV3(rv *ResolvedV3) string {
 	var b strings.Builder
 
 	b.WriteString("=== palette (顶层语义色，token 源) ===\n")
@@ -174,8 +174,8 @@ func firstDiff(want, got string) string {
 	return "(无逐行差异，可能尾部空白)"
 }
 
-// TestV26GoldenSnapshot 落盘/校验 v2.6 渲染消费形态基线（回归基准）。
-func TestV26GoldenSnapshot(t *testing.T) {
+// TestV3GoldenSnapshot 落盘/校验 v3 渲染消费形态基线（回归基准）。
+func TestV3GoldenSnapshot(t *testing.T) {
 	dirs := bitmapTestThemeDirs(t)
 	for _, name := range []string{"default", "msime"} {
 		for _, dark := range []bool{false, true} {
@@ -189,12 +189,12 @@ func TestV26GoldenSnapshot(t *testing.T) {
 					t.Fatalf("LoadTheme %s: %v", name, err)
 				}
 				m.SetDarkMode(dark)
-				rv := m.GetResolvedV25()
+				rv := m.GetResolvedV3()
 				if rv == nil {
-					t.Fatalf("%s: resolvedV25 为 nil", name)
+					t.Fatalf("%s: resolvedV3 为 nil", name)
 				}
-				snap := snapshotResolvedV25(rv)
-				golden := filepath.Join("testdata", "golden_v26", fmt.Sprintf("%s_%s.txt", name, mode))
+				snap := snapshotResolvedV3(rv)
+				golden := filepath.Join("testdata", "golden_v3", fmt.Sprintf("%s_%s.txt", name, mode))
 				compareOrWriteGolden(t, golden, snap)
 			})
 		}

@@ -32,7 +32,7 @@ func TestImageForRef_DecodeAndCache(t *testing.T) {
 	if r.TextDrawer() == nil {
 		t.Skip("无可用文本后端")
 	}
-	r.resolvedV25 = &theme.ResolvedV25{
+	r.resolvedV3 = &theme.ResolvedV3{
 		Resources: map[string]string{"bg": tinyPNGDataURI(t)},
 	}
 
@@ -71,7 +71,7 @@ func TestWindowBackgroundImage_Rendered(t *testing.T) {
 	}
 	views := themePathViews(6, 8)
 	views.Window.Background.Image = &theme.ViewImage{Ref: "panel", Mode: "nine_slice", Slice: theme.ViewEdges{Top: dip(8), Right: dip(8), Bottom: dip(8), Left: dip(8)}}
-	r.resolvedV25 = &theme.ResolvedV25{
+	r.resolvedV3 = &theme.ResolvedV3{
 		Palette:   themePathPalette(),
 		Behavior:  theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600},
 		Resources: map[string]string{"panel": tinyPNGDataURI(t)},
@@ -105,7 +105,7 @@ func TestItemState_SelectedHighlightImage(t *testing.T) {
 		Color:      "#FFFFFF",
 		FontWeight: ip(700),
 	}
-	r.resolvedV25 = &theme.ResolvedV25{
+	r.resolvedV3 = &theme.ResolvedV3{
 		Palette:   themePathPalette(),
 		Behavior:  theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600},
 		Resources: map[string]string{"hl": tinyPNGDataURI(t)},
@@ -137,7 +137,7 @@ func TestWindowLayer_Rendered(t *testing.T) {
 	views.Window.Layers = []theme.ViewImage{
 		{Ref: "mark", Z: 1, Anchor: "bottom-right", Offset: theme.ViewImagePoint{X: 4, Y: 4}, Size: theme.ViewImageSize{W: 12, H: 12}},
 	}
-	r.resolvedV25 = &theme.ResolvedV25{
+	r.resolvedV3 = &theme.ResolvedV3{
 		Palette:   themePathPalette(),
 		Behavior:  theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600},
 		Resources: map[string]string{"mark": tinyPNGDataURI(t)},

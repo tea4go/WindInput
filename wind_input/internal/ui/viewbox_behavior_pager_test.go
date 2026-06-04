@@ -21,7 +21,7 @@ func TestSetTheme_PagerFromBehavior(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := NewRenderer(parityConfig())
-			rv := &theme.ResolvedV25{Palette: themePathPalette(), Behavior: c.behavior}
+			rv := &theme.ResolvedV3{Palette: themePathPalette(), Behavior: c.behavior}
 			r.SetTheme(rv)
 			if r.config.AlwaysShowPager != c.wantAlwaysShow {
 				t.Errorf("AlwaysShowPager=%v, 期望 %v", r.config.AlwaysShowPager, c.wantAlwaysShow)

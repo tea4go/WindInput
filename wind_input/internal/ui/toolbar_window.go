@@ -306,7 +306,7 @@ func (w *ToolbarWindow) SetTextRenderMode(mode TextRenderMode) {
 	}
 }
 
-func (w *ToolbarWindow) SetTheme(rv *theme.ResolvedV25) {
+func (w *ToolbarWindow) SetTheme(rv *theme.ResolvedV3) {
 	if w.renderer != nil {
 		w.renderer.SetTheme(rv)
 	}

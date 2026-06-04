@@ -22,7 +22,7 @@ const (
 
 // ToolbarRenderer renders the toolbar UI
 type ToolbarRenderer struct {
-	resolvedV25 *theme.ResolvedV25
+	resolvedV3 *theme.ResolvedV3
 	TextBackendManager
 }
 
@@ -35,15 +35,15 @@ func NewToolbarRenderer() *ToolbarRenderer {
 	return r
 }
 
-// SetTheme sets the theme for the toolbar renderer（P5：吃 ResolvedV25）
-func (r *ToolbarRenderer) SetTheme(rv *theme.ResolvedV25) {
-	r.resolvedV25 = rv
+// SetTheme sets the theme for the toolbar renderer（P5：吃 ResolvedV3）
+func (r *ToolbarRenderer) SetTheme(rv *theme.ResolvedV3) {
+	r.resolvedV3 = rv
 }
 
 // getTooltipColors returns tooltip colors from theme or defaults（工具栏内悬停提示，复用 Palette.Tooltip）
 func (r *ToolbarRenderer) getTooltipColors() (bgColor, textColor, borderColor color.Color) {
-	if r.resolvedV25 != nil {
-		t := r.resolvedV25.Palette.Tokens
+	if r.resolvedV3 != nil {
+		t := r.resolvedV3.Palette.Tokens
 		return t["tooltip_bg"], t["tooltip_text"], color.RGBA{77, 89, 107, 255}
 	}
 	return color.RGBA{38, 46, 56, 242}, color.RGBA{242, 242, 242, 255}, color.RGBA{77, 89, 107, 255}

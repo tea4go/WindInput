@@ -256,7 +256,7 @@ export interface ThemePreview {
   is_dark?: {
     active: boolean;
   };
-  // v2.5 背景图（仅当 palette 配置了 background 时出现）
+  // 背景图（仅当 palette 配置了 background 时出现）
   background?: {
     mode: string;
     opacity: number;

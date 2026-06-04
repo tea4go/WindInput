@@ -61,8 +61,8 @@ func (w *ToastWindow) SetTextRenderMode(mode TextRenderMode) {
 	}
 }
 
-// SetTheme 同步主题（P5：吃 ResolvedV25，转发给 renderer，颜色源 Palette.Toast）。
-func (w *ToastWindow) SetTheme(rv *theme.ResolvedV25) {
+// SetTheme 同步主题（P5：吃 ResolvedV3，转发给 renderer，颜色源 Palette.Toast）。
+func (w *ToastWindow) SetTheme(rv *theme.ResolvedV3) {
 	if w.renderer != nil {
 		w.renderer.SetTheme(rv)
 	}

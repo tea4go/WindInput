@@ -2,7 +2,7 @@ package ui
 
 // 盒模型 View 渲染引擎 —— 绘制层（measure/arrange 在 viewbox.go）。
 //
-// 分三趟遍历，原因见 docs/design/theme-view-architecture.md 与旧渲染器的 PHASE1/PHASE2 约定：
+// 分三趟遍历，原因见 docs/design/archive/theme-view-architecture.md 与旧渲染器的 PHASE1/PHASE2 约定：
 //   趟 A paintShapes：投影 → 底色 → 背景图 → layers(z<0) → 递归子节点 → 描边（gg 矢量 + 直接像素）
 //   趟 B paintText：在 td.BeginDraw/EndDraw 之间统一绘制所有文本（GDI/DirectWrite 需批处理）
 //   趟 C paintOverlays：layers(z>0) 覆盖到文本之上（纯图片，经 theme.DrawBackground 直接写像素）

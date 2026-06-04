@@ -22,8 +22,8 @@ func (m *PopupMenu) render() *image.RGBA {
 	td := m.textDrawer
 	baseFontSize := m.getMenuFontSize()
 	var resources map[string]string
-	if m.resolvedV25 != nil {
-		resources = m.resolvedV25.Resources
+	if m.resolvedV3 != nil {
+		resources = m.resolvedV3.Resources
 	}
 	m.mu.Unlock()
 

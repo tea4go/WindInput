@@ -38,7 +38,7 @@ func (r *StatusRenderer) resolveStatusNode(cfg StatusWindowConfig) theme.RVNode 
 		BgColor:   color.RGBA{60, 60, 60, 240},
 		TextColor: color.RGBA{255, 255, 255, 255},
 	}
-	if rv := r.resolvedV25; rv != nil {
+	if rv := r.resolvedV3; rv != nil {
 		var sn *theme.ViewNode
 		if rv.Views != nil {
 			sn = rv.Views.Status

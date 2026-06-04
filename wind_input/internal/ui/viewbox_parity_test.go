@@ -16,7 +16,7 @@ import (
 // 填充 r.resolvedViews（合成桥退役后已无 RenderConfig 兜底；直接 build 的测试也需此值）。
 func applyParityThemePath(r *Renderer) {
 	views := themePathViews(8, 8)
-	r.resolvedV25 = &theme.ResolvedV25{Palette: themePathPalette(), Behavior: theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600}}
+	r.resolvedV3 = &theme.ResolvedV3{Palette: themePathPalette(), Behavior: theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600}}
 	r.themeViews = &views
 	r.refreshResolvedViews()
 }

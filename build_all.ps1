@@ -1,4 +1,4 @@
-﻿param(
+param(
     [ValidateSet("all", "dll", "service", "setting", "portable")]
     [string[]]$Module = @("all"),
 
@@ -605,14 +605,14 @@ function Prepare-DataFiles {
     }
     Write-Detail "  - 已复制预制数据文件 ($dataCopied 个文件)"
 
-    # 复制主题文件: 每个主题目录的 theme.yaml + 共享零件目录 _layouts / _palettes (v2.5)
+    # 复制主题文件: 每个主题目录的 theme.yaml + 隐藏基础主题目录 _base (v3 单链继承)
     Write-Detail "  - 复制主题文件..."
     $themesSrc = Join-Path $ScriptDir "wind_input\themes"
     $themesDst = Join-Path $DataDir "themes"
     if (Test-Path $themesSrc) {
         Get-ChildItem -Path $themesSrc -Directory | ForEach-Object {
             $name = $_.Name
-            # 下划线前缀目录视为 v2.5 共享零件 (_layouts / _palettes), 整目录递归复制
+            # 下划线前缀目录视为隐藏基础主题 (_base), 整目录递归复制
             if ($name.StartsWith("_")) {
                 $destDir = Join-Path $themesDst $name
                 if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir -Force | Out-Null }

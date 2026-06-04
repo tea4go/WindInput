@@ -53,8 +53,8 @@ func TestViewShadowSpec_Resolve(t *testing.T) {
 	}
 }
 
-// TestResources_DarkVariantSwitch 端到端验证 P7-E：resources 的 {light,dark} 变体经 ResolveV25
-// 按 isDark 选路径——切暗色后 ResolvedV25.Resources 指向 dark 文件。
+// TestResources_DarkVariantSwitch 端到端验证 P7-E：resources 的 {light,dark} 变体经 ResolveV3
+// 按 isDark 选路径——切暗色后 ResolvedV3.Resources 指向 dark 文件。
 func TestResources_DarkVariantSwitch(t *testing.T) {
 	tmp, cleanup := setupTestThemes(t)
 	defer cleanup()
@@ -72,7 +72,7 @@ resources:
 	if err := m.LoadTheme("v3-res"); err != nil {
 		t.Fatal(err)
 	}
-	light := m.GetResolvedV25()
+	light := m.GetResolvedV3()
 	if !strings.HasSuffix(light.Resources["panel"], "light-panel.png") {
 		t.Errorf("亮色应选 light 变体, got %s", light.Resources["panel"])
 	}
@@ -81,7 +81,7 @@ resources:
 	}
 
 	m.SetDarkMode(true)
-	dark := m.GetResolvedV25()
+	dark := m.GetResolvedV3()
 	if !strings.HasSuffix(dark.Resources["panel"], "dark-panel.png") {
 		t.Errorf("暗色应选 dark 变体, got %s", dark.Resources["panel"])
 	}

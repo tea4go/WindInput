@@ -28,9 +28,9 @@ type PopupMenu struct {
 	height     int
 	hoverIndex int // -1 for none
 
-	// Theme（P5：吃 ResolvedV25，颜色源 Palette.PopupMenu）
-	resolvedV25 *theme.ResolvedV25
-	imgRes      imageResolver // P8 切片6：菜单背景图/layers 解码缓存（与候选窗共享基础设施）
+	// Theme（P5：吃 ResolvedV3，颜色源 Palette.PopupMenu）
+	resolvedV3 *theme.ResolvedV3
+	imgRes     imageResolver // P8 切片6：菜单背景图/layers 解码缓存（与候选窗共享基础设施）
 
 	// Submenu support
 	submenu      *PopupMenu // 当前展开的子菜单实例
@@ -295,7 +295,7 @@ func NewPopupMenu() *PopupMenu {
 func newPopupMenuShared(parent *PopupMenu) *PopupMenu {
 	parent.mu.Lock()
 	menuFontSizeOverride := parent.menuFontSizeOverride
-	resolvedV25 := parent.resolvedV25
+	resolvedV3 := parent.resolvedV3
 	lockedDPI := parent.lockedDPI
 	parent.mu.Unlock()
 
@@ -309,7 +309,7 @@ func newPopupMenuShared(parent *PopupMenu) *PopupMenu {
 		renderMode:           parent.renderMode,
 		fontConfig:           parent.fontConfig,
 		menuFontSizeOverride: menuFontSizeOverride,
-		resolvedV25:          resolvedV25,
+		resolvedV3:           resolvedV3,
 		lockedDPI:            lockedDPI,
 	}
 }
@@ -541,9 +541,9 @@ func (m *PopupMenu) SetTextRenderMode(mode TextRenderMode) {
 }
 
 // SetTheme sets the theme for the popup menu
-func (m *PopupMenu) SetTheme(rv *theme.ResolvedV25) {
+func (m *PopupMenu) SetTheme(rv *theme.ResolvedV3) {
 	m.mu.Lock()
-	m.resolvedV25 = rv
+	m.resolvedV3 = rv
 	m.imgRes.reset() // 换主题清空位图缓存（ref 解码结果按主题失效）
 	sub := m.submenu
 	m.mu.Unlock()

@@ -3,7 +3,7 @@
 # WindInput v3 主题系统 — 冻结契约（结构归一 + 亮暗统一）
 
 > 状态：**已实现并冻结（2026-06-04）**。权威 spec：`theme-schema-v3.md`（设计语义）；本文为冻结后的**字段面契约 + 求值语义快照**。
-> 前身：`theme-v26-freeze-report.md`（v2.5/v2.6，已解冻被 v3 取代，仅作历史/迁移对照）。
+> 前身：`archive/theme-v26-freeze-report.md`（v2.5/v2.6，已解冻被 v3 取代，仅作历史/迁移对照）。
 > 关联：`pkg/theme/AGENTS.md`（实现现状）、`docs/design/enum-constraint.md`（枚举约束）。
 
 ## 一、v3 净效果（相对 v2.6）
@@ -19,7 +19,7 @@ v3 是一次**删机制**的破坏性重构（v2.5/v2.6 未正式发布，无兼
 | states 消费层 | 扁平 `RVState` | 递归 `RVNode` | 状态 patch 与基态同构 |
 | 继承 | `palette/layout: string` 外链 + `Overrides` | `base` 单链继承（先合并后求值） | 复用别人配置 = base 一个基主题 |
 
-**回归判据（贯穿全程）**：v3 主题渲染产物逐字节等于 v2.6 基线——`TestV26GoldenSnapshot`（default/msime × light/dark）守护候选窗 + status/tooltip/toast/menu 的解析后颜色/几何值。
+**回归判据（贯穿全程）**：v3 主题渲染产物逐字节等于 v2.6 基线——`TestV3GoldenSnapshot`（default/msime × light/dark）守护候选窗 + status/tooltip/toast/menu 的解析后颜色/几何值。
 
 ## 二、顶层结构（冻结）
 
@@ -182,7 +182,7 @@ views:  { item: { border: { radius: 8 } } }                 # 局部覆盖
 
 ## 十、验收证据（V3-D 冻结时）
 
-- `go -C wind_input test ./pkg/theme/ -run TestV26GoldenSnapshot -count=1`：绿（重落基线，**已确认重落仅影响 layout 段**——逐字节 diff `110,112d109` 仅删 3 行 layout，palette/candidate views/other windows/behavior/resources 全段不变）。
+- `go -C wind_input test ./pkg/theme/ -run TestV3GoldenSnapshot -count=1`：绿（重落基线，**已确认重落仅影响 layout 段**——逐字节 diff `110,112d109` 仅删 3 行 layout，palette/candidate views/other windows/behavior/resources 全段不变）。
 - `go -C wind_input build ./... && vet ./... && test ./... -count=1`：全绿。
 - `go -C wind_setting build ./... && vet ./...`：绿。
 - config 新增三字段（always_show_pager/show_page_number/vertical_max_width + 各 FollowTheme）round-trip 单测绿（`behavior_override_test.go`）。

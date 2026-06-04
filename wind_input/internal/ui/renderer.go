@@ -36,7 +36,7 @@ type RenderConfig struct {
 	GlobalIndexLabels string                 // 用户全局序号标签覆盖（config.UI.CandidateIndexLabels）；非空时覆盖 IndexLabels
 	CmdbarPrefix      string                 // 副作用 cmdbar 候选 (Actions 含 ActionEffect) 的前缀符号; 空 = 不显示前缀
 
-	// v2.5 候选窗背景图（nil = 仅纯色背景）
+	// 候选窗背景图（nil = 仅纯色背景）
 	BackgroundImage   *image.RGBA
 	BackgroundMode    string // nine_slice | stretch | tile | center
 	BackgroundSlice   theme.Padding
@@ -176,11 +176,11 @@ func (fc *fontCache) Close() {
 // Renderer renders candidate window content
 type Renderer struct {
 	config        RenderConfig
-	resolvedV25   *theme.ResolvedV25
+	resolvedV3    *theme.ResolvedV3
 	resolvedViews theme.ResolvedViews // 候选窗盒模型外观：每帧由 refreshResolvedViews 经 theme.ResolveCandidateViews 重建（几何+颜色）+ 运行时字号回填
 	themeViews    *theme.Views        // 主题盒模型 views（已 merge defaultViews 基线）；来自 rv.Views
 	// imgRes 位图解码缓存基础设施（P7-C；P8 切片6 抽为 imageResolver 与 status/tooltip/menu/toast 共享）：
-	// 一次性解码、跨帧复用，SetTheme 换主题时 reset。resources 表按帧从 resolvedV25.Resources 传入。
+	// 一次性解码、跨帧复用，SetTheme 换主题时 reset。resources 表按帧从 resolvedV3.Resources 传入。
 	imgRes imageResolver
 	TextBackendManager
 
@@ -304,19 +304,19 @@ func (r *Renderer) SetBehaviorOverrides(
 
 // applyBehaviorOverrides 据「跟随主题/用户值」标志位把 pager/page_number 最终值写入
 // r.config（vertical_max_width 不在此——它由 viewbox_render 每帧据标志位选值）。
-// 跟随主题时用 r.resolvedV25.Behavior；用户自定义时用 r.user* 值。
+// 跟随主题时用 r.resolvedV3.Behavior；用户自定义时用 r.user* 值。
 // 注意：用户 PagerDisplayMode（applyPagerOverride）是更上层的独立强制覆盖，仍在其后生效。
 func (r *Renderer) applyBehaviorOverrides() {
 	if r.pagerFollowTheme {
-		if r.resolvedV25 != nil {
-			r.config.AlwaysShowPager = r.resolvedV25.Behavior.AlwaysShowPager
+		if r.resolvedV3 != nil {
+			r.config.AlwaysShowPager = r.resolvedV3.Behavior.AlwaysShowPager
 		}
 	} else {
 		r.config.AlwaysShowPager = r.userAlwaysShowPager
 	}
 	if r.pageNumberFollowTheme {
-		if r.resolvedV25 != nil {
-			r.config.ShowPageNumber = r.resolvedV25.Behavior.ShowPageNumber
+		if r.resolvedV3 != nil {
+			r.config.ShowPageNumber = r.resolvedV3.Behavior.ShowPageNumber
 		}
 	} else {
 		r.config.ShowPageNumber = r.userShowPageNumber
@@ -397,11 +397,11 @@ func (r *Renderer) SetModeAccentColor(c color.Color) {
 }
 
 // SetTheme sets the theme for the renderer and updates colors
-func (r *Renderer) SetTheme(rv *theme.ResolvedV25) {
+func (r *Renderer) SetTheme(rv *theme.ResolvedV3) {
 	if rv == nil {
 		return
 	}
-	r.resolvedV25 = rv
+	r.resolvedV3 = rv
 	r.themeViews = rv.Views // 主题盒模型 views（已 merge defaultViews 基线）
 	// 候选窗颜色/几何已由 theme.ResolveCandidateViews 经 r.resolvedViews 承载（P6 阶段2e 删合成桥）；
 	// 此处只搬运渲染运行时仍需的 RenderConfig 字段：IndexStyle / HasAccentBar / page 策略 / 序号标签。
@@ -438,8 +438,8 @@ func (r *Renderer) SetTheme(rv *theme.ResolvedV25) {
 
 // resourcesSnapshot 返回当前主题的资源表（ref→path/dataURI），nil-safe。
 func (r *Renderer) resourcesSnapshot() map[string]string {
-	if r.resolvedV25 != nil {
-		return r.resolvedV25.Resources
+	if r.resolvedV3 != nil {
+		return r.resolvedV3.Resources
 	}
 	return nil
 }
@@ -462,8 +462,8 @@ func (r *Renderer) appendThemeLayers(v *View, layers []theme.RVImage, sc func(fl
 
 // getModeIndicatorColors returns mode indicator colors from theme or defaults
 func (r *Renderer) getModeIndicatorColors() (bgColor, textColor color.Color) {
-	if r.resolvedV25 != nil {
-		t := r.resolvedV25.Palette.Tokens
+	if r.resolvedV3 != nil {
+		t := r.resolvedV3.Palette.Tokens
 		return t["toast_bg"], t["toast_text"]
 	}
 	return color.RGBA{50, 50, 50, 230}, color.RGBA{255, 255, 255, 255}

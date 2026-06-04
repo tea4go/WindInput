@@ -74,7 +74,7 @@ func TestValidateViews_BadHexLiteral(t *testing.T) {
 	}
 }
 
-// TestLoadTheme_UnknownToken_FailFast 端到端：含未知 token 的主题经 ResolveV25 报错（不进入渲染）。
+// TestLoadTheme_UnknownToken_FailFast 端到端：含未知 token 的主题经 ResolveV3 报错（不进入渲染）。
 func TestLoadTheme_UnknownToken_FailFast(t *testing.T) {
 	tmp, cleanup := setupTestThemes(t)
 	defer cleanup()
@@ -91,8 +91,8 @@ views:
 	_ = os.WriteFile(filepath.Join(dir, "theme.yaml"), []byte(bad), 0o644)
 
 	th := loadMerged(t, m, "bad-token")
-	if _, err := m.ResolveV25(th, false, dir); err == nil {
-		t.Fatal("含未知 token 的主题应 ResolveV25 报错")
+	if _, err := m.ResolveV3(th, false, dir); err == nil {
+		t.Fatal("含未知 token 的主题应 ResolveV3 报错")
 	}
 }
 
@@ -113,8 +113,8 @@ views:
 	_ = os.WriteFile(filepath.Join(dir, "theme.yaml"), []byte(bad), 0o644)
 
 	th := loadMerged(t, m, "bad-ref")
-	if _, err := m.ResolveV25(th, false, dir); err == nil {
-		t.Fatal("缺失 image.ref 的主题应 ResolveV25 报错")
+	if _, err := m.ResolveV3(th, false, dir); err == nil {
+		t.Fatal("缺失 image.ref 的主题应 ResolveV3 报错")
 	}
 }
 
@@ -135,7 +135,7 @@ colors:
 	_ = os.WriteFile(filepath.Join(dir, "theme.yaml"), []byte(bad), 0o644)
 
 	th := loadMerged(t, m, "cycle")
-	_, err := m.ResolveV25(th, false, dir)
+	_, err := m.ResolveV3(th, false, dir)
 	if err == nil || !strings.Contains(err.Error(), "成环") {
 		t.Fatalf("成环颜色引用应报错, got %v", err)
 	}

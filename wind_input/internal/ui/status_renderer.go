@@ -16,10 +16,10 @@ import (
 type StatusRenderer struct {
 	TextBackendManager
 
-	mu          sync.Mutex
-	resolvedV25 *theme.ResolvedV25
-	logger      *slog.Logger
-	imgRes      imageResolver // P8 切片6：背景图/layers 解码缓存（与候选窗共享基础设施）
+	mu         sync.Mutex
+	resolvedV3 *theme.ResolvedV3
+	logger     *slog.Logger
+	imgRes     imageResolver // P8 切片6：背景图/layers 解码缓存（与候选窗共享基础设施）
 }
 
 // NewStatusRenderer 创建状态渲染器，默认使用 DirectWrite 渲染（与系统默认一致，反锯齿效果更好）
@@ -60,8 +60,8 @@ func (r *StatusRenderer) Render(state StatusState, cfg StatusWindowConfig) *imag
 	td := r.TextDrawer()
 	node := r.resolveStatusNode(cfg)
 	var resources map[string]string
-	if r.resolvedV25 != nil {
-		resources = r.resolvedV25.Resources
+	if r.resolvedV3 != nil {
+		resources = r.resolvedV3.Resources
 	}
 	r.mu.Unlock()
 
@@ -150,10 +150,10 @@ func hexDigit(c byte) (uint8, bool) {
 }
 
 // SetTheme 设置主题
-func (r *StatusRenderer) SetTheme(rv *theme.ResolvedV25) {
+func (r *StatusRenderer) SetTheme(rv *theme.ResolvedV3) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.resolvedV25 = rv
+	r.resolvedV3 = rv
 	r.imgRes.reset() // 换主题清空位图缓存（ref 解码结果按主题失效）
 }
 

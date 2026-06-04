@@ -97,7 +97,7 @@ const statusSchema = computed<PageSchema>(() => {
 });
 
 // resolveIndexLabel 根据当前主题的 index_labels 模板返回第 slotIdx (0..9) 个候选项的序号字符串
-// 优先级：v2.5 IndexLabels (斜杠分隔 / 10 字符) > 默认 1-9,0
+// 优先级：IndexLabels (斜杠分隔 / 10 字符) > 默认 1-9,0
 function resolveIndexLabel(slotIdx: number): string {
   const labels = props.themePreview?.style?.index_labels ?? "";
   if (labels) {

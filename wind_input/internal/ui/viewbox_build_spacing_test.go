@@ -17,7 +17,7 @@ func horizontalListGap(t *testing.T, indexStyle string) int {
 		t.Skip("无可用文本后端")
 	}
 	views := themePathViews(8, 2) // item padding=2
-	r.resolvedV25 = &theme.ResolvedV25{Palette: themePathPalette()}
+	r.resolvedV3 = &theme.ResolvedV3{Palette: themePathPalette()}
 	r.themeViews = &views
 	r.refreshResolvedViews()
 	cands := []Candidate{{Text: "中", Index: 1}, {Text: "文", Index: 2}}

@@ -19,10 +19,10 @@ import (
 type ToastRenderer struct {
 	TextBackendManager
 
-	mu          sync.Mutex
-	resolvedV25 *theme.ResolvedV25
-	logger      *slog.Logger
-	imgRes      imageResolver // P8 切片6：背景图/layers 解码缓存（与候选窗共享基础设施）
+	mu         sync.Mutex
+	resolvedV3 *theme.ResolvedV3
+	logger     *slog.Logger
+	imgRes     imageResolver // P8 切片6：背景图/layers 解码缓存（与候选窗共享基础设施）
 }
 
 // NewToastRenderer 创建 toast 渲染器。默认 DirectWrite, 与项目主配置默认 FontEngine 一致;
@@ -38,10 +38,10 @@ func NewToastRenderer(logger *slog.Logger) *ToastRenderer {
 }
 
 // SetTheme 注入解析后的主题，用于颜色取值。
-func (r *ToastRenderer) SetTheme(rv *theme.ResolvedV25) {
+func (r *ToastRenderer) SetTheme(rv *theme.ResolvedV3) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.resolvedV25 = rv
+	r.resolvedV3 = rv
 	r.imgRes.reset() // 换主题清空位图缓存（ref 解码结果按主题失效）
 }
 
@@ -67,7 +67,7 @@ func (r *ToastRenderer) resolveToastNode() theme.RVNode {
 		TextColor: color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
 	}
 	r.mu.Lock()
-	rv := r.resolvedV25
+	rv := r.resolvedV3
 	r.mu.Unlock()
 	if rv != nil {
 		var tn *theme.ViewNode
@@ -125,8 +125,8 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 	r.mu.Lock()
 	td := r.TextDrawer()
 	var resources map[string]string
-	if r.resolvedV25 != nil {
-		resources = r.resolvedV25.Resources
+	if r.resolvedV3 != nil {
+		resources = r.resolvedV3.Resources
 	}
 	r.mu.Unlock()
 	accent := levelAccent(opts.Level)

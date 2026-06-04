@@ -6,12 +6,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ResourceRef 资源注册表条目（v2.6 P7-E）：单图（明暗通用）或 {light,dark} 双变体。
+// ResourceRef 资源注册表条目（P7-E）：单图（明暗通用）或 {light,dark} 双变体。
 // YAML / JSON 均支持两种写法：
 //   - 标量字符串："panel.png"（明暗共用同一字节）
 //   - 映射对象：{light: "panel.png", dark: "panel-dark.png"}（缺一侧回退另一侧）
 //
-// ResolveV25 按 isDark 经 PathFor 选出单路径填入 ResolvedV25.Resources——下游（imageForRef）
+// ResolveV3 按 isDark 经 PathFor 选出单路径填入 ResolvedV3.Resources——下游（imageForRef）
 // 只见解析后的单路径，与 palette light/dark 双变体对称。
 type ResourceRef struct {
 	Light string `yaml:"light,omitempty" json:"light,omitempty"`

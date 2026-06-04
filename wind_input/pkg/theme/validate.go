@@ -14,7 +14,7 @@ import (
 //
 // 循环引用 / 未知 token 在 colors 表内部已由 resolveColorTokens fail fast（refexpand.go）；
 // base 链无环由 loadThemeFileWithDir fail fast（manager.go）。本文件补齐**使用点**（views 各节点）
-// 的引用校验。失败返回带节点路径的 error，ResolveV25 据此不进入渲染。
+// 的引用校验。失败返回带节点路径的 error，ResolveV3 据此不进入渲染。
 
 // validateViews 校验合并后的 views 各节点颜色 token 引用 + 图片 ref 可达性。
 // tokens = 已解析 colors 表（含 primary + derive/auto_dark 后的全部 token）；resources = 主题资源表。

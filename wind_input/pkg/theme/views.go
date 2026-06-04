@@ -1,10 +1,10 @@
 package theme
 
-// views.go — 盒模型 View 主题 schema（v2.6 P2）。
+// views.go — 盒模型 View 主题 schema（P2）。
 //
 // 两类形态：
 //   - YAML schema（Views/ViewNode，*int 显式语义）：主题文件 views: 块的解析目标，
-//     沿用 v2.5「nil=未写回退基线，非 nil（含 0）=显式值」。
+//     nil=未写回退基线，非 nil（含 0）=显式值。
 //   - 渲染消费形态（ResolvedViews/RVNode，plain 值 + 已解析颜色）：候选窗 build 直接读取。
 //
 // 本切片（切片-0）YAML 可配字段 = margin/padding/border/background.color/font/color/labels/states；

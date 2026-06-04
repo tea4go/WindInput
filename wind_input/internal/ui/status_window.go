@@ -345,8 +345,8 @@ func (w *StatusWindow) GetConfig() StatusWindowConfig {
 	return w.config
 }
 
-// SetTheme 设置主题（P5：吃 ResolvedV25，转发给 renderer + popupMenu）
-func (w *StatusWindow) SetTheme(rv *theme.ResolvedV25) {
+// SetTheme 设置主题（P5：吃 ResolvedV3，转发给 renderer + popupMenu）
+func (w *StatusWindow) SetTheme(rv *theme.ResolvedV3) {
 	w.renderer.SetTheme(rv)
 	if w.popupMenu != nil {
 		w.popupMenu.SetTheme(rv)

@@ -98,7 +98,7 @@ func themePathPalette() theme.ResolvedPalette {
 // （refreshResolvedViews→ResolveCandidateViews+回填）。供 fingerprint / hittest 等共用。
 func applyThemePath(r *Renderer, winPad, itemPad int) {
 	v := themePathViews(winPad, itemPad)
-	r.resolvedV25 = &theme.ResolvedV25{Palette: themePathPalette(), Behavior: theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600}}
+	r.resolvedV3 = &theme.ResolvedV3{Palette: themePathPalette(), Behavior: theme.ResolvedBehavior{FontSize: 18, ShowPageNumber: true, VerticalMaxWidth: 600}}
 	r.themeViews = &v
 }
 

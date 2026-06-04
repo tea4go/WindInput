@@ -28,7 +28,7 @@ func builtinThemesDir(t *testing.T) string {
 }
 
 // TestBuiltinDefaultTheme 加载实际 build/data/themes/default 主题，
-// 确认 v2.5 路径产出合理的 ResolvedV25（颜色非零、index style 模板生效）
+// 确认 v3 路径产出合理的 ResolvedV3（颜色非零、index style 模板生效）
 func TestBuiltinDefaultTheme(t *testing.T) {
 	dir := builtinThemesDir(t)
 	m := &Manager{themeDirs: []string{dir}}
@@ -36,7 +36,7 @@ func TestBuiltinDefaultTheme(t *testing.T) {
 	if err := m.LoadTheme("default"); err != nil {
 		t.Fatalf("LoadTheme default: %v (themesDir=%s)", err, dir)
 	}
-	r := m.GetResolvedV25()
+	r := m.GetResolvedV3()
 	if r == nil {
 		t.Fatal("resolved nil")
 	}
@@ -65,7 +65,7 @@ func TestBuiltinMsimeTheme(t *testing.T) {
 	if err := m.LoadTheme("msime"); err != nil {
 		t.Fatalf("LoadTheme msime: %v", err)
 	}
-	r := m.GetResolvedV25()
+	r := m.GetResolvedV3()
 	// P7-5：序号样式/标签/强调条开关归口 views。
 	vi := r.Views.Index
 	if vi.Background.Shape == "circle" {
@@ -113,7 +113,7 @@ func TestListAvailableThemes_SkipsUnderscoreDirs(t *testing.T) {
 	}
 }
 
-// TestBuiltinDarkMode 验证 dark mode 切换走 v2.5 path 并产出 dark 变体颜色
+// TestBuiltinDarkMode 验证 dark mode 切换走 v3 path 并产出 dark 变体颜色
 func TestBuiltinDarkMode(t *testing.T) {
 	dir := builtinThemesDir(t)
 	m := &Manager{themeDirs: []string{dir}}
@@ -122,7 +122,7 @@ func TestBuiltinDarkMode(t *testing.T) {
 	if err := m.LoadTheme("default"); err != nil {
 		t.Fatalf("LoadTheme default: %v", err)
 	}
-	r := m.GetResolvedV25()
+	r := m.GetResolvedV3()
 	if ColorToHexRGB(r.Palette.Bg) != "#2D2D2D" {
 		t.Errorf("default dark bg want #2D2D2D, got %s", ColorToHexRGB(r.Palette.Bg))
 	}

@@ -31,7 +31,7 @@ base: test-base
 		t.Fatalf("LoadTheme v3-test: %v", err)
 	}
 
-	rv := m.GetResolvedV25()
+	rv := m.GetResolvedV3()
 	if rv == nil {
 		t.Fatal("resolved nil")
 	}
@@ -64,11 +64,11 @@ base: test-base
 	if err := m.LoadTheme("v3-dark"); err != nil {
 		t.Fatal(err)
 	}
-	light := m.GetResolvedV25()
+	light := m.GetResolvedV3()
 	lightBg := ColorToHexRGB(light.Palette.Bg)
 
 	m.SetDarkMode(true)
-	dark := m.GetResolvedV25()
+	dark := m.GetResolvedV3()
 	darkBg := ColorToHexRGB(dark.Palette.Bg)
 
 	if lightBg == darkBg {

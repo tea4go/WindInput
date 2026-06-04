@@ -27,7 +27,7 @@ func TestBitmapSkinTheme_JidianClassic(t *testing.T) {
 	if err := m.LoadTheme("jidian-classic"); err != nil {
 		t.Fatalf("LoadTheme jidian-classic: %v", err)
 	}
-	rv := m.GetResolvedV25()
+	rv := m.GetResolvedV3()
 	if rv == nil || rv.Views == nil {
 		t.Fatal("resolved/views nil")
 	}
@@ -151,7 +151,7 @@ func TestBitmapSkinTheme_JidianClassic(t *testing.T) {
 	// P7-E：暗色位图变体——切暗色后 panel/sel 应指向 *-dark.png（mark 单图不变）。
 	lightPanel := rv.Resources["panel"]
 	m.SetDarkMode(true)
-	dk := m.GetResolvedV25()
+	dk := m.GetResolvedV3()
 	if dk.Resources["panel"] == lightPanel {
 		t.Errorf("切暗色后 panel 应换 dark 变体, 仍为 %s", dk.Resources["panel"])
 	}

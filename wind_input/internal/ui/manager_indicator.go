@@ -181,8 +181,8 @@ func (m *Manager) LoadTheme(themeName string) error {
 		m.logger.Warn("Failed to load theme, using default", "theme", themeName, "error", err)
 	}
 
-	// Apply theme to all renderers（P5：渲染层统一吃 ResolvedV25）
-	m.applyTheme(m.themeManager.GetResolvedV25())
+	// Apply theme to all renderers（P5：渲染层统一吃 ResolvedV3）
+	m.applyTheme(m.themeManager.GetResolvedV3())
 
 	// Refresh candidate window if it's currently visible
 	if m.window != nil && m.window.IsVisible() {
@@ -194,43 +194,43 @@ func (m *Manager) LoadTheme(themeName string) error {
 }
 
 // applyTheme applies the resolved theme to all UI components
-func (m *Manager) applyTheme(rv *theme.ResolvedV25) {
+func (m *Manager) applyTheme(rv *theme.ResolvedV3) {
 	if rv == nil {
 		return
 	}
 
-	// Apply to candidate window renderer（P5-3：吃 ResolvedV25）
+	// Apply to candidate window renderer（P5-3：吃 ResolvedV3）
 	if m.renderer != nil {
 		m.renderer.SetTheme(rv)
 		m.applyPagerOverride()
 	}
 
-	// Apply to toolbar（P5-2：吃 ResolvedV25，颜色源 Palette.Toolbar；也处理工具栏内 popup menu）
+	// Apply to toolbar（P5-2：吃 ResolvedV3，颜色源 Palette.Toolbar；也处理工具栏内 popup menu）
 	if m.toolbar != nil {
 		m.toolbar.SetTheme(rv)
 	}
 
-	// Apply to popup menus via candidate window（P5-2：菜单吃 ResolvedV25）
+	// Apply to popup menus via candidate window（P5-2：菜单吃 ResolvedV3）
 	if m.window != nil {
 		m.window.SetTheme(rv)
 	}
 
-	// Apply to tooltip（P5-2：已迁移吃 ResolvedV25）
+	// Apply to tooltip（P5-2：已迁移吃 ResolvedV3）
 	if m.tooltip != nil {
 		m.tooltip.SetTheme(rv)
 	}
 
-	// Apply to unified popup menu（P5-2：菜单吃 ResolvedV25）
+	// Apply to unified popup menu（P5-2：菜单吃 ResolvedV3）
 	if m.unifiedPopupMenu != nil {
 		m.unifiedPopupMenu.SetTheme(rv)
 	}
 
-	// 应用到状态窗口（P5-6：吃 ResolvedV25，颜色源 Palette.Status）
+	// 应用到状态窗口（P5-6：吃 ResolvedV3，颜色源 Palette.Status）
 	if m.status != nil {
 		m.status.SetTheme(rv)
 	}
 
-	// 应用到 Toast 通知窗口（P5-6：吃 ResolvedV25，颜色源 Palette.Toast）
+	// 应用到 Toast 通知窗口（P5-6：吃 ResolvedV3，颜色源 Palette.Toast）
 	if m.toast != nil {
 		m.toast.SetTheme(rv)
 	}
@@ -327,7 +327,7 @@ func (m *Manager) ReapplyTheme() {
 		return
 	}
 
-	m.applyTheme(m.themeManager.GetResolvedV25())
+	m.applyTheme(m.themeManager.GetResolvedV3())
 
 	// Refresh candidate window if it's currently visible
 	if m.window != nil && m.window.IsVisible() {

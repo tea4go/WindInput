@@ -327,7 +327,7 @@ func (m *PopupMenu) showSubmenu(index int) {
 	// Create submenu sharing parent's rendering resources
 	sub := newPopupMenuShared(m)
 	sub.parentMenu = m
-	// 主题（resolvedV25）已由 newPopupMenuShared 从父菜单复制
+	// 主题（resolvedV3）已由 newPopupMenuShared 从父菜单复制
 	if err := sub.Create(); err != nil {
 		return
 	}

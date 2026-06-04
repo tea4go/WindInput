@@ -35,7 +35,7 @@ func TestResolveTokenColor(t *testing.T) {
 func TestResolveStatusColors(t *testing.T) {
 	statusBg := color.RGBA{10, 20, 30, 255}
 	statusText := color.RGBA{200, 200, 200, 255}
-	rv := &theme.ResolvedV25{
+	rv := &theme.ResolvedV3{
 		Palette: theme.ResolvedPalette{Tokens: map[string]color.Color{
 			"status_bg":   statusBg,
 			"status_text": statusText,
@@ -45,7 +45,7 @@ func TestResolveStatusColors(t *testing.T) {
 			Color:      "${status_text}",
 		}},
 	}
-	r := &StatusRenderer{resolvedV25: rv}
+	r := &StatusRenderer{resolvedV3: rv}
 
 	// views token → status_* token
 	node := r.resolveStatusNode(StatusWindowConfig{})

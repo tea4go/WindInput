@@ -25,11 +25,11 @@ type Manager struct {
 	logger          *slog.Logger
 	mu              sync.RWMutex
 	currentTheme    *Theme
-	currentThemeID  string       // Theme ID used for loading (e.g., "default", "msime")
-	currentThemeDir string       // theme.yaml 所在目录（用于背景图相对路径）
-	resolvedV25     *ResolvedV25 // 解析结果（P5：渲染层统一消费此结构；adapter/ResolvedTheme 已退役）
-	isDarkMode      bool         // Current dark mode state
-	themeDirs       []string     // Directories to search for themes
+	currentThemeID  string      // Theme ID used for loading (e.g., "default", "msime")
+	currentThemeDir string      // theme.yaml 所在目录（用于背景图相对路径）
+	resolvedV3      *ResolvedV3 // 解析结果（P5：渲染层统一消费此结构；adapter/ResolvedTheme 已退役）
+	isDarkMode      bool        // Current dark mode state
+	themeDirs       []string    // Directories to search for themes
 
 	// lastFallbackFrom 记录上次 LoadTheme 因主题不合法（非 v3 / 解析失败）而回退 default 时的
 	// 原请求主题名（一次性，经 ConsumeFallbackNotice 读取并清空）。供 UI 层弹 Toast 提示用户。
@@ -60,7 +60,7 @@ func NewManager(logger *slog.Logger) *Manager {
 		}
 		m.currentTheme = emptyTheme()
 		m.currentThemeID = "default"
-		// emptyTheme 非 v2.5，resolvedV25 保持 nil（渲染层各窗口对 nil 用内置默认色）
+		// emptyTheme 非 v3，resolvedV3 保持 nil（渲染层各窗口对 nil 用内置默认色）
 	}
 
 	return m
@@ -96,19 +96,19 @@ func (m *Manager) loadAndApply(name string) error {
 	m.currentTheme = theme
 	m.currentThemeID = name
 	m.currentThemeDir = themeDir
-	m.resolvedV25 = m.resolveTheme(theme, themeDir)
+	m.resolvedV3 = m.resolveTheme(theme, themeDir)
 	return nil
 }
 
-// resolveTheme 解析主题为 ResolvedV25（仅支持 v2.5；非 v2.5 或解析失败返回 nil）。
+// resolveTheme 解析主题为 ResolvedV3（仅支持 v3；非 v3 或解析失败返回 nil）。
 // P5：adapter/ResolvedTheme/v2 路径已退役。
-func (m *Manager) resolveTheme(t *Theme, themeDir string) *ResolvedV25 {
+func (m *Manager) resolveTheme(t *Theme, themeDir string) *ResolvedV3 {
 	return m.resolveThemeWithDark(t, themeDir, m.isDarkMode)
 }
 
 // resolveThemeWithDark 与 resolveTheme 等价，但显式接收 isDark 参数，
 // 用于在锁外执行解析时携带快照值。
-func (m *Manager) resolveThemeWithDark(t *Theme, themeDir string, isDark bool) *ResolvedV25 {
+func (m *Manager) resolveThemeWithDark(t *Theme, themeDir string, isDark bool) *ResolvedV3 {
 	if !t.HasV3Schema() {
 		// 旧 v2.5/v2.6 格式（无 colors 块）已不再支持（v3 一刀切，不兼容旧主题）。
 		// 返回 nil，由 LoadTheme 统一回退默认主题。
@@ -117,7 +117,7 @@ func (m *Manager) resolveThemeWithDark(t *Theme, themeDir string, isDark bool) *
 		}
 		return nil
 	}
-	rv, err := m.ResolveV25(t, isDark, themeDir)
+	rv, err := m.ResolveV3(t, isDark, themeDir)
 	if err != nil {
 		if m.logger != nil {
 			m.logger.Warn("v3 主题解析失败", "name", t.Meta.Name, "error", err)
@@ -170,7 +170,7 @@ func (m *Manager) LoadTheme(name string) error {
 	m.currentTheme = theme
 	m.currentThemeID = name
 	m.currentThemeDir = themeDir
-	m.resolvedV25 = rv
+	m.resolvedV3 = rv
 	m.lastFallbackFrom = fallbackFrom
 	m.mu.Unlock()
 
@@ -192,7 +192,7 @@ func (m *Manager) SetDarkMode(isDark bool) bool {
 
 	m.isDarkMode = isDark
 	if m.currentTheme != nil {
-		m.resolvedV25 = m.resolveTheme(m.currentTheme, m.currentThemeDir)
+		m.resolvedV3 = m.resolveTheme(m.currentTheme, m.currentThemeDir)
 	}
 	if m.logger != nil {
 		m.logger.Info("Dark mode changed, theme re-resolved", "isDark", isDark, "theme", m.currentThemeID)
@@ -217,7 +217,7 @@ func (m *Manager) loadThemeFile(name string) (*Theme, error) {
 // （用于背景图相对路径）。
 //
 // v3-C 求值铁律「先合并后求值」：本函数只在**原始未求值 Theme** 上做 deepMerge
-// （base 链自底向上 ⊕ self），返回的合并 Theme 交由 ResolveV25 统一求值（derive / token 展开 /
+// （base 链自底向上 ⊕ self），返回的合并 Theme 交由 ResolveV3 统一求值（derive / token 展开 /
 // 变体选取）——见 deepMergeTheme。
 func (m *Manager) loadThemeFileWithDir(name string) (*Theme, string, error) {
 	self, selfDir, err := m.loadRawThemeByName(name)
@@ -301,12 +301,12 @@ func (m *Manager) GetCurrentTheme() *Theme {
 	return m.currentTheme
 }
 
-// GetResolvedV25 returns the v2.5 resolved theme (nil 表示主题非 v2.5 或解析失败).
+// GetResolvedV3 returns the v3 resolved theme (nil 表示主题非 v3 或解析失败).
 // P5：adapter/ResolvedTheme 已退役，这是渲染层唯一的解析结果来源。
-func (m *Manager) GetResolvedV25() *ResolvedV25 {
+func (m *Manager) GetResolvedV3() *ResolvedV3 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.resolvedV25
+	return m.resolvedV3
 }
 
 // ListAvailableThemes returns a list of available theme names

@@ -247,17 +247,17 @@ prepare_data() {
     cd - >/dev/null
 
     # 主题 (对齐 build_all.ps1 ~608): 普通主题目录复制 theme.yaml + 同目录资源 (背景图等);
-    # 下划线前缀目录 (_layouts / _palettes) 是 v2.5 共享零件, 整目录递归复制。均排除 *.md。
-    # 注意: v2.5 主题 (theme.yaml 里 layout:/palette: 引用零件名) 缺了 _layouts/_palettes 会
-    # 加载失败 (日志 "主题非 v2.5 格式无法解析"), 候选窗渲染异常。
+    # 下划线前缀目录 (_base) 是 v3 隐藏基础主题, 整目录递归复制。均排除 *.md。
+    # 注意: v3 主题 (theme.yaml 里 base: 引用基础主题名) 缺了 _base 会
+    # 加载失败并回退默认主题, 候选窗按默认渲染。
     if [[ -d "$REPO_DIR/wind_input/themes" ]]; then
-        info "复制主题 (含 v2.5 共享零件 _layouts/_palettes)..."
+        info "复制主题 (含 v3 隐藏基础主题 _base)..."
         mkdir -p "$data/themes"
         for theme_dir in "$REPO_DIR/wind_input/themes"/*/; do
             local name
             name=$(basename "$theme_dir")
             if [[ "$name" == _* ]]; then
-                # v2.5 共享零件: 整目录递归复制 (保留相对路径, 排除 *.md)
+                # 隐藏基础主题: 整目录递归复制 (保留相对路径, 排除 *.md)
                 mkdir -p "$data/themes/$name"
                 ( cd "$theme_dir" && find . -type f ! -name '*.md' -print0 | while IFS= read -r -d '' rel; do
                     mkdir -p "$data/themes/$name/$(dirname "$rel")"
