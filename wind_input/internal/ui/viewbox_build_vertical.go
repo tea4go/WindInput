@@ -23,15 +23,26 @@ func (r *Renderer) buildPager(
 		return nil, nil, nil
 	}
 
-	pageFS := r.resolvedViews.FooterBar.FontSize // 页码/翻页字号 = base + views.footer_bar.font_size 偏移（无派生魔法）
-	arrowSz := maxF(8*scale, pageFS*0.65)        // chevron 视觉尺寸按字号比例（绘制内禀几何，非主题字号配置）
+	fb := r.resolvedViews.FooterBar
+	pageFS := fb.FontSize                 // 页码/翻页字号 = base + views.footer_bar.font_size 偏移（无派生魔法）
+	arrowSz := maxF(8*scale, pageFS*0.65) // chevron 视觉尺寸按字号比例（绘制内禀几何，非主题字号配置）
 	arrowW := int(arrowSz + 6*scale*2 + 0.5)
 	lineW := 1.5 * scale
 	canUp := page > 1
 	canDown := page < absTotal
 
+	// 翻页颜色可配（views.footer_bar.color）：页码 + 启用态箭头取 FooterBar.TextColor，
+	// 未配则零回归（页码=PreeditBar.TextColor、启用箭头=Index.BgColor）；禁用箭头恒为暗色（PreeditBar.TextColor）。
+	pageColor := r.resolvedViews.PreeditBar.TextColor
+	if fb.TextColor != nil {
+		pageColor = fb.TextColor
+	}
+
 	mkBtn := func(glyph GlyphKind, enabled, hovered bool) *View {
 		clr := r.resolvedViews.Index.BgColor
+		if fb.TextColor != nil {
+			clr = fb.TextColor
+		}
 		if !enabled {
 			clr = r.resolvedViews.PreeditBar.TextColor
 		}
@@ -55,7 +66,7 @@ func (r *Renderer) buildPager(
 		}
 		children = append(children, &View{
 			Text:      txt,
-			TextStyle: TextStyle{FontSize: pageFS, Color: r.resolvedViews.PreeditBar.TextColor},
+			TextStyle: TextStyle{FontSize: pageFS, Color: pageColor},
 		})
 	}
 	d := mkBtn(GlyphChevronRight, canDown, hoverPageBtn == "down")

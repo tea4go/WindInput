@@ -123,6 +123,12 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 		}
 		if isHovered && rmv.Item.Hover != nil && rmv.Item.Hover.BgColor != nil {
 			row.Background = Fill{Color: rmv.Item.Hover.BgColor}
+			// 菜单项高亮背景圆角：默认取 views.menu.item.border.radius，hover 显式 radius 则覆盖。
+			hr := rmv.Item.BorderRadius.Scaled(scale)
+			if hov := rmv.Item.Hover.BorderRadius.Scaled(scale); hov > 0 {
+				hr = hov
+			}
+			row.Border = Border{Radius: hr}
 		}
 
 		if hasChecked {
