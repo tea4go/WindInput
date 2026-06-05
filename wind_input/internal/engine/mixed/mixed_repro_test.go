@@ -203,6 +203,69 @@ func TestRecheckAutoCommit_SourceWhitelist(t *testing.T) {
 	}
 }
 
+// TestHandleTopCode_ShadowPinRespected 回归测试：顶码上屏应遵守候选调整（Shadow pin）。
+//
+// 复现场景：用户将 awut 码中排第二的「共产」移到首位，再输入「中国共产党」中的「共产」
+// 时，第 5 码触发顶码，上屏的却是原始首候选「茶道」而非调整后的「共产」。
+//
+// 根因：mixed.Engine.HandleTopCode 原实现委托给 codetableEngine.HandleTopCode，
+// 而码表子引擎在混输模式下 SkipShadow=true，其 ConvertEx 跳过 Phase 6，
+// Shadow pin 从未被应用。
+func TestHandleTopCode_ShadowPinRespected(t *testing.T) {
+	// 写一个极简码表文件：abcd 下有两个候选，茶道权重更高排首位，共产排第二
+	ctFile := filepath.Join(t.TempDir(), "test.txt")
+	ctContent := "[CodeTableHeader]\nName = test\nCodeLength = 4\n[CodeTable]\nabcd\t茶道\t1000\nabcd\t共产\t500\n"
+	if err := os.WriteFile(ctFile, []byte(ctContent), 0644); err != nil {
+		t.Fatalf("write codetable file: %v", err)
+	}
+
+	// 创建码表引擎，SkipShadow=true 模拟混输子引擎模式
+	ctCfg := codetable.DefaultConfig()
+	ctCfg.SkipShadow = true
+	ctEng := codetable.NewEngine(ctCfg, nil)
+	if err := ctEng.LoadCodeTable(ctFile); err != nil {
+		t.Fatalf("LoadCodeTable: %v", err)
+	}
+
+	// 验证自然排序下茶道确实排首位（确认测试前提）
+	rawResult := ctEng.ConvertEx("abcd", 0)
+	if len(rawResult.Candidates) < 2 {
+		t.Fatalf("预期至少 2 个候选，实际 %d 个", len(rawResult.Candidates))
+	}
+	if rawResult.Candidates[0].Text != "茶道" {
+		t.Fatalf("自然排序首候选应为「茶道」，实际为 %q", rawResult.Candidates[0].Text)
+	}
+
+	// 创建 DictManager，将「共产」pin 到 abcd 首位（模拟用户候选调整）
+	tmpDir := t.TempDir()
+	dm := dict.NewDictManager(tmpDir, tmpDir, nil)
+	if err := dm.OpenStore(filepath.Join(tmpDir, "test.db")); err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	if err := dm.Initialize(); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	t.Cleanup(func() { dm.Close() })
+	dm.SwitchSchemaFull("test", "test", 5000, 5)
+	dm.PinWord("abcd", "共产", "", 0)
+
+	// 创建混输引擎（无拼音子引擎），注入 DictManager
+	me := NewEngine(ctEng, nil, &Config{}, nil)
+	me.SetDictManager(dm)
+
+	// 触发顶码：abcd（4码）+ e（第5码）
+	commitText, newInput, shouldCommit := me.HandleTopCode("abcde")
+	if !shouldCommit {
+		t.Fatal("预期触发顶码上屏，实际未触发")
+	}
+	if newInput != "e" {
+		t.Errorf("顶码后剩余输入应为 \"e\"，实际为 %q", newInput)
+	}
+	if commitText != "共产" {
+		t.Errorf("顶码应上屏候选调整后的首选「共产」，实际上屏了 %q（Shadow pin 未生效）", commitText)
+	}
+}
+
 func TestMixedEngine_CommonWordsFromPinyinFallback(t *testing.T) {
 	engine := newRealMixedEngine(t)
 

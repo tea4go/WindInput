@@ -233,7 +233,11 @@ func (e *Engine) HandleEmptyCode(input string) (shouldClear bool, toEnglish bool
 // HandleTopCode 处理顶码
 // 混输模式下：先检查前 maxCodeLen 码是否构成合法拼音序列，
 // 若是则抑制顶码（用户可能在输入拼音，如 yans→yan+se=颜色）；
-// 若不是合法拼音（如 rcqn）则委托码表引擎执行顶码上屏。
+// 若不是合法拼音（如 rcqn）则走完整候选流水线后应用 Shadow 规则再取首选上屏。
+//
+// 注意：不能直接委托 codetableEngine.HandleTopCode，因为码表子引擎在混输模式下
+// 设置了 SkipShadow=true，其 ConvertEx 会跳过 Phase 6，导致用户通过候选调整
+// 置顶的词条（Shadow pin）无法生效，顶码上屏的仍是原始首候选而非调整后首候选。
 func (e *Engine) HandleTopCode(input string) (commitText string, newInput string, shouldCommit bool) {
 	if len(input) <= e.maxCodeLen {
 		return "", input, false
@@ -246,11 +250,47 @@ func (e *Engine) HandleTopCode(input string) (commitText string, newInput string
 		return "", input, false
 	}
 
-	// 非拼音序列，委托码表引擎执行顶码
-	if e.codetableEngine != nil {
-		return e.codetableEngine.HandleTopCode(input)
+	if e.codetableEngine == nil {
+		return "", input, false
 	}
-	return "", input, false
+
+	cfg := e.codetableEngine.GetConfig()
+	if cfg == nil || !cfg.TopCodeCommit {
+		e.logger.Debug("HandleTopCode: TopCodeCommit is disabled")
+		return "", input, false
+	}
+
+	// 完整 input 可能命中精确匹配或有更长后继 → 不顶字
+	if e.codetableEngine.HasFullInputMatch(input) || e.codetableEngine.HasLongerCode(input) {
+		e.logger.Debug("HandleTopCode: input has full/longer match, suppress topcode")
+		return "", input, false
+	}
+
+	// 取前 N 码，获取全量候选（maxCandidates=0 不截断），再由本层应用 Shadow
+	prefix := input[:e.maxCodeLen]
+	result := e.codetableEngine.ConvertEx(prefix, 0)
+	e.logger.Debug("HandleTopCode", "prefix", prefix, "candidates", len(result.Candidates))
+
+	if len(result.Candidates) == 0 {
+		e.logger.Debug("HandleTopCode: no candidates found", "prefix", prefix)
+		return "", input, false
+	}
+
+	candidates := result.Candidates
+	// 应用 Shadow 规则（置顶/删除），与 convertCodetableOnly 保持一致
+	if e.dictManager != nil {
+		if shadowLayer := e.dictManager.GetShadowProvider(); shadowLayer != nil {
+			rules := shadowLayer.GetShadowRules(prefix)
+			candidates = dict.ApplyShadowPins(candidates, rules)
+		}
+	}
+
+	if len(candidates) == 0 {
+		return "", input, false
+	}
+
+	e.logger.Debug("HandleTopCode commit", "commit", candidates[0].Text, "newInput", input[e.maxCodeLen:])
+	return candidates[0].Text, input[e.maxCodeLen:], true
 }
 
 // isPossiblePinyinSequence 判断输入是否构成合法的拼音序列。
