@@ -26,7 +26,16 @@ func (r *Renderer) buildPager(
 	fb := r.resolvedViews.FooterBar
 	pageFS := fb.FontSize                 // 页码/翻页字号 = base + views.footer_bar.font_size 偏移（无派生魔法）
 	arrowSz := maxF(8*scale, pageFS*0.65) // chevron 视觉尺寸按字号比例（绘制内禀几何，非主题字号配置）
-	arrowW := int(arrowSz + 6*scale*2 + 0.5)
+	// 箭头左右 padding 来自 views.footer_bar.padding；未配兜底现状 6（默认逐像素零回归）。
+	arrowPadL := 6.0 * scale
+	if v := fb.PadLeft.Scaled(scale); v != 0 {
+		arrowPadL = float64(v)
+	}
+	arrowPadR := 6.0 * scale
+	if v := fb.PadRight.Scaled(scale); v != 0 {
+		arrowPadR = float64(v)
+	}
+	arrowW := int(arrowSz + arrowPadL + arrowPadR + 0.5)
 	lineW := 1.5 * scale
 	canUp := page > 1
 	canDown := page < absTotal

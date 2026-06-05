@@ -50,8 +50,15 @@ func buildTooltipTree(text string, maxContentWidth float64, node theme.RVNode, s
 	if radius == 0 {
 		radius = int(4.0 * scale)
 	}
-	lineSpacing := int(2.0 * scale)
-	colGap := int(16.0 * scale)
+	// 行距/列距来自 views.tooltip（line_spacing/col_gap）；未配兜底现状 2/16（零回归）。
+	lineSpacing := node.LineSpacing.Scaled(scale)
+	if lineSpacing == 0 {
+		lineSpacing = int(2.0 * scale)
+	}
+	colGap := node.ColGap.Scaled(scale)
+	if colGap == 0 {
+		colGap = int(16.0 * scale)
+	}
 	const maxLines = 20
 	weight := node.FontWeight
 	family := node.FontFamily

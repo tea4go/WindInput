@@ -65,6 +65,12 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 		p := int(float64(menuPaddingX) * scale / 2)
 		padL, padR = p, p
 	}
+	// root 左右 padding（views.menu.root；未配=0，零回归）
+	rootPadL := rmv.Root.PadLeft.Scaled(scale)
+	rootPadR := rmv.Root.PadRight.Scaled(scale)
+	// item 上下 padding（views.menu.item；未配=0 → 行高=itemH，零回归）
+	itemPadT := rmv.Item.PadTop.Scaled(scale)
+	itemPadB := rmv.Item.PadBottom.Scaled(scale)
 	checkW := 0
 	if hasChecked {
 		checkW = int(float64(menuCheckMarkWidth) * scale)
@@ -84,7 +90,7 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 		FixedW:     width,
 		FixedH:     height,
 		Layout:     LayoutColumn,
-		Padding:    Edges{Top: padTop, Bottom: padBottom},
+		Padding:    Edges{Top: padTop, Bottom: padBottom, Left: rootPadL, Right: rootPadR},
 		Background: ir.fillFor(rmv.Root.BgColor, rmv.Root.BgImage, resources), // P8 切片6：菜单背景可带图（PaintTree 在内圆角 clip 内绘制）
 		Border:     Border{Radius: radius},
 	}
@@ -112,14 +118,15 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 			}
 		}
 
-		// item 上下 padding 不独立生效：行高由 FixedH=itemH + CrossAlign center 决定。
-		// 仅左右 padding 来自 views.menu.item，规避候选项曾踩的"上下 padding 被 FixedH 均摊"坑（见 P8 设计文档）。
+		// item 上下 padding 独立生效（仿候选项）：Padding{Top,Bottom} 缩减内容区，
+		// FixedH=itemH+padT+padB 使内容区恰为 itemH、children 在其中居中。
+		// 对称 padding 与旧版（FixedH=itemH、无上下 padding）逐像素一致；非对称不再被均摊。
 		row := &View{
-			FixedH:     itemH,
+			FixedH:     itemH + itemPadT + itemPadB,
 			Layout:     LayoutRow,
 			Stretch:    true,        // 撑满 root 宽（hover 满宽）
-			CrossAlign: AlignCenter, // check/text/arrow 在 itemH 内垂直居中
-			Padding:    Edges{Left: padL, Right: padR},
+			CrossAlign: AlignCenter, // check/text/arrow 在内容区垂直居中
+			Padding:    Edges{Top: itemPadT, Bottom: itemPadB, Left: padL, Right: padR},
 		}
 		if isHovered && rmv.Item.Hover != nil && rmv.Item.Hover.BgColor != nil {
 			row.Background = Fill{Color: rmv.Item.Hover.BgColor}

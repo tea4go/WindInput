@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "views": [
+    {
+      "view": "window",
+      "caps": {
+        "background_color": "supported",
+        "background_gradient": "reserved",
+        "background_image": "supported",
+        "border": "supported",
+        "layers": "supported",
+        "padding": "supported",
+        "shadow_blur_spread": "reserved",
+        "shadow_offset": "supported"
+      }
+    },
+    {
+      "view": "preedit_bar",
+      "caps": {
+        "background_color": "supported",
+        "background_gradient": "reserved",
+        "background_image": "supported",
+        "border": "supported",
+        "font": "supported",
+        "layers": "supported",
+        "padding": "supported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "candidate_list",
+      "caps": {
+        "background_color": "reserved",
+        "band_gap": "supported",
+        "item_spacing": "supported"
+      }
+    },
+    {
+      "view": "item",
+      "caps": {
+        "background_color": "supported",
+        "background_gradient": "reserved",
+        "background_image": "supported",
+        "border": "supported",
+        "layers": "supported",
+        "padding": "supported",
+        "state_disabled": "unsupported",
+        "state_hover": "supported",
+        "state_selected": "supported"
+      }
+    },
+    {
+      "view": "index",
+      "caps": {
+        "background_color": "supported",
+        "background_gradient": "reserved",
+        "background_shape": "supported",
+        "border": "supported",
+        "font": "supported",
+        "index_labels": "supported",
+        "padding": "supported",
+        "state_disabled": "unsupported",
+        "state_hover": "supported",
+        "state_selected": "supported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "text",
+      "caps": {
+        "font": "supported",
+        "margin": "supported",
+        "state_disabled": "unsupported",
+        "state_hover": "supported",
+        "state_selected": "supported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "comment",
+      "caps": {
+        "font": "supported",
+        "margin": "supported",
+        "state_disabled": "unsupported",
+        "state_hover": "supported",
+        "state_selected": "supported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "accent_bar",
+      "caps": {
+        "accent_bar": "supported",
+        "background_color": "supported"
+      }
+    },
+    {
+      "view": "footer_bar",
+      "caps": {
+        "font": "supported",
+        "footer_arrow_image": "supported",
+        "padding": "supported",
+        "pager": "supported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "mode_label",
+      "caps": {
+        "font": "supported",
+        "margin": "supported",
+        "padding": "supported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "status",
+      "caps": {
+        "background_color": "supported",
+        "background_gradient": "reserved",
+        "background_image": "supported",
+        "border": "supported",
+        "font": "supported",
+        "layers": "supported",
+        "padding": "supported",
+        "state_hover": "unsupported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "tooltip",
+      "caps": {
+        "background_color": "supported",
+        "background_gradient": "reserved",
+        "background_image": "supported",
+        "border": "supported",
+        "col_gap": "supported",
+        "font": "supported",
+        "layers": "supported",
+        "line_spacing": "supported",
+        "padding": "supported",
+        "state_hover": "unsupported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "toast",
+      "caps": {
+        "background_color": "supported",
+        "background_gradient": "reserved",
+        "background_image": "supported",
+        "border": "supported",
+        "font": "supported",
+        "layers": "supported",
+        "line_spacing": "supported",
+        "padding": "supported",
+        "state_hover": "unsupported",
+        "text_color": "supported",
+        "title_gap": "supported"
+      }
+    },
+    {
+      "view": "menu.root",
+      "caps": {
+        "background_color": "supported",
+        "background_image": "supported",
+        "border": "supported",
+        "layers": "supported",
+        "padding": "supported"
+      }
+    },
+    {
+      "view": "menu.item",
+      "caps": {
+        "background_color": "supported",
+        "border": "supported",
+        "font": "supported",
+        "padding": "supported",
+        "state_disabled": "supported",
+        "state_hover": "supported",
+        "text_color": "supported"
+      }
+    },
+    {
+      "view": "menu.separator",
+      "caps": {
+        "background_color": "supported"
+      }
+    },
+    {
+      "view": "toolbar",
+      "caps": {
+        "background_color": "supported",
+        "border": "supported",
+        "font": "supported",
+        "mode_states": "supported",
+        "padding": "supported",
+        "state_disabled": "unsupported",
+        "state_hover": "unsupported"
+      }
+    }
+  ]
+}

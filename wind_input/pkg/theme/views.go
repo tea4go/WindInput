@@ -119,6 +119,11 @@ type ViewNode struct {
 	PrevImage   *ViewImage      `yaml:"prev_image,omitempty"`   // 仅 footer_bar：上一页箭头图（替代内置 chevron；可 SVG + tint 随主题变色）
 	NextImage   *ViewImage      `yaml:"next_image,omitempty"`   // 仅 footer_bar：下一页箭头图
 
+	// 多行/多列布局间距（提示窗专有；nil=渲染层兜底现状值，零回归）：
+	LineSpacing *Dimension `yaml:"line_spacing,omitempty"` // 行间距（tooltip 兜底 2 / toast 兜底 4）
+	ColGap      *Dimension `yaml:"col_gap,omitempty"`      // 多列列间距（仅 tooltip，兜底 16）
+	TitleGap    *Dimension `yaml:"title_gap,omitempty"`    // 标题与正文间距（仅 toast，兜底 6）
+
 	Selected *ViewNode `yaml:"selected,omitempty"`
 	Hover    *ViewNode `yaml:"hover,omitempty"`
 	Disabled *ViewNode `yaml:"disabled,omitempty"` // P7-D：禁用态 patch（候选项暂无运行时触发器，schema 预留）
@@ -194,6 +199,7 @@ type RVNode struct {
 	BgImage                                          *RVImage  // 背景填充图（P7-C）；nil=无
 	Layers                                           []RVImage // z 层级覆盖图（P7-C）
 	PrevImage, NextImage                             *RVImage  // 仅 footer_bar：上/下翻页箭头图（替代内置 chevron，可 SVG + tint）；nil=用内置矢量箭头
+	LineSpacing, ColGap, TitleGap                    Dimension // 多行/多列布局间距（tooltip/toast 专用；零值=渲染层兜底现状）
 }
 
 // ResolvedViews 候选窗各具名 View 的解析后外观（plain 逻辑像素，渲染器直接读）。
@@ -440,6 +446,15 @@ func mergeViewNode(base, ov ViewNode) ViewNode {
 	}
 	if ov.NextImage != nil {
 		out.NextImage = ov.NextImage
+	}
+	if ov.LineSpacing != nil {
+		out.LineSpacing = ov.LineSpacing
+	}
+	if ov.ColGap != nil {
+		out.ColGap = ov.ColGap
+	}
+	if ov.TitleGap != nil {
+		out.TitleGap = ov.TitleGap
 	}
 	if ov.Selected != nil {
 		var baseSel ViewNode

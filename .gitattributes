@@ -1,3 +1,6 @@
 # 主题 golden 快照基线由测试逐字节比较，生成端用 LF。
 # 固定为 LF，避免 core.autocrlf=true 在 checkout 时转成 CRLF 导致跨机/CI 误判回归。
 wind_input/pkg/theme/testdata/golden_v3/*.txt text eol=lf
+
+# 能力声明导出 JSON 由测试逐字节比较 + 前端编辑器消费，同样固定 LF。
+docs/design/theme-capabilities.json text eol=lf

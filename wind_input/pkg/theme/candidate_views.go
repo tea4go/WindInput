@@ -54,6 +54,9 @@ func resolveViewNode(n ViewNode, resolveColor func(ColorRef) color.Color, defBg,
 		FontSize:     float64(edgeOr(n.FontSize, 0)),
 		FontWeight:   edgeOr(n.FontWeight, 0),
 		FontFamily:   n.FontFamily,
+		LineSpacing:  dimOr(n.LineSpacing, Dimension{}),
+		ColGap:       dimOr(n.ColGap, Dimension{}),
+		TitleGap:     dimOr(n.TitleGap, Dimension{}),
 	}
 	if c := resolveColor(n.Background.Color); c != nil {
 		out.BgColor = c

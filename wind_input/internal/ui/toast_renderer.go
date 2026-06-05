@@ -107,8 +107,9 @@ func (r *ToastRenderer) Render(opts ToastOptions, maxContentPx int) *image.RGBA 
 
 	titleSize := (15.0 + node.FontSize) * scale
 	bodySize := (13.0 + node.FontSize) * scale
-	lineSpacing := 4.0 * scale
-	titleGap := 6.0 * scale // 标题与正文之间额外间距
+	// 行距/标题距来自 views.toast（line_spacing/title_gap）；未配兜底现状 4/6（零回归）。
+	lineSpacing := float64(scaledOr(node.LineSpacing, 4.0, scale))
+	titleGap := float64(scaledOr(node.TitleGap, 6.0, scale)) // 标题与正文之间额外间距
 	// 左侧 accent 条参数：完全位于不透明背景内部, 不与圆角外缘相切, 避免反锯齿像素溢出到
 	// layered 窗口的透明区域产生"边缘透色"问题。
 	accentBarWidth := 4.0 * scale

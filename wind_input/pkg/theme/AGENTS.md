@@ -18,6 +18,7 @@
 | `manager.go` | `Manager`：多路径搜索加载主题、列出可用主题、返回解析后主题。`loadThemeFileWithDir` 解析 **base 单链继承**：`loadRawThemeByName` 逐级加载、检测环、自底向上 `deepMergeTheme`（先合并后求值） |
 | `merge_theme.go` | **v3-C base 继承的原始 Theme 深合并**：`deepMergeTheme`（colors tokens map 逐 key 覆盖、views 复用 mergeViews、behavior 逐指针字段覆盖、resources map 覆盖）。**V3-D：layout 合并分支已删**。求值铁律=合并作用于 raw，求值只在最终合并结果上跑一次 |
 | `default_themes.go` | `emptyTheme()`：空主题（加载失败兜底，无 colors → resolvedV3 为 nil） |
+| `capability.go` | **能力声明 schema（Capability Manifest）**：`ThemeCapabilities` 权威矩阵（view × 能力维度 → 三态 `supported`/`reserved`/`unsupported`）+ `MarshalCapabilities()` 导出仓根 `docs/design/theme-capabilities.json`。前后端**单一数据源**：编辑器据此显示/灰显/隐藏控件、引擎据此渲染/忽略。`reserved`=schema 有但渲染未实现（假字段，如 gradient/blur）；`unsupported`=该 view 概念不支持（如候选项无 disabled 业务、status 无状态）。维护纪律：改渲染时同步格子、转 `supported` 须落地真实渲染。`capability_test.go` 守护 well-formed（键/view/状态合法 + 全覆盖）+ JSON 不漂移。设计见 `docs/design/theme-capability-schema.md` |
 
 ### 几何 / 颜色 / 派生 / 求值
 | File | Description |
@@ -48,6 +49,7 @@
 - **`${name}` 引用（v3）**：colors token 值可互引 `${token}`（含隐式 `${primary}`），支持多跳 + LightDark 任意交错嵌套；循环引用与未知 token 报错（非静默）。views 节点颜色字段 `${name}` 由 `resolveColorToken`(候选窗)/各 `ResolveXxxViews`(其它窗口) 查 `ResolvedPalette.Tokens[name]`——**theme.yaml 节点 token 名须与 colors token key 完全一致**（顶层语义 `${bg}/${accent}/${selection}/${hover}/${selection_text}…` + 功能 token `${menu_*}/${tooltip_*}/${status_*}/${toast_*}/${toolbar_*}`）
 - **颜色字段类型 `ColorRef`**（= `LightDark[string]`，别名）：所有 view 颜色字段（`ViewFill.Color`/`ViewNode.Color`/`ViewBorder.Color`/`ViewShadowSpec.Color`/`ViewGradientStop.Color`/`ViewImage.Tint`·`DisabledTint`/`ToolbarButtonNode.Color`）支持**标量**(`"${token}"`/hex/transparent) **或内联 `{light,dark}`**（各分支仍可写 `${token}`，两机制可嵌套）。求值：闭包按 `pal.IsDark` `Select` 选分支后走 `resolveColorToken`。亮暗值**集中定义**仍推荐 `colors:` token；内联是一次性颜色便捷写法。merge 用 `IsZero` 判空；validate 两分支分别校验。
 - **背景图**：相对路径相对 self theme.yaml 解析；`data:` URI 原样透传；模式：nine_slice / stretch / tile / center
+- **间距字段（提示窗专有）**：`ViewNode.LineSpacing/ColGap/TitleGap *Dimension`（→ `RVNode` 同名 `Dimension`，`resolveViewNode` 填充，**不入 golden dump**——新值由 `views_spacing_test.go` 单独守护）：tooltip 行距/列距、toast 行距/标题距。nil/零值 = 消费层兜底现状（tooltip 2/16、toast 4/6，零回归）。footer 翻页箭头左右 padding **复用 `footer_bar.padding`**（兜底 6），不新增专有字段
 - **候选序号 index（P7-5 起归口 views）**：`views.index.labels` 是序号显示的**唯一来源**（字符串数组，≤10），槽位 0→序号 1、…、槽位 9→第 10 个候选（index 0）；不足 10 项或空串槽位回退默认数字（1..9,0，由 `defaultViews().Index.Labels` 基线提供），单个标签不应含 `/`（渲染器以 `/` 切分槽位）。"风格"（`1.`/`①`/`❶`…）只是编辑器侧把对应字符填入 labels 的预设。`views.index.background.shape`（`circle`\|`none`，空=none）是与 labels **正交**的序号项背景形状：`circle` 画圆形底，`none` 仅文本——序号文本始终显示。SetTheme（ui）：`IndexLabels = BuildIndexLabelsFromSlots(views.index.labels)`、`IndexStyle = (shape=="circle") ? "circle" : "text"`（内部 sentinel `"text"`=无背景）
 
 ### 主题搜索路径（优先级从高到低）

@@ -192,3 +192,13 @@ views:  { item: { border: { radius: 8 } } }                 # 局部覆盖
 - **冻结字段语义/类型变更**须迁移（升版本 + 迁移器）。
 - **新增可选字段**非破坏、无需迁移（如 gradient/blur 的渲染补全、behavior 新模块）。
 - 改 `pkg/theme`/`pkg/config` 对外接口/结构须同步对应 `AGENTS.md`。
+
+## 十二、能力声明 schema（Capability Manifest）
+
+冻结的 schema 字段渲染消费不均：有的已渲染（真能力）、有的 schema 占位但渲染未实现（假字段，如 `gradient`/`shadow.blur`）、有的对某 view 概念上无意义（如 `status` 无交互状态）。**能力声明 schema** 给出权威清单消解这种歧义，作前后端统一标准。
+
+- **真相源**：`pkg/theme/capability.go` 的 `ThemeCapabilities`（Go 权威矩阵）→ `MarshalCapabilities()` 导出 `docs/design/theme-capabilities.json`（前端编辑器消费）。
+- **三态**：`supported`（已渲染）/ `reserved`（schema 有、渲染未实现）/ `unsupported`（该 view 概念不支持）。编辑器：supported→正常控件、reserved→灰显标"未生效"、unsupported→隐藏；引擎：reserved/unsupported→忽略。
+- **维度粒度**：按用户可感知的能力单元（`padding`/`background_color`/`state_*`/`line_spacing`/`accent_bar`…，白名单见 `capability.go`），非每个 schema 叶子字段。
+- **维护纪律**：改渲染时同步对应格子；把格子转 `supported` 必须同时落地真实渲染（不得空转声明）。`capability_test.go` 守护 well-formed + JSON 不漂移。
+- 完整设计见 `theme-capability-schema.md`。

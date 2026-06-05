@@ -90,3 +90,39 @@ func TestBuildMenuTree_Geometry(t *testing.T) {
 		t.Errorf("菜单项文本应垂直居中(偏移 5), got %d", got)
 	}
 }
+
+// TestBuildMenuTree_Padding 守护 root 左右 padding 生效 + item 上下 padding 独立化（仿候选项）。
+func TestBuildMenuTree_Padding(t *testing.T) {
+	rmv := theme.ResolvedMenuViews{
+		Root: theme.RVNode{
+			BgColor:  color.RGBA{255, 255, 255, 255},
+			PadLeft:  theme.Dimension{Value: 7},
+			PadRight: theme.Dimension{Value: 7},
+		},
+		Item: theme.RVNode{
+			TextColor: color.RGBA{0, 0, 0, 255},
+			PadTop:    theme.Dimension{Value: 4},
+			PadBottom: theme.Dimension{Value: 6},
+		},
+	}
+	items := []MenuItem{{Text: "项目一"}}
+	m := fixedMeasurer{charW: 14}
+	// 无 check/arrow（hasChecked=false, hasChildren=false）；itemH=24, scale=1.0。
+	mt := buildMenuTree(items, -1, -1, false, false, rmv, 200, 80, 14.0, 24, 1.0, &imageResolver{}, nil)
+	Layout(mt.root, 0, 0, m)
+
+	row := mt.root.Children[0]
+	// root 左 padding 生效：行左缘 = root 左缘 + rootPadL(7)。
+	if got := row.Rect().Min.X - mt.root.Rect().Min.X; got != 7 {
+		t.Errorf("root 左 padding 应=7, got %d", got)
+	}
+	// item 上下 padding 独立：行高 = itemH(24) + padT(4) + padB(6) = 34。
+	if got := row.Rect().Dy(); got != 34 {
+		t.Errorf("item 行高应=itemH+padT+padB=34, got %d", got)
+	}
+	// 内容区高=itemH(24)，text(高14)在内容区居中：偏移 = padT(4) + (24-14)/2 = 9。
+	text := row.Children[0]
+	if got := text.Rect().Min.Y - row.Rect().Min.Y; got != 9 {
+		t.Errorf("text 偏移应=padT+居中=9, got %d", got)
+	}
+}
