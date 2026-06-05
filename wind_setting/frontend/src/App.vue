@@ -820,12 +820,14 @@ onUnmounted(() => {
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-actions">
-          <Button variant="outline" @click="resetCurrentPageDefaults">
-            恢复本页默认
-          </Button>
-          <Button variant="outline" @click="handleReloadConfig"
-            >重新加载</Button
-          >
+          <div class="sidebar-actions-row">
+            <Button variant="outline" @click="resetCurrentPageDefaults">
+              恢复本页
+            </Button>
+            <Button variant="outline" @click="handleReloadConfig">
+              重新加载
+            </Button>
+          </div>
           <Button
             @click="saveConfig"
             :disabled="saving || hotkeyConflicts.length > 0"

@@ -231,6 +231,14 @@
     flex-direction: column;
     gap: 6px;
   }
+  .sidebar-actions-row {
+    display: flex;
+    gap: 6px;
+  }
+  .sidebar-actions-row > * {
+    flex: 1;
+    min-width: 0;
+  }
   .sidebar-actions .btn {
     width: 100%;
     justify-content: center;
