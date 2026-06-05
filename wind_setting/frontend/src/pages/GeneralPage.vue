@@ -66,10 +66,10 @@ function openSchemaSettingsByEngine(engine: "pinyin" | "codetable") {
   else if (activeSchemaID.value) openSchemaSettings(activeSchemaID.value);
 }
 
-// 供 App.vue 查询是否有待保存的方案配置
-function hasPendingSchemaChanges(): boolean {
-  return Object.keys(pendingSchemaConfigs.value).length > 0;
-}
+// 供 App.vue 查询是否有待保存的方案配置（computed 以便父组件响应式追踪）
+const hasPendingSchemaChanges = computed(
+  () => Object.keys(pendingSchemaConfigs.value).length > 0,
+);
 
 // 供 App.vue 保存时批量提交所有暂存的方案配置
 async function flushPendingSchemaConfigs(): Promise<void> {

@@ -358,7 +358,7 @@ async function saveConfig() {
     if (isWailsEnv.value) {
       const items = diffConfigToItems(config.value, formData.value);
       const hasSchemaPending =
-        generalPageRef.value?.hasPendingSchemaChanges() ?? false;
+        generalPageRef.value?.hasPendingSchemaChanges ?? false;
       if (items.length === 0 && !hasSchemaPending) {
         toast("当前无改动");
         return;
@@ -403,7 +403,7 @@ function hasUnsavedChanges(): boolean {
   if (!isWailsEnv.value) return configChanged;
 
   const schemaSettingsChanged =
-    generalPageRef.value?.hasPendingSchemaChanges() ?? false;
+    generalPageRef.value?.hasPendingSchemaChanges ?? false;
 
   return (
     configChanged ||
@@ -847,13 +847,11 @@ onUnmounted(() => {
           <div class="sidebar-actions-row">
             <Button
               variant="outline"
-              size="sm"
               :disabled="!canResetPage"
               @click="resetCurrentPageDefaults"
             >恢复本页</Button>
             <Button
               variant="outline"
-              size="sm"
               :disabled="!canReloadPage"
               @click="handleReloadConfig"
             >重新加载</Button>
