@@ -71,13 +71,22 @@ func (v *View) paintShapes(dc *gg.Context, img *image.RGBA) {
 		c.paintShapes(dc, img)
 	}
 
-	// 描边（沿边框盒边缘，内缩半个线宽，与旧渲染器一致）
+	// 边框：用「外圆角矩形 − 内圆角矩形」的 even-odd 填充环，代替 gg 的中心描边。
+	// gg@v0.48.3 的 Stroke 存在 AA 渗色（见库内 TestStroke_*Bleed / FillThenStrokeBleed），
+	// 中心描边会致边框粗细不均；填充环只用 Fill——粗细数学上恒为 Width，仅内/外边缘各一条干净 AA。
+	// 占位与旧中心描边一致：外圈与边框盒边缘对齐，向内占据 Width 宽（[边缘, 边缘+Width]）。
 	if v.Border.Color != nil && v.Border.Width > 0 {
-		half := float64(v.Border.Width) / 2
+		bw := float64(v.Border.Width)
+		innerRad := rad - bw
+		if innerRad < 0 {
+			innerRad = 0
+		}
 		dc.SetColor(v.Border.Color)
-		dc.SetLineWidth(float64(v.Border.Width))
-		dc.DrawRoundedRectangle(x+half, y+half, w-2*half, h-2*half, rad)
-		dc.Stroke()
+		dc.DrawRoundedRectangle(x, y, w, h, rad)                      // 外圈
+		dc.DrawRoundedRectangle(x+bw, y+bw, w-2*bw, h-2*bw, innerRad) // 内圈（even-odd 挖空）
+		dc.SetFillRule(gg.FillRuleEvenOdd)
+		dc.Fill()
+		dc.SetFillRule(gg.FillRuleNonZero) // 还原默认（dc 全树共享，Fill 默认 nonzero）
 	}
 }
 
