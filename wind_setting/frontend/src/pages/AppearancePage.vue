@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { ChevronDown } from "lucide-vue-next";
+import { ChevronDown, Trash2 } from "lucide-vue-next";
 import type { Config } from "../api/settings";
 import type { ThemeInfo, ThemePreview, SystemFontInfo, ThemeServerStatus } from "../api/wails";
 import {
   startThemeServer,
   stopThemeServer,
   getThemeServerStatus,
+  deleteTheme,
+  openThemesFolder,
 } from "../api/wails";
 import {
   Select,
@@ -51,6 +53,7 @@ const emit = defineEmits<{
   themeSelect: [themeName: string];
   themeStyleChange: [themeStyle: string];
   themeImported: [themeName: string];
+  themeDeleted: [themeName: string];
 }>();
 
 const themeImportOpen = ref(false);
@@ -75,8 +78,42 @@ const themeOptions = computed(() => {
     description: theme.author ? `作者 ${theme.author}` : "暂无描述",
     version: theme.version || "",
     isActive: theme.is_active,
+    isBuiltin: theme.is_builtin,
   }));
 });
+
+// 删除主题
+const deleteConfirmOpen = ref(false);
+const deletingThemeName = ref("");
+const deleteLoading = ref(false);
+const deleteError = ref("");
+
+const deletingThemeLabel = computed(
+  () =>
+    themeOptions.value.find((t) => t.name === deletingThemeName.value)?.label ||
+    deletingThemeName.value,
+);
+
+function askDeleteTheme(name: string, event: MouseEvent) {
+  event.stopPropagation();
+  deletingThemeName.value = name;
+  deleteError.value = "";
+  deleteConfirmOpen.value = true;
+}
+
+async function confirmDeleteTheme() {
+  deleteLoading.value = true;
+  deleteError.value = "";
+  try {
+    await deleteTheme(deletingThemeName.value);
+    deleteConfirmOpen.value = false;
+    emit("themeDeleted", deletingThemeName.value);
+  } catch (e) {
+    deleteError.value = String(e);
+  } finally {
+    deleteLoading.value = false;
+  }
+}
 
 const currentThemeOption = computed(() => {
   return themeOptions.value.find(
@@ -262,9 +299,14 @@ async function copyServerURL() {
     <div class="settings-card" v-if="isWailsEnv">
       <div class="card-title card-title-row">
         <span>主题</span>
-        <Button variant="outline" size="sm" @click="themeImportOpen = true">
-          导入主题
-        </Button>
+        <div class="flex gap-2">
+          <Button variant="outline" size="sm" @click="openThemesFolder">
+            打开目录
+          </Button>
+          <Button variant="outline" size="sm" @click="themeImportOpen = true">
+            导入主题
+          </Button>
+        </div>
       </div>
       <div class="setting-item align-start" data-search-anchor="ui.theme">
         <div class="setting-info">
@@ -298,27 +340,40 @@ async function copyServerURL() {
               />
             </button>
             <div v-if="themeSelectOpen" class="theme-options">
-              <button
+              <div
                 v-for="theme in themeOptions"
                 :key="theme.name"
-                type="button"
-                class="theme-option"
-                :class="{ selected: formData.ui.theme === theme.name }"
-                @click="onThemeSelect(theme.name)"
+                class="theme-option-row"
               >
-                <div class="theme-option-title">
-                  <span class="theme-option-name">{{ theme.label }}</span>
-                  <span v-if="theme.isActive" class="theme-badge active"
-                    >当前</span
-                  >
-                </div>
-                <div class="theme-option-sub">
-                  <span>{{ theme.description }}</span>
-                  <span v-if="theme.version" class="theme-option-version"
-                    >v{{ theme.version }}</span
-                  >
-                </div>
-              </button>
+                <button
+                  type="button"
+                  class="theme-option"
+                  :class="{ selected: formData.ui.theme === theme.name }"
+                  @click="onThemeSelect(theme.name)"
+                >
+                  <div class="theme-option-title">
+                    <span class="theme-option-name">{{ theme.label }}</span>
+                    <span v-if="theme.isActive" class="theme-badge active"
+                      >当前</span
+                    >
+                  </div>
+                  <div class="theme-option-sub">
+                    <span>{{ theme.description }}</span>
+                    <span v-if="theme.version" class="theme-option-version"
+                      >v{{ theme.version }}</span
+                    >
+                  </div>
+                </button>
+                <button
+                  v-if="!theme.isBuiltin"
+                  type="button"
+                  class="theme-option-delete-btn"
+                  title="删除主题"
+                  @click="askDeleteTheme(theme.name, $event)"
+                >
+                  <Trash2 class="h-3.5 w-3.5" />
+                </button>
+              </div>
               <div v-if="themeOptions.length === 0" class="theme-option-empty">
                 暂无主题
               </div>
@@ -744,6 +799,42 @@ async function copyServerURL() {
       </DialogContent>
     </Dialog>
 
+    <!-- 删除主题确认弹框 -->
+    <Dialog
+      :open="deleteConfirmOpen"
+      @update:open="(v: boolean) => { if (!v) deleteConfirmOpen = false }"
+    >
+      <DialogContent class="sm:max-w-[360px]">
+        <DialogHeader>
+          <DialogTitle>删除主题</DialogTitle>
+          <DialogDescription>
+            确定要删除主题「{{ deletingThemeLabel }}」吗？此操作不可恢复。
+          </DialogDescription>
+        </DialogHeader>
+        <p v-if="deleteError" class="text-sm text-destructive">
+          {{ deleteError }}
+        </p>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="deleteLoading"
+            @click="deleteConfirmOpen = false"
+          >
+            取消
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            :disabled="deleteLoading"
+            @click="confirmDeleteTheme"
+          >
+            {{ deleteLoading ? "删除中…" : "确认删除" }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <ThemeImportModal
       :open="themeImportOpen"
       @update:open="themeImportOpen = $event"
@@ -951,5 +1042,41 @@ async function copyServerURL() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+/* 主题选项行：选项本体 + 右侧删除按钮 */
+.theme-option-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.theme-option-row .theme-option {
+  flex: 1;
+  min-width: 0;
+}
+
+.theme-option-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.theme-option-row:hover .theme-option-delete-btn {
+  opacity: 1;
+}
+
+.theme-option-delete-btn:hover {
+  background: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
 }
 </style>

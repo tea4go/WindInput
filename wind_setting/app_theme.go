@@ -117,6 +117,42 @@ func importThemeFromContent(content []byte, force bool) ImportThemeResult {
 	}
 }
 
+// DeleteTheme 删除用户安装的主题目录（内置主题不可删除）。
+// themeName 为主题 ID（即目录名），与 ThemeInfo.Name 对应。
+func (a *App) DeleteTheme(themeName string) error {
+	if theme.BuiltinThemeIDs[themeName] {
+		return fmt.Errorf("内置主题不可删除")
+	}
+	userThemesDir, err := config.GetThemesUserDir()
+	if err != nil {
+		return fmt.Errorf("获取用户主题目录失败: %w", err)
+	}
+	themeDir := filepath.Join(userThemesDir, themeName)
+	// 路径遮越安全检查
+	rel, err := filepath.Rel(userThemesDir, themeDir)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("非法主题路径")
+	}
+	if _, err := os.Stat(themeDir); os.IsNotExist(err) {
+		return fmt.Errorf("主题不存在: %s", themeName)
+	}
+	wailsRuntime.LogInfof(a.ctx, "[setting] 删除主题 id=%s", themeName)
+	return os.RemoveAll(themeDir)
+}
+
+// OpenThemesFolder 在系统文件管理器中打开用户主题目录。
+func (a *App) OpenThemesFolder() error {
+	userThemesDir, err := config.GetThemesUserDir()
+	if err != nil {
+		return fmt.Errorf("获取用户主题目录失败: %w", err)
+	}
+	if err := os.MkdirAll(userThemesDir, 0o755); err != nil {
+		return fmt.Errorf("创建主题目录失败: %w", err)
+	}
+	wailsRuntime.LogInfof(a.ctx, "[setting] 打开主题目录 len=%d", len(userThemesDir))
+	return shellOpen(userThemesDir)
+}
+
 // sanitizeThemeSlug 将 meta.name 转为合法的 Windows 目录名：
 // 去除非法字符（\ / : * ? " < > |），空格替换为下划线，保留其余字符。
 func sanitizeThemeSlug(name string) string {

@@ -674,6 +674,15 @@ async function onThemeImported(themeName: string) {
   await loadThemePreview(themeName);
 }
 
+async function onThemeDeleted(themeName: string) {
+  await loadThemes();
+  // 若删除的是当前主题，回退到 default
+  if (formData.value.ui.theme === themeName) {
+    formData.value.ui.theme = "default";
+    await loadThemePreview("default");
+  }
+}
+
 async function onThemeStyleChange(_themeStyle: string) {
   // Reload preview to show the correct light/dark variant
   if (formData.value.ui.theme) {
@@ -908,6 +917,7 @@ onUnmounted(() => {
           @themeSelect="onThemeSelect"
           @themeStyleChange="onThemeStyleChange"
           @themeImported="onThemeImported"
+          @themeDeleted="onThemeDeleted"
         />
 
         <DictionaryPage

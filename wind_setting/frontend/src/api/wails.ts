@@ -1026,6 +1026,14 @@ export async function importThemeFromText(
   ) as ImportThemeResult;
 }
 
+export async function deleteTheme(themeName: string): Promise<void> {
+  return (window as any).go.main.App.DeleteTheme(themeName);
+}
+
+export async function openThemesFolder(): Promise<void> {
+  return (window as any).go.main.App.OpenThemesFolder();
+}
+
 export async function getThemePreview(
   themeName: string,
   themeStyle: string = "system",
