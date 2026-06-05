@@ -80,9 +80,9 @@ func pickOnColor(c color.Color) string {
 // applyDeriveToTokens 用 primary 派生的语义色填充 colors token 表中未显式给出的语义 token（维度①）。
 // 用户显式给值的 token 不变。light/dark 两分支各自派生（同 primary、不同 isDark）。
 // 仅当 derive 启用时由调用方调用。
-func applyDeriveToTokens(tokens map[string]Color, primary, algorithm string) {
-	dl := derivePalette(primary, algorithm, false)
-	dd := derivePalette(primary, algorithm, true)
+func applyDeriveToTokens(tokens map[string]Color, primary Color, algorithm string) {
+	dl := derivePalette(primary.Light, algorithm, false)
+	dd := derivePalette(primary.Dark, algorithm, true)
 	sem := []struct {
 		name         string
 		light, dark0 string

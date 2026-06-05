@@ -19,7 +19,7 @@ type Color = LightDark[string]
 //   - 其它窗口特有色用功能前缀 token：menu_* / tooltip_* / status_* / toast_* / toolbar_*
 type PaletteSchema struct {
 	Meta     PaletteMeta      `yaml:"meta" json:"meta"`
-	Primary  string           `yaml:"primary" json:"primary"`
+	Primary  Color            `yaml:"primary" json:"primary"` // 支持标量或 {light,dark} map
 	Derive   DeriveConfig     `yaml:"derive" json:"derive"`
 	AutoDark bool             `yaml:"auto_dark" json:"auto_dark"` // 维度②：未显式给 dark 的 token 由 light 派生（默认 false）
 	Tokens   map[string]Color `yaml:"-" json:"tokens"`            // 全部扁平颜色 token（自定义 UnmarshalYAML 填充）
@@ -95,7 +95,7 @@ func (p PaletteSchema) MarshalYAML() (any, error) {
 	if p.Meta.Name != "" || p.Meta.Version != "" {
 		out["meta"] = p.Meta
 	}
-	if p.Primary != "" {
+	if !p.Primary.IsZero() {
 		out["primary"] = p.Primary
 	}
 	if p.Derive.Enabled || p.Derive.Algorithm != "" {

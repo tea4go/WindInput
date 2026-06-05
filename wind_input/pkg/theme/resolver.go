@@ -89,7 +89,7 @@ func finalizePalette(p *PaletteSchema, isDark bool) (ResolvedPalette, error) {
 		applyAutoDarkToTokens(tokens)
 	}
 
-	resolved, err := resolveColorTokens(tokens, p.Primary, isDark)
+	resolved, err := resolveColorTokens(tokens, p.Primary.Select(isDark), isDark)
 	if err != nil {
 		return ResolvedPalette{}, err
 	}

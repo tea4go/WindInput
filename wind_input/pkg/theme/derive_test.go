@@ -49,7 +49,7 @@ func TestApplyDeriveToTokens_PreservesUserValues(t *testing.T) {
 		"bg": {Light: "#ABCDEF", Dark: "#123456"}, // 用户显式
 		// accent 缺失 → 待派生
 	}
-	applyDeriveToTokens(tokens, "#4285F4", "hsl-shift")
+	applyDeriveToTokens(tokens, NewLightDark("#4285F4"), "hsl-shift")
 	if tokens["bg"].Light != "#ABCDEF" {
 		t.Errorf("user bg.light should be preserved, got %s", tokens["bg"].Light)
 	}

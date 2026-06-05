@@ -51,7 +51,7 @@ func mergePaletteSchema(base, override *PaletteSchema) *PaletteSchema {
 	if override.Meta.Name != "" {
 		out.Meta = override.Meta
 	}
-	if override.Primary != "" {
+	if !override.Primary.IsZero() {
 		out.Primary = override.Primary
 	}
 	// derive：self 显式给出（enabled 或 algorithm 非零）才覆盖；否则沿用 base。
