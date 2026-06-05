@@ -2,10 +2,12 @@
 package coordinator
 
 import (
+	"context"
 	"strings"
 
 	"github.com/huanfeng/wind_input/internal/bridge"
 	"github.com/huanfeng/wind_input/internal/clipboard"
+	"github.com/huanfeng/wind_input/internal/tooltip"
 )
 
 // handleCandidateCopy copies the candidate text at the given page-local index to clipboard.
@@ -55,6 +57,51 @@ func (c *Coordinator) handleCandidateCopyBatch(maxPages int) {
 		c.logger.Error("Failed to copy candidates batch to clipboard", "error", err)
 	} else {
 		c.logger.Debug("Candidates batch copied to clipboard", "count", len(texts), "maxPages", maxPages)
+	}
+}
+
+// handleCandidateCopyTooltip 查询指定候选的 tooltip 内容并复制到剪贴板（调试用）。
+// 与 runTooltipQuery 走同一查询逻辑，但同步执行，结果写剪贴板而非显示 tooltip。
+func (c *Coordinator) handleCandidateCopyTooltip(index int) {
+	c.mu.Lock()
+	actualIndex := (c.currentPage-1)*c.candidatesPerPage + index
+	if actualIndex < 0 || actualIndex >= len(c.candidates) {
+		c.mu.Unlock()
+		return
+	}
+	cand := c.candidates[actualIndex]
+	codeEnabled := c.config != nil && c.config.UI.Tooltip.Code.IsEnabled()
+	engineMgr := c.engineMgr
+	c.mu.Unlock()
+
+	c.tooltipMu.Lock()
+	svc := c.tooltipService
+	c.tooltipMu.Unlock()
+
+	var sections []tooltip.Section
+	if codeEnabled && engineMgr != nil {
+		if code := engineMgr.LookupCodeForText(cand.Text); code != "" {
+			sections = append(sections, tooltip.Section{
+				Label: "编码",
+				Lines: []string{code},
+			})
+		}
+	}
+	if svc != nil && svc.HasEnabledProviders() {
+		sections = append(sections, svc.Query(context.Background(), cand)...)
+	}
+	sections = tooltip.MergeChaiziPinyin(sections)
+	content := tooltip.FormatContent("", sections)
+
+	if content == "" {
+		c.logger.Debug("No tooltip content to copy", "index", index)
+		return
+	}
+
+	if err := clipboard.SetText(content); err != nil {
+		c.logger.Error("Failed to copy tooltip to clipboard", "error", err)
+	} else {
+		c.logger.Debug("Tooltip copied to clipboard", "len", len([]rune(content)))
 	}
 }
 

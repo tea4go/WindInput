@@ -387,6 +387,7 @@ func (w *CandidateWindow) handleRightClick(lParam uintptr) {
 				{ID: IDM_CANDIDATE_COPY1P, Text: "复制前1页候选"},
 				{ID: IDM_CANDIDATE_COPY2P, Text: "复制前2页候选"},
 				{ID: IDM_CANDIDATE_COPY3P, Text: "复制前3页候选"},
+				{ID: IDM_CANDIDATE_COPY_TOOLTIP, Text: "复制 Tooltip"},
 			},
 		})
 	}
@@ -447,6 +448,10 @@ func (w *CandidateWindow) handleRightClick(lParam uintptr) {
 			case IDM_CANDIDATE_COPY3P:
 				if cb.OnCopyDebugBatch != nil {
 					cb.OnCopyDebugBatch(3)
+				}
+			case IDM_CANDIDATE_COPY_TOOLTIP:
+				if cb.OnCopyDebugTooltip != nil {
+					cb.OnCopyDebugTooltip(targetIndex)
 				}
 			}
 		}

@@ -25,16 +25,17 @@ func (CandidateHoverPayload) EventType() EventType { return EvtCandidateHover }
 type CandidateContextMenuAction string
 
 const (
-	CandidateActionMoveUp         CandidateContextMenuAction = "move_up"
-	CandidateActionMoveDown       CandidateContextMenuAction = "move_down"
-	CandidateActionMoveTop        CandidateContextMenuAction = "move_top"
-	CandidateActionDelete         CandidateContextMenuAction = "delete"
-	CandidateActionResetDefault   CandidateContextMenuAction = "reset_default"
-	CandidateActionCopy           CandidateContextMenuAction = "copy"
-	CandidateActionCopyDebugBatch CandidateContextMenuAction = "copy_debug_batch" // Debug: 复制候选 batch; Index 字段复用为 maxPages
-	CandidateActionOpenSettings   CandidateContextMenuAction = "open_settings"
-	CandidateActionAbout          CandidateContextMenuAction = "about"
-	CandidateActionShowMenu       CandidateContextMenuAction = "show_unified_menu" // 空白处右键请求统一菜单; Index 字段无意义, 取屏幕坐标见上行 CmdMenuShow
+	CandidateActionMoveUp           CandidateContextMenuAction = "move_up"
+	CandidateActionMoveDown         CandidateContextMenuAction = "move_down"
+	CandidateActionMoveTop          CandidateContextMenuAction = "move_top"
+	CandidateActionDelete           CandidateContextMenuAction = "delete"
+	CandidateActionResetDefault     CandidateContextMenuAction = "reset_default"
+	CandidateActionCopy             CandidateContextMenuAction = "copy"
+	CandidateActionCopyDebugBatch   CandidateContextMenuAction = "copy_debug_batch"   // Debug: 复制候选 batch; Index 字段复用为 maxPages
+	CandidateActionCopyDebugTooltip CandidateContextMenuAction = "copy_debug_tooltip" // Debug: 复制指定候选的 Tooltip; Index 字段为页内索引
+	CandidateActionOpenSettings     CandidateContextMenuAction = "open_settings"
+	CandidateActionAbout            CandidateContextMenuAction = "about"
+	CandidateActionShowMenu         CandidateContextMenuAction = "show_unified_menu" // 空白处右键请求统一菜单; Index 字段无意义, 取屏幕坐标见上行 CmdMenuShow
 )
 
 // CandidateContextMenuPayload 用户在候选词右键菜单选了某项。

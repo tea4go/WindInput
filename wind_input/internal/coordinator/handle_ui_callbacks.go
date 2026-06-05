@@ -220,6 +220,9 @@ func (c *Coordinator) setupCandidateCallbacks() {
 		OnCopyDebugBatch: func(maxPages int) {
 			go c.handleCandidateCopyBatch(maxPages)
 		},
+		OnCopyDebugTooltip: func(index int) {
+			go c.handleCandidateCopyTooltip(index)
+		},
 		OnOpenSettings: func() {
 			// Run in goroutine to avoid blocking UI thread
 			go c.handleCandidateOpenSettings()

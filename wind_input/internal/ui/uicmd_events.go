@@ -93,6 +93,17 @@ func (m *Manager) wrapCandidateCallbacks(cb *CandidateCallback) *CandidateCallba
 		}
 	}
 
+	origCopyDebugTooltip := cb.OnCopyDebugTooltip
+	wrap.OnCopyDebugTooltip = func(index int) {
+		m.postEvent(uicmd.NewEvent(uicmd.EvtCandidateContextMenu, uicmd.CandidateContextMenuPayload{
+			Index:  int32(index),
+			Action: uicmd.CandidateActionCopyDebugTooltip,
+		}))
+		if origCopyDebugTooltip != nil {
+			origCopyDebugTooltip(index)
+		}
+	}
+
 	origOpenSettings := cb.OnOpenSettings
 	wrap.OnOpenSettings = func() {
 		m.postEvent(uicmd.NewEvent(uicmd.EvtCandidateContextMenu, uicmd.CandidateContextMenuPayload{
