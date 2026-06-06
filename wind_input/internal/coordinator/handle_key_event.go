@@ -455,20 +455,26 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 			c.clearState()
 			c.hideUI()
 
-			// Shift+letter = lowercase, letter = uppercase (CapsLock behavior)
+			// 计算实际输出字符（CapsLock ON: 无 Shift=大写，有 Shift=小写）
 			var outputKey string
 			if hasShift {
 				outputKey = strings.ToLower(key)
 			} else {
 				outputKey = strings.ToUpper(key)
 			}
-			if c.fullWidth {
-				outputKey = transform.ToFullWidth(outputKey)
+
+			// 非全角：透传给宿主，系统 CapsLock 自然产生大写字母，
+			// CAD 等依赖 WM_KEYDOWN 的快捷键可正常触发（与英文模式行为一致）
+			if !c.fullWidth {
+				// 透传前手动记录统计，因为 nil 返回不会触发 recordCommitFallback
+				c.recordCommit(outputKey, 0, -1, store.SourcePunctuation)
+				return nil
 			}
 
+			// 全角：拦截并转换为全角字符
 			return &bridge.KeyEventResult{
 				Type: bridge.ResponseTypeInsertText,
-				Text: outputKey,
+				Text: transform.ToFullWidth(outputKey),
 			}
 		}
 	}
