@@ -539,7 +539,7 @@ func (r *Renderer) buildHorizontalCandidateTree(
 		Padding:    Edges{Top: scD(rv.Window.PadTop), Right: scD(rv.Window.PadRight), Bottom: scD(rv.Window.PadBottom), Left: scD(rv.Window.PadLeft)}, // 完整遵循主题 window.padding 四边
 		Background: r.fillFor(rv.Window.BgColor, rv.Window.BgImage, rv.Window.BgGradient, scale),                                                      // P7-C：背景图来自 views.window.background.image
 		Border:     r.windowBorder(rv.Window.BorderRadius.Scaled(scale), sc, scale),
-		Shadow:     &ViewShadow{OffsetX: rv.ShadowOffsetX.Scaled(scale), OffsetY: rv.ShadowOffsetY.Scaled(scale), Color: rv.ShadowColor},
+		Shadow:     &ViewShadow{OffsetX: rv.ShadowOffsetX.Scaled(scale), OffsetY: rv.ShadowOffsetY.Scaled(scale), Blur: rv.ShadowBlur.Scaled(scale), Spread: rv.ShadowSpread.Scaled(scale), Color: rv.ShadowColor},
 		Children:   bands,
 	}
 	r.appendThemeLayers(window, rv.Window.Layers, sc) // P7-C：窗口装饰层（水印等）

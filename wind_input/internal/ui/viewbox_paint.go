@@ -10,6 +10,8 @@ package ui
 
 import (
 	"image"
+	"image/color"
+	"math"
 
 	"github.com/gogpu/gg"
 	"github.com/huanfeng/wind_input/pkg/theme"
@@ -33,9 +35,13 @@ func (v *View) paintShapes(dc *gg.Context, img *image.RGBA) {
 
 	// 投影（在底色之前）
 	if v.Shadow != nil && v.Shadow.Color != nil {
-		dc.SetColor(v.Shadow.Color)
-		dc.DrawRoundedRectangle(x+float64(v.Shadow.OffsetX), y+float64(v.Shadow.OffsetY), w, h, rad)
-		dc.Fill()
+		if v.Shadow.Blur > 0 || v.Shadow.Spread > 0 {
+			paintBlurredShadow(img, v, x, y, w, h, rad)
+		} else {
+			dc.SetColor(v.Shadow.Color)
+			dc.DrawRoundedRectangle(x+float64(v.Shadow.OffsetX), y+float64(v.Shadow.OffsetY), w, h, rad)
+			dc.Fill()
+		}
 	}
 
 	// 底色（radius=0 即普通矩形）
@@ -211,4 +217,146 @@ func modeOrStretch(m string) string {
 		return "stretch"
 	}
 	return m
+}
+
+// paintBlurredShadow 绘制带 blur/spread 的模糊投影到 dst。
+// ① 在临时画布上绘制 spread 扩散后的实心圆角矩形；② alpha 通道做 3 次方框模糊（逼近高斯）；
+// ③ 以 shadow.Color 着色后 src-over 合成到 dst（dst 存储预乘 alpha）。
+func paintBlurredShadow(dst *image.RGBA, v *View, x, y, w, h, borderRadius float64) {
+	sh := v.Shadow
+	spread := float64(sh.Spread)
+	blur := sh.Blur
+	offsetX := float64(sh.OffsetX)
+	offsetY := float64(sh.OffsetY)
+
+	// 扩散后阴影盒在 canvas 坐标中的位置与尺寸
+	boxW := w + 2*spread
+	boxH := h + 2*spread
+	boxX := x + offsetX - spread
+	boxY := y + offsetY - spread
+
+	// 临时图：阴影盒 + 四周 blur px + 2px AA 裕量
+	pad := blur + 2
+	tmpW := int(math.Ceil(boxW)) + 2*pad
+	tmpH := int(math.Ceil(boxH)) + 2*pad
+	if tmpW < 1 {
+		tmpW = 1
+	}
+	if tmpH < 1 {
+		tmpH = 1
+	}
+
+	// 临时图中阴影盒左上角（保留亚像素偏移以维持 AA 精度）
+	localX := float64(pad) + (boxX - math.Floor(boxX))
+	localY := float64(pad) + (boxY - math.Floor(boxY))
+
+	buf := make([]byte, tmpW*tmpH*4)
+	pm := gg.NewPixmapFromBuffer(buf, tmpW, tmpH)
+	tmpDc := gg.NewContextForPixmap(pm)
+	tmpImg := pm.ImageView()
+
+	tmpDc.SetColor(color.RGBA{0, 0, 0, 255})
+	tmpDc.DrawRoundedRectangle(localX, localY, boxW, boxH, borderRadius)
+	tmpDc.Fill()
+
+	// 3 次方框模糊 alpha ≈ 高斯模糊
+	for i := 0; i < 3; i++ {
+		boxBlurAlpha(tmpImg, blur)
+	}
+
+	// color.RGBA.RGBA() 返回非预乘 16-bit（>>8 = 原字节值）
+	sr32, sg32, sb32, sa32 := sh.Color.RGBA()
+	shadowR := uint32(sr32 >> 8)
+	shadowG := uint32(sg32 >> 8)
+	shadowB := uint32(sb32 >> 8)
+	shadowA := uint32(sa32 >> 8)
+
+	// 临时图左上角在 dst 中的整像素起点
+	dstX0 := int(math.Floor(boxX)) - pad
+	dstY0 := int(math.Floor(boxY)) - pad
+	dstBounds := dst.Bounds()
+
+	for ty := 0; ty < tmpH; ty++ {
+		for tx := 0; tx < tmpW; tx++ {
+			maskA := uint32(tmpImg.Pix[ty*tmpImg.Stride+tx*4+3])
+			if maskA == 0 {
+				continue
+			}
+			finalA := maskA * shadowA / 255
+			if finalA == 0 {
+				continue
+			}
+			dx := dstX0 + tx
+			dy := dstY0 + ty
+			if dx < dstBounds.Min.X || dx >= dstBounds.Max.X || dy < dstBounds.Min.Y || dy >= dstBounds.Max.Y {
+				continue
+			}
+			// 预乘源颜色，src-over 合成
+			srcR := shadowR * finalA / 255
+			srcG := shadowG * finalA / 255
+			srcB := shadowB * finalA / 255
+			srcA := finalA
+			off := dst.PixOffset(dx, dy)
+			inv := 255 - srcA
+			dst.Pix[off+0] = uint8((srcR*255 + uint32(dst.Pix[off+0])*inv) / 255)
+			dst.Pix[off+1] = uint8((srcG*255 + uint32(dst.Pix[off+1])*inv) / 255)
+			dst.Pix[off+2] = uint8((srcB*255 + uint32(dst.Pix[off+2])*inv) / 255)
+			dst.Pix[off+3] = uint8((srcA*255 + uint32(dst.Pix[off+3])*inv) / 255)
+		}
+	}
+}
+
+// boxBlurAlpha 对 img alpha 通道做一次可分离方框模糊（水平 + 垂直，O(w×h) 与 r 无关）。
+// 边界使用延伸（clamp）模式；三次调用可逼近高斯模糊。
+func boxBlurAlpha(img *image.RGBA, r int) {
+	if r <= 0 {
+		return
+	}
+	w := img.Bounds().Dx()
+	h := img.Bounds().Dy()
+	if w == 0 || h == 0 {
+		return
+	}
+	diam := 2*r + 1
+	tmp := make([]uint8, w*h)
+
+	// 水平方向滑动窗口
+	for row := 0; row < h; row++ {
+		var sum int
+		for i := -r; i <= r; i++ {
+			xi := clampInt(i, 0, w-1)
+			sum += int(img.Pix[row*img.Stride+xi*4+3])
+		}
+		for col := 0; col < w; col++ {
+			tmp[row*w+col] = uint8(sum / diam)
+			removeX := clampInt(col-r, 0, w-1)
+			addX := clampInt(col+r+1, 0, w-1)
+			sum += int(img.Pix[row*img.Stride+addX*4+3]) - int(img.Pix[row*img.Stride+removeX*4+3])
+		}
+	}
+
+	// 垂直方向滑动窗口，tmp → img alpha
+	for col := 0; col < w; col++ {
+		var sum int
+		for i := -r; i <= r; i++ {
+			yi := clampInt(i, 0, h-1)
+			sum += int(tmp[yi*w+col])
+		}
+		for row := 0; row < h; row++ {
+			img.Pix[row*img.Stride+col*4+3] = uint8(sum / diam)
+			removeY := clampInt(row-r, 0, h-1)
+			addY := clampInt(row+r+1, 0, h-1)
+			sum += int(tmp[addY*w+col]) - int(tmp[removeY*w+col])
+		}
+	}
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }

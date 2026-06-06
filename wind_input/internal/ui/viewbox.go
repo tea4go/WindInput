@@ -72,10 +72,13 @@ type Border struct {
 	Radius int
 }
 
-// ViewShadow 投影（偏移 + 颜色；无模糊，与旧渲染器 (2,2) 偏移一致）。
+// ViewShadow 投影（偏移 + 颜色 + 可选模糊/扩散）。
+// Blur/Spread > 0 时 paintShapes 使用高斯近似模糊；均为 0 时退化为旧实心偏移投影。
 type ViewShadow struct {
 	OffsetX int
 	OffsetY int
+	Blur    int
+	Spread  int
 	Color   color.Color
 }
 

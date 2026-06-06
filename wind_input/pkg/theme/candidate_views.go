@@ -150,11 +150,13 @@ func ResolveCandidateViews(views Views, pal ResolvedPalette) ResolvedViews {
 	rv.ItemSpacing = dimOr(views.CandidateList.Gap, Dimension{})
 	rv.WindowGap = dimOr(views.CandidateList.BandGap, Dimension{})
 	rv.RowGap = dimOr(views.CandidateList.RowGap, Dimension{})
-	// window 节点：投影偏移/颜色（offset_x/offset_y/color）。标量 ShadowOffset = X（X/Y 默认同值）。
+	// window 节点：投影偏移/颜色/模糊/扩散（offset_x/offset_y/color/blur/spread）。标量 ShadowOffset = X（X/Y 默认同值）。
 	if sh := views.Window.Shadow; sh != nil {
 		rv.ShadowOffsetX = dimOr(sh.OffsetX, Dimension{})
 		rv.ShadowOffsetY = dimOr(sh.OffsetY, Dimension{})
 		rv.ShadowOffset = rv.ShadowOffsetX
+		rv.ShadowBlur = dimOr(sh.Blur, Dimension{})
+		rv.ShadowSpread = dimOr(sh.Spread, Dimension{})
 		if c := resolveColorToken(sh.Color.Select(pal.IsDark), pal); c != nil {
 			rv.ShadowColor = c
 		}

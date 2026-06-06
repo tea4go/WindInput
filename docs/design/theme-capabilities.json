@@ -10,7 +10,7 @@
         "border": "supported",
         "layers": "supported",
         "padding": "supported",
-        "shadow_blur_spread": "reserved",
+        "shadow_blur_spread": "supported",
         "shadow_offset": "supported"
       }
     },

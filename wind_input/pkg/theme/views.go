@@ -250,6 +250,8 @@ type ResolvedViews struct {
 	ShadowOffset     Dimension   // 窗口投影偏移（标量，legacy；= ShadowOffsetX/Y 的同值兜底）
 	ShadowOffsetX    Dimension   // 窗口投影水平偏移（P7-E：来自 metrics.shadow.offset_x，未配=ShadowOffset）
 	ShadowOffsetY    Dimension   // 窗口投影垂直偏移（P7-E：来自 metrics.shadow.offset_y，未配=ShadowOffset）
+	ShadowBlur       Dimension   // 窗口投影模糊半径（views.window.shadow.blur；0=无模糊）
+	ShadowSpread     Dimension   // 窗口投影扩散半径（views.window.shadow.spread；0=无扩散）
 	ItemHeight       float64     // 行高（rowH = round(ItemHeight)）
 	ItemSpacing      Dimension   // 横排候选框横向间距基数（已按 isTextIndex 选定 12/16）
 	RowGap           Dimension   // 竖排候选项纵向（行）间距（来自 candidate_list.row_gap；0=紧贴）

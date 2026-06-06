@@ -88,18 +88,30 @@ func (r *Renderer) renderVerticalV2(
 }
 
 // renderTree 对已构建的候选窗 View 树执行布局 → 绘制 → 命中矩形提取。
-// 窗口根铺满画布，仅为投影偏移在右下留出空间（画布即窗口尺寸 + 投影 2px）。
+// 有 blur/spread 时四向扩展画布以容纳模糊扩散；否则仅右下留出偏移空间（向后兼容）。
 func (r *Renderer) renderTree(tree *candWindowTree) (*image.RGBA, *RenderResult) {
 	td := r.textDrawer
 	root := tree.root
-	Layout(root, 0, 0, td)
 
-	ext := 0
-	if root.Shadow != nil {
-		ext = maxInt(root.Shadow.OffsetX, root.Shadow.OffsetY)
+	// 先计算阴影四向 margin，再以 (marginLeft, marginTop) 为起点 layout。
+	// blur/spread > 0：四向扩展，offset 决定不对称量；否则退化为旧右下扩展。
+	marginLeft, marginTop, marginRight, marginBottom := 0, 0, 0, 0
+	if sh := root.Shadow; sh != nil {
+		if sh.Blur > 0 || sh.Spread > 0 {
+			base := sh.Blur + sh.Spread
+			marginLeft = base + maxInt(-sh.OffsetX, 0)
+			marginTop = base + maxInt(-sh.OffsetY, 0)
+			marginRight = base + maxInt(sh.OffsetX, 0)
+			marginBottom = base + maxInt(sh.OffsetY, 0)
+		} else {
+			marginRight = maxInt(sh.OffsetX, 0)
+			marginBottom = maxInt(sh.OffsetY, 0)
+		}
 	}
-	w := root.Rect().Dx() + ext
-	h := root.Rect().Dy() + ext
+	Layout(root, marginLeft, marginTop, td)
+
+	w := root.Rect().Dx() + marginLeft + marginRight
+	h := root.Rect().Dy() + marginTop + marginBottom
 	// 纵深防御：root 几何塌缩（异常主题）时 clamp，避免 0 尺寸画布 panic 致候选窗消失。
 	if w < 1 {
 		w = 1

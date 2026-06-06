@@ -55,7 +55,7 @@ bg=#FFFFFFFF surface=#F0F0F0FF border=#C8C8C8FF text=#1E1E1EFF textDim=#646464FF
   bg=#4285F4FF text=nil
   font: size=0.0 weight=0 family=""
 [footer_bar]
-  margin: 0dp 0dp 0dp 0dp
+  margin: 0dp 0dp 0dp 8dp
   padding: 0dp 0dp 0dp 0dp
   border: radius=0dp width=0dp color=nil
   bg=nil text=nil
