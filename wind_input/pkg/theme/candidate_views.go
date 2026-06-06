@@ -97,6 +97,16 @@ func resolveViewNode(n ViewNode, resolveColor func(ColorRef) color.Color, defBg,
 	if n.NextChar != nil {
 		out.NextChar = *n.NextChar
 	}
+	// shadow：候选窗 views.window.shadow / 简单窗口 views.status|tooltip|toast.shadow 共用此解析。
+	if sh := n.Shadow; sh != nil {
+		out.ShadowOffsetX = dimOr(sh.OffsetX, Dimension{})
+		out.ShadowOffsetY = dimOr(sh.OffsetY, Dimension{})
+		out.ShadowBlur = dimOr(sh.Blur, Dimension{})
+		out.ShadowSpread = dimOr(sh.Spread, Dimension{})
+		if c := resolveColor(sh.Color); c != nil {
+			out.ShadowColor = c
+		}
+	}
 	return out
 }
 

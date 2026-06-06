@@ -202,8 +202,27 @@ func (m *Manager) doShowCandidates(candidates []Candidate, input string, cursorP
 		if m.renderer != nil && m.renderer.GetLayout() == config.LayoutHorizontal {
 			layout = LayoutHorizontal
 		}
+		// 阴影画布四向扩展了 shadowMargin 像素，定位应以内容尺寸（不含阴影）为基准，
+		// 再把画布整体左移/上移 margin，使内容区域精确对准光标。
+		sml, smt, smr, smb := 0, 0, 0, 0
+		if renderResult != nil {
+			sml = renderResult.ShadowMarginLeft
+			smt = renderResult.ShadowMarginTop
+			smr = renderResult.ShadowMarginRight
+			smb = renderResult.ShadowMarginBottom
+		}
+		contentW := windowWidth - sml - smr
+		contentH := windowHeight - smt - smb
+		if contentW < 1 {
+			contentW = 1
+		}
+		if contentH < 1 {
+			contentH = 1
+		}
 		var showAbove bool
-		windowX, windowY, showAbove = AdjustCandidatePosition(caretX, caretY, caretHeight, windowWidth, windowHeight, layout, preference)
+		windowX, windowY, showAbove = AdjustCandidatePosition(caretX, caretY, caretHeight, contentW, contentH, layout, preference)
+		windowX -= sml
+		windowY -= smt
 		m.logger.Debug("Position adjusted", "windowX", windowX, "windowY", windowY, "showAbove", showAbove, "stickyAbove", currentStickyAbove)
 
 		// Update sticky state if we're now showing above

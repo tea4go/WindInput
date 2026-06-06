@@ -11,6 +11,28 @@ import (
 	"github.com/huanfeng/wind_input/pkg/theme"
 )
 
+// shadowMargins 返回窗口画布为投影额外预留的四向 margin（像素）。
+// blur/spread > 0 时四向扩展（与 paintBlurredShadow 的 3-sigma 公式对齐）；
+// 否则仅右下留出偏移空间（向后兼容无模糊投影）。sh==nil 或 Color==nil 时全零。
+func shadowMargins(sh *ViewShadow) (marginLeft, marginTop, marginRight, marginBottom int) {
+	if sh == nil || sh.Color == nil {
+		return
+	}
+	if sh.Blur > 0 || sh.Spread > 0 {
+		sigma := math.Sqrt(float64(sh.Blur) * float64(sh.Blur+2))
+		pad := int(math.Ceil(3*sigma)) + 2
+		base := pad + sh.Spread
+		marginLeft = base + maxInt(-sh.OffsetX, 0)
+		marginTop = base + maxInt(-sh.OffsetY, 0)
+		marginRight = base + maxInt(sh.OffsetX, 0)
+		marginBottom = base + maxInt(sh.OffsetY, 0)
+	} else {
+		marginRight = maxInt(sh.OffsetX, 0)
+		marginBottom = maxInt(sh.OffsetY, 0)
+	}
+	return
+}
+
 // refreshResolvedViews 重建 r.resolvedViews，由渲染入口 render*V2 每次调用。
 // 候选窗外观直接消费 theme 包解析结果 ResolveCandidateViews（views 已 merge defaultViews
 // 基线、几何+颜色权威）；字号/行高/竖排宽是运行时值（用户全局字号派生 + DPI scale），在此回填。
@@ -95,23 +117,7 @@ func (r *Renderer) renderTree(tree *candWindowTree) (*image.RGBA, *RenderResult)
 	root := tree.root
 
 	// 先计算阴影四向 margin，再以 (marginLeft, marginTop) 为起点 layout。
-	// blur/spread > 0：四向扩展，offset 决定不对称量；否则退化为旧右下扩展。
-	marginLeft, marginTop, marginRight, marginBottom := 0, 0, 0, 0
-	if sh := root.Shadow; sh != nil {
-		if sh.Blur > 0 || sh.Spread > 0 {
-			// 与 paintBlurredShadow 相同的公式：3-sigma 覆盖 99.7% 模糊梯度。
-			sigma := math.Sqrt(float64(sh.Blur) * float64(sh.Blur+2))
-			pad := int(math.Ceil(3*sigma)) + 2
-			base := pad + sh.Spread
-			marginLeft = base + maxInt(-sh.OffsetX, 0)
-			marginTop = base + maxInt(-sh.OffsetY, 0)
-			marginRight = base + maxInt(sh.OffsetX, 0)
-			marginBottom = base + maxInt(sh.OffsetY, 0)
-		} else {
-			marginRight = maxInt(sh.OffsetX, 0)
-			marginBottom = maxInt(sh.OffsetY, 0)
-		}
-	}
+	marginLeft, marginTop, marginRight, marginBottom := shadowMargins(root.Shadow)
 	Layout(root, marginLeft, marginTop, td)
 
 	w := root.Rect().Dx() + marginLeft + marginRight
@@ -127,7 +133,13 @@ func (r *Renderer) renderTree(tree *candWindowTree) (*image.RGBA, *RenderResult)
 	PaintTree(root, dc, img, td)
 	DrawDebugBanner(img)
 
-	res := &RenderResult{Rects: make([]CandidateRect, len(tree.items))}
+	res := &RenderResult{
+		Rects:              make([]CandidateRect, len(tree.items)),
+		ShadowMarginLeft:   marginLeft,
+		ShadowMarginTop:    marginTop,
+		ShadowMarginRight:  marginRight,
+		ShadowMarginBottom: marginBottom,
+	}
 	for i, it := range tree.items {
 		res.Rects[i] = rectOf(i, it)
 	}

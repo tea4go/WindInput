@@ -20,6 +20,11 @@ type RenderResult struct {
 	Rects        []CandidateRect // Bounding rectangles for each candidate
 	PageUpRect   *CandidateRect  // Bounding rectangle for page up button
 	PageDownRect *CandidateRect  // Bounding rectangle for page down button
+	// 阴影画布四向扩展量（像素）。blur/spread>0 时非零，用于将画布坐标还原为内容坐标。
+	ShadowMarginLeft   int
+	ShadowMarginTop    int
+	ShadowMarginRight  int
+	ShadowMarginBottom int
 }
 
 // CandidateCallback defines callbacks for candidate window interactions

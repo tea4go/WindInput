@@ -113,7 +113,7 @@ type ViewNode struct {
 	Layers     []ViewImage `yaml:"layers,omitempty"` // z 层级覆盖图（P7-C，D4）：z<0 在内容下、z>0 在上
 
 	// 仅特定节点字段（V3-D 属性归位）：
-	Shadow      *ViewShadowSpec `yaml:"shadow,omitempty"`       // 仅 window：窗口投影（offset/color 已实现，blur/spread 预留）
+	Shadow      *ViewShadowSpec `yaml:"shadow,omitempty"`       // 窗口投影（候选窗=views.window.shadow；简单窗口=views.status/tooltip/toast.shadow）
 	Gap         *Dimension      `yaml:"gap,omitempty"`          // 仅 candidate_list：横排候选项**横向**间距基数（旧 metrics.item_spacing）
 	BandGap     *Dimension      `yaml:"band_gap,omitempty"`     // 仅 candidate_list：band 间距（旧 metrics.band_gap → WindowGap）
 	RowGap      *Dimension      `yaml:"row_gap,omitempty"`      // 仅 candidate_list：竖排候选项**纵向**（行）间距；nil/0=紧贴（横排不用，横向间距走 gap）
@@ -158,7 +158,7 @@ type Views struct {
 	Menu          *MenuViews    `yaml:"menu,omitempty"`       // P4-D 弹出菜单
 }
 
-// ViewShadowSpec 结构化窗口投影（P7-E）。offset_x/offset_y/color 已实现；blur/spread 为预留字段（渲染 later）。
+// ViewShadowSpec 结构化窗口投影（P7-E）。offset_x/offset_y/color/blur/spread 均已实现。
 // V3-D：归位到 window 节点（views.window.shadow）。优先级：Shadow 非 nil 时其 offset/color
 // 覆盖 ShadowOffset 默认 + palette.Shadow；未给的子字段回退。
 type ViewShadowSpec struct {
@@ -228,6 +228,9 @@ type RVNode struct {
 	PrevImage, NextImage                             *RVImage    // 仅 footer_bar：上/下翻页箭头图（替代内置字符，可 SVG + tint）；nil=用字符
 	PrevChar, NextChar                               string      // 仅 footer_bar：上/下翻页字符；空=内置默认（❮/❯）；PrevImage/NextImage 非 nil 时不消费
 	LineSpacing, ColGap, TitleGap                    Dimension   // 多行/多列布局间距（tooltip/toast 专用；零值=渲染层兜底现状）
+	ShadowOffsetX, ShadowOffsetY                     Dimension   // 窗口投影偏移（status/tooltip/toast 由 resolveViewNode 填充）
+	ShadowBlur, ShadowSpread                         Dimension   // 投影模糊/扩散半径
+	ShadowColor                                      color.Color // nil=无投影（简单窗口不继承 palette.Shadow 默认）
 }
 
 // ResolvedViews 候选窗各具名 View 的解析后外观（plain 逻辑像素，渲染器直接读）。
