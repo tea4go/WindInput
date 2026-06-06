@@ -106,7 +106,7 @@ var ThemeCapabilities = []ViewCapability{
 		CapBackgroundGradient: CapSupported,
 	}},
 	{"preedit_bar", map[string]CapabilityStatus{
-		CapPadding: CapSupported, CapBorder: CapSupported,
+		CapPadding: CapSupported, CapMargin: CapSupported, CapBorder: CapSupported,
 		CapBackgroundColor: CapSupported, CapBackgroundImage: CapSupported, CapLayers: CapSupported,
 		CapTextColor: CapSupported, CapFont: CapSupported,
 		CapBackgroundGradient: CapSupported,
@@ -116,7 +116,7 @@ var ThemeCapabilities = []ViewCapability{
 		CapBackgroundColor: CapReserved, // ViewNode 可配，但列表 View 当前不绘制底色
 	}},
 	{"item", map[string]CapabilityStatus{
-		CapPadding: CapSupported, CapBorder: CapSupported,
+		CapPadding: CapSupported, CapMargin: CapSupported, CapBorder: CapSupported,
 		CapBackgroundColor: CapSupported, CapBackgroundImage: CapSupported, CapLayers: CapSupported,
 		CapStateSelected: CapSupported, CapStateHover: CapSupported,
 		CapStateDisabled:      CapUnsupported, // 候选项无禁用业务语义（Candidate 无 disabled 字段）
@@ -125,6 +125,8 @@ var ThemeCapabilities = []ViewCapability{
 	}},
 	{"index", map[string]CapabilityStatus{
 		CapPadding: CapSupported, CapBorder: CapSupported,
+		// margin：横排序号四边全应用；竖排固定列模式下水平间距由列宽治理，仅上下生效。
+		CapMargin:          CapSupported,
 		CapBackgroundColor: CapSupported, CapTextColor: CapSupported, CapFont: CapSupported,
 		CapBackgroundShape: CapSupported, CapIndexLabels: CapSupported,
 		CapStateSelected: CapSupported, CapStateHover: CapSupported,
@@ -153,6 +155,7 @@ var ThemeCapabilities = []ViewCapability{
 		CapFont: CapSupported, CapTextColor: CapSupported,
 		CapFooterArrowImage: CapSupported, CapPager: CapSupported,
 		CapPadding: CapSupported, // 翻页箭头左右 padding（复用 footer_bar.padding）
+		CapMargin:  CapSupported, // 翻页带外间距：仅竖排生效（横排页码内嵌候选行，无独立翻页带）
 	}},
 	{"mode_label", map[string]CapabilityStatus{
 		CapPadding: CapSupported, CapMargin: CapSupported,
@@ -188,13 +191,14 @@ var ThemeCapabilities = []ViewCapability{
 		CapBackgroundGradient: CapSupported,
 	}},
 	{"menu.item", map[string]CapabilityStatus{
-		CapPadding: CapSupported, CapBorder: CapSupported,
+		CapPadding: CapSupported, CapMargin: CapSupported, CapBorder: CapSupported,
 		CapBackgroundColor: CapSupported, CapTextColor: CapSupported, CapFont: CapSupported,
 		CapStateHover: CapSupported, CapStateDisabled: CapSupported,
 		CapStateGeometry: CapUnsupported, // 几何不随状态变（避免跳动）；色/图/渐变/边框/字体/层可覆盖
 	}},
 	{"menu.separator", map[string]CapabilityStatus{
 		CapBackgroundColor: CapSupported, // 作分隔线色
+		CapMargin:          CapSupported, // 分隔项菜单列内外间距
 	}},
 	{"toolbar", map[string]CapabilityStatus{
 		CapBackgroundColor: CapSupported, CapBorder: CapSupported, CapFont: CapSupported,

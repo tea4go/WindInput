@@ -44,6 +44,14 @@ const (
 
 某 view 的 caps 中未列出的键 = 隐式 `unsupported`（该能力对该 view 不适用）。
 
+#### `margin` 的可达性规则（通用盒模型外间距）
+
+`margin` 由父布局从**子节点**读取，故仅对**流式子节点**（某 `LayoutRow`/`LayoutColumn` 的 child）生效；**窗口根盒**（`window`/`status`/`tooltip`/`toast`/`menu.root`/`toolbar`）由各窗口定位逻辑直接放置、无父流式容器，margin 在引擎层不可消费 → 一律 `unsupported`。已接线支持：`text`/`comment`/`item`/`index`/`mode_label`/`preedit_bar`/`footer_bar`/`menu.item`/`menu.separator`。两处刻意的边不对称（实现使然，非字段缺失）：
+
+- **`text` 的 `margin.left`**：维持 lead-gap 语义——有前导序号时取序号→文字列间距，无序号则不留左间距（零回归）；T/R/B 恒生效。
+- **`index` 的水平边**：横排自然流四边全应用；竖排固定列模式下水平间距由列宽（`indexFixedW`）治理，仅上下生效。
+- **`footer_bar`**：仅竖排有独立翻页带；横排页码内嵌候选行，margin 不生效。
+
 ### view 主体（subjects）
 
 候选窗：`window` `preedit_bar` `candidate_list` `item` `index` `text` `comment` `accent_bar` `footer_bar` `mode_label`

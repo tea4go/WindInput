@@ -81,6 +81,8 @@ func (r *Renderer) buildPreeditBand(input string, cursorPos, inputH int, scale f
 	}
 	band := &View{
 		Layout: LayoutRow, CrossAlign: AlignCenter, Stretch: true, FixedH: inputH,
+		// 预编辑条四边 margin 忠实生效：窗口列内的外间距（与候选列表的留白），默认 0 零回归。
+		Margin:     nodeMargin(*pb, scale),
 		Padding:    Edges{Left: pb.PadLeft.Scaled(scale), Right: pb.PadRight.Scaled(scale)},
 		Background: r.fillFor(bgColor, pb.BgImage, pb.BgGradient), // P7-C：preedit 背景可带图/渐变
 		// 边框 color/width 忠实生效（与候选项/tooltip 统一）：未配 color=不描边（零回归）。
@@ -211,6 +213,19 @@ func effectiveNode(n theme.RVNode, selected, hover bool) theme.RVNode {
 
 // applyNodeBox 把有效节点的背景 + 边框应用到 View——**仅配置了才设**，未配=不动（纯文本/无框，零回归）。
 // index/text/comment/item 统一经此上盒模型；padding 由各自构建处控制（item 行内边距含 rail 逻辑，不在此覆盖）。
+// nodeMargin 把节点四边 margin 换算为设备像素 Edges（盒模型通用外间距）。
+// 刻意不并入 applyNodeBox：margin 是「父布局消费子节点」的属性，且序号 lead-gap、菜单等处
+// 需与结构性间距组合，故由各流式子节点 builder 显式取值——既保证 index 文本叶子不被动获得
+// margin（与圆圈序号一致），也让窗口根盒（无父流式容器）不被无意义地写入死字段。
+func nodeMargin(n theme.RVNode, scale float64) Edges {
+	return Edges{
+		Top:    n.MarginTop.Scaled(scale),
+		Right:  n.MarginRight.Scaled(scale),
+		Bottom: n.MarginBottom.Scaled(scale),
+		Left:   n.MarginLeft.Scaled(scale),
+	}
+}
+
 func (r *Renderer) applyNodeBox(v *View, eff theme.RVNode, scale float64) {
 	if eff.BgColor != nil || eff.BgImage != nil || eff.BgGradient != nil {
 		v.Background = r.fillFor(eff.BgColor, eff.BgImage, eff.BgGradient) // 优先级：底色 < 渐变 < 背景图
@@ -311,11 +326,18 @@ func (r *Renderer) buildCandidateItem(cand Candidate, sel, hov bool, st *candIte
 
 	if cand.Index >= 0 {
 		label := indexLabel(r.effectiveIndexLabels(), cand.Index, cand.IndexLabel)
+		// 序号四边 margin 忠实生效：横排自然流四边全应用；竖排固定列模式下水平间距由列宽
+		// （indexFixedW）治理，仅 Top/Bottom 生效，Left/Right 让位给列对齐数学（避免溢出错位）。
+		im := nodeMargin(effIdx, scale)
 		if st.isTextIndex {
 			// 文本序号：accent 底色是圆圈模式专属，文本模式无背景（保留 color/font/border）。
 			effIdxText := effIdx
 			effIdxText.BgColor, effIdxText.BgImage = nil, nil
-			idx := r.styleLeaf(effIdxText, label, scale, AlignStart, Edges{})
+			textIm := im
+			if st.indexFixedW > 0 {
+				textIm.Left, textIm.Right = 0, 0
+			}
+			idx := r.styleLeaf(effIdxText, label, scale, AlignStart, textIm)
 			if st.indexFixedW > 0 {
 				idx.FixedW = st.indexFixedW // 竖排：固定列宽使各行候选文字对齐
 			}
@@ -323,22 +345,30 @@ func (r *Renderer) buildCandidateItem(cand Candidate, sel, hov bool, st *candIte
 		} else {
 			circle := r.buildIndexCircle(effIdx, label, st.indexCircleD, scale)
 			if st.indexFixedW > 0 {
-				// 竖排：圆圈在固定列内左对齐 + 右侧留白补足列宽（跨行对齐）。
+				// 竖排：圆圈在固定列内左对齐 + 右侧留白补足列宽（跨行对齐）；序号 margin 仅 T/B。
 				leftM := sc(3)
 				rightM := st.indexFixedW - st.indexCircleD - leftM
 				if rightM < 0 {
 					rightM = 0
 				}
-				circle.Margin = Edges{Left: leftM, Right: rightM}
+				circle.Margin = Edges{Left: leftM, Right: rightM, Top: im.Top, Bottom: im.Bottom}
+			} else {
+				circle.Margin = im // 横排：序号四边 margin 全应用
 			}
 			children = append(children, circle)
 		}
 	}
 
 	// 候选文字（颜色/字重来自 text 自身状态）。横排自然宽；竖排截断到 availText。
-	textMargin := Edges{}
+	// margin 四边忠实生效（盒模型通用）：T/R/B 恒应用；Left 维持 lead-gap 语义——
+	// 仅当有前导序号时取列间距 st.indexMarginRight(= text.margin.left)，无序号则不留左间距（零回归）。
+	textMargin := Edges{
+		Top:    effText.MarginTop.Scaled(scale),
+		Right:  effText.MarginRight.Scaled(scale),
+		Bottom: effText.MarginBottom.Scaled(scale),
+	}
 	if len(children) > 0 {
-		textMargin = Edges{Left: st.indexMarginRight}
+		textMargin.Left = st.indexMarginRight
 	}
 	textStr := candidateDisplayText(cand, r.config.CmdbarPrefix)
 	if availText > 0 {
@@ -347,7 +377,14 @@ func (r *Renderer) buildCandidateItem(cand Candidate, sel, hov bool, st *candIte
 	children = append(children, r.styleLeaf(effText, textStr, scale, AlignStart, textMargin))
 
 	if cand.Comment != "" {
-		children = append(children, r.styleLeaf(effCmt, cand.Comment, scale, AlignStart, Edges{Left: st.commentMarginL}))
+		// 注释 margin 四边全量：Left=文字→注释列间距(commentMarginL=comment.margin.left)，T/R/B 恒应用。
+		cmtMargin := Edges{
+			Top:    effCmt.MarginTop.Scaled(scale),
+			Right:  effCmt.MarginRight.Scaled(scale),
+			Bottom: effCmt.MarginBottom.Scaled(scale),
+			Left:   st.commentMarginL,
+		}
+		children = append(children, r.styleLeaf(effCmt, cand.Comment, scale, AlignStart, cmtMargin))
 	}
 
 	// 强调条占位元素：rail 在所有行占据左留白（保持列对齐），仅选中行绘制强调条；内容排在 rail 右侧。
@@ -360,6 +397,9 @@ func (r *Renderer) buildCandidateItem(cand Candidate, sel, hov bool, st *candIte
 		CrossAlign: AlignCenter,
 		Stretch:    st.stretch,
 		FixedH:     st.rowH,
+		// item 四边 margin 忠实生效（盒模型通用）：逐候选外间距，默认 0 零回归；
+		// 与候选列表 Gap/item_spacing 正交叠加（各自独立调距）。状态不改几何故取基态 margin。
+		Margin: Edges{Top: effItem.MarginTop.Scaled(scale), Right: effItem.MarginRight.Scaled(scale), Bottom: effItem.MarginBottom.Scaled(scale), Left: effItem.MarginLeft.Scaled(scale)},
 		// 四向 padding 真实生效（横竖一致）：左 padding 走 itemPadLeft（有强调条时让位给 rail）。
 		Padding:  Edges{Top: st.itemPadTop, Right: st.itemPadRight, Bottom: st.itemPadBottom, Left: st.itemPadLeft},
 		Children: itemChildren,

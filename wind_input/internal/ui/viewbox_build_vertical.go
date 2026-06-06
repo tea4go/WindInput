@@ -252,7 +252,10 @@ func (r *Renderer) buildVerticalCandidateTree(
 		bands = append(bands, &View{
 			Layout:     LayoutRow,
 			CrossAlign: AlignCenter,
-			Children:   pagerChildren,
+			// 翻页条四边 margin 忠实生效（窗口列内的底部翻页带外间距），默认 0 零回归。
+			// 横排无独立翻页带（页码内嵌候选行），footer_bar margin 仅竖排生效。
+			Margin:   nodeMargin(rv.FooterBar, scale),
+			Children: pagerChildren,
 		})
 	}
 

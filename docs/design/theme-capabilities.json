@@ -23,6 +23,7 @@
         "border": "supported",
         "font": "supported",
         "layers": "supported",
+        "margin": "supported",
         "padding": "supported",
         "text_color": "supported"
       }
@@ -44,6 +45,7 @@
         "background_image": "supported",
         "border": "supported",
         "layers": "supported",
+        "margin": "supported",
         "padding": "supported",
         "state_disabled": "unsupported",
         "state_geometry": "unsupported",
@@ -60,6 +62,7 @@
         "border": "supported",
         "font": "supported",
         "index_labels": "supported",
+        "margin": "supported",
         "padding": "supported",
         "state_disabled": "unsupported",
         "state_geometry": "unsupported",
@@ -114,6 +117,7 @@
       "caps": {
         "font": "supported",
         "footer_arrow_image": "supported",
+        "margin": "supported",
         "padding": "supported",
         "pager": "supported",
         "text_color": "supported"
@@ -191,6 +195,7 @@
         "background_color": "supported",
         "border": "supported",
         "font": "supported",
+        "margin": "supported",
         "padding": "supported",
         "state_disabled": "supported",
         "state_geometry": "unsupported",
@@ -201,7 +206,8 @@
     {
       "view": "menu.separator",
       "caps": {
-        "background_color": "supported"
+        "background_color": "supported",
+        "margin": "supported"
       }
     },
     {

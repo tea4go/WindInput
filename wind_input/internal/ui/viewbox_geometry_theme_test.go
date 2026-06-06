@@ -246,6 +246,66 @@ func TestVerticalTextIndexPadding(t *testing.T) {
 	}
 }
 
+// TestMarginWiring 守护 margin 作为通用盒模型能力在各流式子节点忠实生效：
+// item/index/text/comment（横排）+ preedit_bar/footer_bar（竖排）。运行时 patch margin
+// 避免改几何指纹 golden；text 的 Left 维持 lead-gap（= text.margin.left，有前导序号时取列间距）。
+func TestMarginWiring(t *testing.T) {
+	mk := func(layout config.CandidateLayout) *Renderer {
+		cfg := parityConfig()
+		cfg.Layout = layout
+		cfg.IndexStyle = "text" // 序号为文本叶子，item.Children = [index, text, comment]
+		cfg.HasAccentBar = false
+		r := NewRenderer(cfg)
+		v := themePathViews(6, 8)
+		r.resolvedV3 = &theme.ResolvedV3{Palette: themePathPalette(), Behavior: theme.ResolvedBehavior{FontSize: 18, VerticalMaxWidth: 600}}
+		r.themeViews = &v
+		r.refreshResolvedViews()
+		return r
+	}
+
+	// ---- 横排：item / index / text / comment 四边 margin ----
+	r := mk(config.LayoutHorizontal)
+	if r.TextDrawer() == nil {
+		t.Skip("无可用文本后端")
+	}
+	r.resolvedViews.Item.MarginTop, r.resolvedViews.Item.MarginRight = theme.Dp(3), theme.Dp(4)
+	r.resolvedViews.Item.MarginBottom, r.resolvedViews.Item.MarginLeft = theme.Dp(5), theme.Dp(6)
+	r.resolvedViews.Index.MarginTop, r.resolvedViews.Index.MarginLeft = theme.Dp(7), theme.Dp(8) // 横排序号四边全应用
+	r.resolvedViews.Text.MarginTop, r.resolvedViews.Text.MarginRight = theme.Dp(9), theme.Dp(10)
+	r.resolvedViews.Text.MarginBottom, r.resolvedViews.Text.MarginLeft = theme.Dp(11), theme.Dp(12) // Left=12 → 序号→文字列间距
+	r.resolvedViews.Comment.MarginTop, r.resolvedViews.Comment.MarginLeft = theme.Dp(13), theme.Dp(14)
+
+	tree := r.buildHorizontalCandidateTree([]Candidate{{Text: "中", Index: 1, Comment: "x"}}, "", -1, 1, 1, 0, -1, "")
+	Layout(tree.root, 0, 0, r.textDrawer)
+	item := tree.items[0]
+	if got := item.Margin; got != (Edges{Top: 3, Right: 4, Bottom: 5, Left: 6}) {
+		t.Errorf("item.Margin 应忠实生效, got %+v", got)
+	}
+	if got := item.Children[0].Margin; got != (Edges{Top: 7, Left: 8}) { // 横排序号
+		t.Errorf("index.Margin 横排四边应生效, got %+v", got)
+	}
+	if got := item.Children[1].Margin; got != (Edges{Top: 9, Right: 10, Bottom: 11, Left: 12}) { // text：Left=lead-gap=12
+		t.Errorf("text.Margin 四边应生效(Left=lead-gap), got %+v", got)
+	}
+	if got := item.Children[2].Margin; got != (Edges{Top: 13, Left: 14}) { // comment
+		t.Errorf("comment.Margin 应生效, got %+v", got)
+	}
+
+	// ---- 竖排：preedit_bar / footer_bar 四边 margin ----
+	rv := mk(config.LayoutVertical)
+	rv.resolvedViews.PreeditBar.MarginTop, rv.resolvedViews.PreeditBar.MarginLeft = theme.Dp(2), theme.Dp(3)
+	rv.resolvedViews.FooterBar.MarginTop, rv.resolvedViews.FooterBar.MarginBottom = theme.Dp(4), theme.Dp(5)
+	vt := rv.buildVerticalCandidateTree([]Candidate{{Text: "中", Index: 1}, {Text: "国", Index: 2}}, "zhong", 5, 1, 2, 0, -1, "")
+	Layout(vt.root, 0, 0, rv.textDrawer)
+	if got := vt.root.Children[0].Margin; got != (Edges{Top: 2, Left: 3}) { // 第一个 band = preedit
+		t.Errorf("preedit_bar.Margin 应生效, got %+v", got)
+	}
+	footer := vt.root.Children[len(vt.root.Children)-1] // 末 band = 翻页带
+	if got := footer.Margin; got != (Edges{Top: 4, Bottom: 5}) {
+		t.Errorf("footer_bar.Margin 竖排应生效, got %+v", got)
+	}
+}
+
 // TestPreeditBorderColorWidth 守护预编辑条边框 color/width 忠实生效（buildPreeditBand 接通）：
 // 此前只取 Radius，配了 color/width 不渲染（同 menu.item 旧病）。
 func TestPreeditBorderColorWidth(t *testing.T) {

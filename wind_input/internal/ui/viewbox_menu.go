@@ -100,7 +100,8 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 	for i := range items {
 		item := items[i]
 		if item.Separator {
-			sep := &View{FixedH: sepH, Stretch: true}
+			// 分隔项四边 margin 忠实生效（菜单列内外间距），默认 0 零回归。
+			sep := &View{FixedH: sepH, Stretch: true, Margin: nodeMargin(rmv.Separator, scale)}
 			root.Children = append(root.Children, sep)
 			mt.separators = append(mt.separators, sep)
 			continue
@@ -126,7 +127,9 @@ func buildMenuTree(items []MenuItem, hoverIdx, submenuIdx int, hasChecked, hasCh
 			Layout:     LayoutRow,
 			Stretch:    true,        // 撑满 root 宽（hover 满宽）
 			CrossAlign: AlignCenter, // check/text/arrow 在内容区垂直居中
-			Padding:    Edges{Top: itemPadT, Bottom: itemPadB, Left: padL, Right: padR},
+			// 菜单项四边 margin 忠实生效（菜单列内逐项外间距），默认 0 零回归。
+			Margin:  nodeMargin(rmv.Item, scale),
+			Padding: Edges{Top: itemPadT, Bottom: itemPadB, Left: padL, Right: padR},
 		}
 		// 菜单项边框（color/width/radius）：基态读 views.menu.item.border，hover 态逐字段覆盖。
 		// color 未配=不描边（零回归，与候选项/tooltip 统一）；radius 始终生效以裁 hover 满宽高亮圆角。
