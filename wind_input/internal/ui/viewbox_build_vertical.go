@@ -138,8 +138,8 @@ func (r *Renderer) buildVerticalCandidateTree(
 	indexD := rv.Index.FontSize + maxF(float64(scD(rv.Index.PadTop)+scD(rv.Index.PadBottom)), float64(scD(rv.Index.PadLeft)+scD(rv.Index.PadRight))) // 四边 padding 都参与，保持正圆
 	indexMarginL := scD(rv.Index.MarginLeft)
 	indexMarginR := scD(rv.Index.MarginRight)
-	indexAreaW := int(indexD+6*scale+0.5) + indexMarginL + indexMarginR
-	indexContentW := int(indexD + 6*scale + 0.5) // 圆圈模式：内容宽=不含 margin 的原始值
+	indexAreaW := int(indexD+0.5) + indexMarginL + indexMarginR
+	indexContentW := int(indexD + 0.5) // 圆圈模式：内容宽=直径（margin 另计）
 	if isTextIndex {
 		// 文本序号列宽按字形测量收紧：取最宽序号标签实际宽 + 小留白，紧凑且各行候选文字对齐。
 		// （旧写法 sc(20×scale) 既偏宽、又重复乘 scale 致高 DPI 失真。）
@@ -215,7 +215,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 	st := &candItemStyle{
 		isTextIndex:      isTextIndex,
 		indexCircleD:     int(indexD + 0.5),
-		indexFixedW:      indexAreaW,   // 竖排：固定列宽使各行候选文字对齐（含 margin）
+		indexFixedW:      indexAreaW,    // 竖排：固定列宽使各行候选文字对齐（含 margin）
 		indexContentW:    indexContentW, // 内容+padding 宽（不含 margin）
 		indexMarginRight: indexMarginRight,
 		commentMarginL:   commentMarginLeft,
@@ -269,7 +269,7 @@ func (r *Renderer) buildVerticalCandidateTree(
 		CrossAlign: AlignCenter, // 让底部翻页行水平居中
 		Gap:        rv.WindowGap.Scaled(scale),
 		Padding:    Edges{Top: scD(rv.Window.PadTop), Right: scD(rv.Window.PadRight), Bottom: scD(rv.Window.PadBottom), Left: scD(rv.Window.PadLeft)}, // 完整遵循主题 window.padding 四边
-		Background: r.fillFor(r.resolvedViews.Window.BgColor, r.resolvedViews.Window.BgImage, r.resolvedViews.Window.BgGradient),                      // P7-C：背景图来自 views.window.background.image
+		Background: r.fillFor(r.resolvedViews.Window.BgColor, r.resolvedViews.Window.BgImage, r.resolvedViews.Window.BgGradient, scale),               // P7-C：背景图来自 views.window.background.image
 		Border:     r.windowBorder(rv.Window.BorderRadius.Scaled(scale), sc, scale),
 		Shadow:     &ViewShadow{OffsetX: rv.ShadowOffsetX.Scaled(scale), OffsetY: rv.ShadowOffsetY.Scaled(scale), Color: r.resolvedViews.ShadowColor},
 		Children:   bands,

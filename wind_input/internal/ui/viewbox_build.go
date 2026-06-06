@@ -84,7 +84,7 @@ func (r *Renderer) buildPreeditBand(input string, cursorPos, inputH int, scale f
 		// 预编辑条四边 margin 忠实生效：窗口列内的外间距（与候选列表的留白），默认 0 零回归。
 		Margin:     nodeMargin(*pb, scale),
 		Padding:    Edges{Left: pb.PadLeft.Scaled(scale), Right: pb.PadRight.Scaled(scale)},
-		Background: r.fillFor(bgColor, pb.BgImage, pb.BgGradient), // P7-C：preedit 背景可带图/渐变
+		Background: r.fillFor(bgColor, pb.BgImage, pb.BgGradient, scale), // P7-C：preedit 背景可带图/渐变
 		// 边框 color/width 忠实生效（与候选项/tooltip 统一）：未配 color=不描边（零回归）。
 		Border:   Border{Radius: pb.BorderRadius.Scaled(scale), Color: pb.BorderColor, Width: pb.BorderWidth.Scaled(scale)},
 		Children: children,
@@ -228,7 +228,7 @@ func nodeMargin(n theme.RVNode, scale float64) Edges {
 
 func (r *Renderer) applyNodeBox(v *View, eff theme.RVNode, scale float64) {
 	if eff.BgColor != nil || eff.BgImage != nil || eff.BgGradient != nil {
-		v.Background = r.fillFor(eff.BgColor, eff.BgImage, eff.BgGradient) // 优先级：底色 < 渐变 < 背景图
+		v.Background = r.fillFor(eff.BgColor, eff.BgImage, eff.BgGradient, scale) // 优先级：底色 < 渐变 < 背景图
 	}
 	if eff.BorderColor != nil || eff.BorderWidth != (theme.Dimension{}) || eff.BorderRadius != (theme.Dimension{}) {
 		v.Border = Border{Color: eff.BorderColor, Width: eff.BorderWidth.Scaled(scale), Radius: eff.BorderRadius.Scaled(scale)}
@@ -261,7 +261,7 @@ func (r *Renderer) buildIndexCircle(eff theme.RVNode, label string, d int, scale
 	return &View{
 		FixedW:     d,
 		FixedH:     d,
-		Background: r.fillFor(eff.BgColor, eff.BgImage, eff.BgGradient),
+		Background: r.fillFor(eff.BgColor, eff.BgImage, eff.BgGradient, scale),
 		Border:     Border{Radius: radius, Color: eff.BorderColor, Width: eff.BorderWidth.Scaled(scale)},
 		Layout:     LayoutStack,
 		Children: []*View{{
@@ -343,8 +343,8 @@ func (r *Renderer) buildCandidateItem(cand Candidate, sel, hov bool, st *candIte
 		} else {
 			circle := r.buildIndexCircle(effIdx, label, st.indexCircleD, scale)
 			if st.indexFixedW > 0 {
-				// 竖排：圆圈在固定列内左对齐 + 右侧留白补足列宽；L/R margin 叠加到定位间距上。
-				leftM := sc(3) + im.Left
+				// 竖排：圆圈在固定列内，margin.left/right 直接决定定位间距（无硬编码偏置）。
+				leftM := im.Left
 				rightM := st.indexFixedW - st.indexCircleD - leftM
 				if rightM < 0 {
 					rightM = 0
@@ -537,7 +537,7 @@ func (r *Renderer) buildHorizontalCandidateTree(
 		Layout:     LayoutColumn,
 		Gap:        rv.WindowGap.Scaled(scale),
 		Padding:    Edges{Top: scD(rv.Window.PadTop), Right: scD(rv.Window.PadRight), Bottom: scD(rv.Window.PadBottom), Left: scD(rv.Window.PadLeft)}, // 完整遵循主题 window.padding 四边
-		Background: r.fillFor(rv.Window.BgColor, rv.Window.BgImage, rv.Window.BgGradient),                                                             // P7-C：背景图来自 views.window.background.image
+		Background: r.fillFor(rv.Window.BgColor, rv.Window.BgImage, rv.Window.BgGradient, scale),                                                      // P7-C：背景图来自 views.window.background.image
 		Border:     r.windowBorder(rv.Window.BorderRadius.Scaled(scale), sc, scale),
 		Shadow:     &ViewShadow{OffsetX: rv.ShadowOffsetX.Scaled(scale), OffsetY: rv.ShadowOffsetY.Scaled(scale), Color: rv.ShadowColor},
 		Children:   bands,
