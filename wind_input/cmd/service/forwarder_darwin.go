@@ -56,7 +56,8 @@ type darwinForwarder struct {
 	// 用户翻页器显示覆盖 (来自 CmdCandidatesConfig)。空=Default=跟随主题 behavior。
 	// 因 refreshThemeIfNeeded→SetTheme 会把主题 behavior 的 pager 值写回 renderer,
 	// 每次 renderAndPush 都需在 refreshThemeIfNeeded 之后重应用此覆盖, 否则被主题值盖掉。
-	pagerMode config.PagerDisplayMode
+	pagerBarDisplay   config.PagerBarDisplay
+	pageNumberDisplay config.PageNumberDisplay
 
 	// 主题: forwarder 在服务进程内自持 theme.Manager (exeDir/data/themes 可解析),
 	// 按 config 文件 mtime 检测 ui.theme / theme_style 变化并 renderer.SetTheme 重应用;
@@ -629,7 +630,8 @@ func (f *darwinForwarder) applyCandidatesConfig(p uicmd.CandidatesConfigPayload)
 	f.renderer.SetCmdbarPrefix(p.CmdbarPrefix)
 	// 翻页器显示覆盖: 仅记模式, 实际写 renderer 在 renderAndPush 的 applyPagerOverride
 	// (那里在 refreshThemeIfNeeded→SetTheme 之后, 避免被主题 behavior 值盖掉)。
-	f.pagerMode = config.PagerDisplayMode(p.PagerDisplayMode)
+	f.pagerBarDisplay = config.PagerBarDisplay(p.PagerBarDisplay)
+	f.pageNumberDisplay = config.PageNumberDisplay(p.PageNumberDisplay)
 	// 配置可能在候选框已显示时变更 (设置界面实时改), 立即重渲染当前帧。
 	f.mu.Lock()
 	visible := f.visible
@@ -642,17 +644,25 @@ func (f *darwinForwarder) applyCandidatesConfig(p uicmd.CandidatesConfigPayload)
 // applyPagerOverride 按用户翻页器显示模式覆盖 renderer 的翻页区/页码显示。
 // 镜像 Win 端 ui.Manager.applyPagerOverride; Default(空) 时不覆盖, 保留主题 behavior 值。
 func (f *darwinForwarder) applyPagerOverride() {
-	switch f.pagerMode {
-	case config.PagerDisplayNever:
-		f.renderer.SetAlwaysShowPager(false)
-		f.renderer.SetShowPageNumber(false)
-	case config.PagerDisplayAuto:
-		f.renderer.SetAlwaysShowPager(false)
-		f.renderer.SetShowPageNumber(true)
-	case config.PagerDisplayAlways:
+	// 翻页栏显示方式
+	switch f.pagerBarDisplay {
+	case config.PagerBarHide:
+		f.renderer.SetHidePager(true)
+	case config.PagerBarAlways:
+		f.renderer.SetHidePager(false)
 		f.renderer.SetAlwaysShowPager(true)
+	case config.PagerBarAuto:
+		f.renderer.SetHidePager(false)
+		f.renderer.SetAlwaysShowPager(false)
+		// PagerBarDefault（空字符串）：不覆盖，保留主题值
+	}
+	// 页码显示方式
+	switch f.pageNumberDisplay {
+	case config.PageNumberShow:
 		f.renderer.SetShowPageNumber(true)
-		// PagerDisplayDefault（空字符串）：不覆盖，保留主题 behavior 值
+	case config.PageNumberHide:
+		f.renderer.SetShowPageNumber(false)
+		// PageNumberDefault（空字符串）：不覆盖，保留主题值
 	}
 }
 

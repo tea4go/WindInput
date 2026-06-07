@@ -1,7 +1,8 @@
 import type { PageSchema } from "./types";
 import {
   ThemeStyle,
-  PagerDisplayMode,
+  PagerBarDisplay,
+  PageNumberDisplay,
   PreeditMode,
   CandidateLayout,
   StatusDisplayMode,
@@ -24,15 +25,25 @@ export const themeExtraSchema: PageSchema = [
   },
   {
     type: "select",
-    key: "ui.pager_display_mode",
-    label: "翻页区显示方式",
-    hint: "覆盖主题配置中的翻页区显示行为；隐藏时整个翻页栏（含箭头）不渲染",
+    key: "ui.pager_bar_display",
+    label: "翻页栏显示",
+    hint: "覆盖主题配置中翻页栏的显示方式；隐藏时整个翻页栏（含箭头）不渲染",
     options: [
-      { value: PagerDisplayMode.Default, label: "默认（主题配置）" },
-      { value: PagerDisplayMode.Hide, label: "隐藏" },
-      { value: PagerDisplayMode.Never, label: "不显示页码" },
-      { value: PagerDisplayMode.Auto, label: "大于一页时显示" },
-      { value: PagerDisplayMode.Always, label: "总是显示" },
+      { value: PagerBarDisplay.Default, label: "默认（主题配置）" },
+      { value: PagerBarDisplay.Hide, label: "隐藏" },
+      { value: PagerBarDisplay.Auto, label: "大于一页时显示" },
+      { value: PagerBarDisplay.Always, label: "总是显示" },
+    ],
+  },
+  {
+    type: "select",
+    key: "ui.page_number_display",
+    label: "显示页码",
+    hint: "翻页栏可见时，是否显示页码文字",
+    options: [
+      { value: PageNumberDisplay.Default, label: "默认（主题配置）" },
+      { value: PageNumberDisplay.Show, label: "显示" },
+      { value: PageNumberDisplay.Hide, label: "隐藏" },
     ],
   },
 ];

@@ -7,7 +7,7 @@ import (
 )
 
 // TestSetTheme_PagerFromBehavior 验证 SetTheme 的 page 策略默认改读 rv.Behavior（P6 阶段2d）。
-// 用户 PagerDisplayMode 覆盖在 manager.applyPagerOverride 注入，不在 renderer 层。
+// 用户 PagerBarDisplay/PageNumberDisplay 覆盖在 manager.applyPagerOverride 注入，不在 renderer 层。
 func TestSetTheme_PagerFromBehavior(t *testing.T) {
 	cases := []struct {
 		name            string

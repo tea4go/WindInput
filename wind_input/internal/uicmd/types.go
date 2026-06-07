@@ -39,8 +39,11 @@ const (
 // PreeditMode 编码区显示模式. 镜像 pkg/config.PreeditMode。
 type PreeditMode string
 
-// PagerDisplayMode 翻页器显示模式. 镜像 pkg/config.PagerDisplayMode。
-type PagerDisplayMode string
+// PagerBarDisplay 翻页栏显示方式。镜像 pkg/config.PagerBarDisplay。
+type PagerBarDisplay string
+
+// PageNumberDisplay 页码显示方式。镜像 pkg/config.PageNumberDisplay。
+type PageNumberDisplay string
 
 // ThemeStyle 主题风格. 镜像 pkg/config.ThemeStyle。
 type ThemeStyle string

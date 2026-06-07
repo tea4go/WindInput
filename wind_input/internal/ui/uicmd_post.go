@@ -62,7 +62,8 @@ func (m *Manager) snapshotCandidatesConfig() uicmd.Command {
 		HideCandidateWindow: m.hideCandidateWindow,
 		HidePreedit:         m.hidePreedit,
 		PreeditMode:         uicmd.PreeditMode(m.preeditMode),
-		PagerDisplayMode:    uicmd.PagerDisplayMode(m.pagerDisplayMode),
+		PagerBarDisplay:     uicmd.PagerBarDisplay(m.pagerBarDisplay),
+		PageNumberDisplay:   uicmd.PageNumberDisplay(m.pageNumberDisplay),
 		CmdbarPrefix:        m.cmdbarPrefix,
 		MaxCandidateChars:   m.maxCandidateChars,
 	}

@@ -270,35 +270,46 @@ func (m *Manager) SetPreeditMode(mode config.PreeditMode) {
 	m.postCmd(m.snapshotCandidatesConfig())
 }
 
-// SetPagerDisplayMode 设置页码显示方式（覆盖主题配置）
-func (m *Manager) SetPagerDisplayMode(mode config.PagerDisplayMode) {
-	m.pagerDisplayMode = mode
+// SetPagerBarDisplay 设置翻页栏显示方式（覆盖主题配置）
+func (m *Manager) SetPagerBarDisplay(mode config.PagerBarDisplay) {
+	m.pagerBarDisplay = mode
 	m.applyPagerOverride()
 	m.postCmd(m.snapshotCandidatesConfig())
 }
 
-// applyPagerOverride 根据 pagerDisplayMode 覆盖渲染器的翻页显示设置。
+// SetPageNumberDisplay 设置页码显示方式（覆盖主题配置）
+func (m *Manager) SetPageNumberDisplay(mode config.PageNumberDisplay) {
+	m.pageNumberDisplay = mode
+	m.applyPagerOverride()
+	m.postCmd(m.snapshotCandidatesConfig())
+}
+
+// applyPagerOverride 根据 pagerBarDisplay 和 pageNumberDisplay 覆盖渲染器的翻页显示设置。
 // 必须在 renderer.SetTheme() 之后调用，以确保主题值已写入。
+// Default（空字符串）不覆盖，保留主题值。
 func (m *Manager) applyPagerOverride() {
 	if m.renderer == nil {
 		return
 	}
-	switch m.pagerDisplayMode {
-	case config.PagerDisplayHide:
+	// 翻页栏显示方式
+	switch m.pagerBarDisplay {
+	case config.PagerBarHide:
 		m.renderer.SetHidePager(true)
-	case config.PagerDisplayNever:
-		m.renderer.SetHidePager(false)
-		m.renderer.SetAlwaysShowPager(false)
-		m.renderer.SetShowPageNumber(false)
-	case config.PagerDisplayAuto:
-		m.renderer.SetHidePager(false)
-		m.renderer.SetAlwaysShowPager(false)
-		m.renderer.SetShowPageNumber(true)
-	case config.PagerDisplayAlways:
+	case config.PagerBarAlways:
 		m.renderer.SetHidePager(false)
 		m.renderer.SetAlwaysShowPager(true)
+	case config.PagerBarAuto:
+		m.renderer.SetHidePager(false)
+		m.renderer.SetAlwaysShowPager(false)
+		// PagerBarDefault（空字符串）：不覆盖，保留主题值
+	}
+	// 页码显示方式
+	switch m.pageNumberDisplay {
+	case config.PageNumberShow:
 		m.renderer.SetShowPageNumber(true)
-		// PagerDisplayDefault（空字符串）：不覆盖，保留主题值
+	case config.PageNumberHide:
+		m.renderer.SetShowPageNumber(false)
+		// PageNumberDefault（空字符串）：不覆盖，保留主题值
 	}
 }
 

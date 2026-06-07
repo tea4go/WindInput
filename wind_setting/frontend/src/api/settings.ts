@@ -14,7 +14,8 @@ import type {
   StatusPositionModeValue,
   NumpadBehaviorValue,
   ShiftBehaviorValue,
-  PagerDisplayModeValue,
+  PagerBarDisplayValue,
+  PageNumberDisplayValue,
 } from "../lib/enums";
 
 const API_BASE = "http://127.0.0.1:18923";
@@ -125,7 +126,8 @@ export interface UIConfig {
   status_indicator: StatusIndicatorConfig;
   theme: string;
   theme_style: ThemeStyleValue;
-  pager_display_mode: PagerDisplayModeValue;
+  pager_bar_display: PagerBarDisplayValue;
+  page_number_display: PageNumberDisplayValue;
   tooltip: TooltipConfig;
   tooltip_delay: number; // 悬停候选触发 tooltip 的延迟（毫秒）
   // 副作用命令直通车候选 (Actions 含 ActionEffect) 的渲染前缀符号。
@@ -417,7 +419,8 @@ export function getDefaultConfig(): Config {
       },
       theme: "default",
       theme_style: "system",
-      pager_display_mode: "",
+      pager_bar_display: "",
+      page_number_display: "",
       tooltip: {
         code: { enabled: true },
         pinyin: { enabled: false, heteronyms: false, max_readings: 0 },

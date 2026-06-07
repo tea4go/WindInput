@@ -68,7 +68,7 @@ func TestSnapshotCandidatesConfig(t *testing.T) {
 	m.hideCandidateWindow = true
 	m.hidePreedit = true
 	m.preeditMode = config.PreeditMode("inline")
-	m.pagerDisplayMode = config.PagerDisplayMode("always")
+	m.pagerBarDisplay = config.PagerBarDisplay("always")
 	m.cmdbarPrefix = "⚡"
 	m.maxCandidateChars = 8
 
@@ -83,8 +83,8 @@ func TestSnapshotCandidatesConfig(t *testing.T) {
 	if string(p.PreeditMode) != "inline" {
 		t.Errorf("PreeditMode = %q, want inline", p.PreeditMode)
 	}
-	if string(p.PagerDisplayMode) != "always" {
-		t.Errorf("PagerDisplayMode = %q, want always", p.PagerDisplayMode)
+	if string(p.PagerBarDisplay) != "always" {
+		t.Errorf("PagerBarDisplay = %q, want always", p.PagerBarDisplay)
 	}
 	if p.CmdbarPrefix != "⚡" || p.MaxCandidateChars != 8 {
 		t.Errorf("CmdbarPrefix/MaxCandidateChars not propagated: %+v", p)

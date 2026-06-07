@@ -53,10 +53,13 @@ func TestEnumYAMLRoundTrip(t *testing.T) {
 		{"FontEngineGDI", FontEngineGDI, "gdi"},
 		{"FontEngineFreetype", FontEngineFreetype, "freetype"},
 
-		{"PagerDisplayDefault", PagerDisplayDefault, "\"\""},
-		{"PagerDisplayNever", PagerDisplayNever, "never"},
-		{"PagerDisplayAuto", PagerDisplayAuto, "auto"},
-		{"PagerDisplayAlways", PagerDisplayAlways, "always"},
+		{"PagerBarDefault", PagerBarDefault, "\"\""},
+		{"PagerBarAlways", PagerBarAlways, "always"},
+		{"PagerBarAuto", PagerBarAuto, "auto"},
+		{"PagerBarHide", PagerBarHide, "hide"},
+		{"PageNumberDefault", PageNumberDefault, "\"\""},
+		{"PageNumberShow", PageNumberShow, "show"},
+		{"PageNumberHide", PageNumberHide, "hide"},
 	}
 
 	for _, c := range cases {
@@ -230,10 +233,15 @@ func TestEnumValidRejectsInvalid(t *testing.T) {
 		}
 	})
 
-	// PagerDisplayMode 特例：空字符串有效，表示"使用主题配置"
-	t.Run("PagerDisplayMode empty string is valid", func(t *testing.T) {
-		if !PagerDisplayMode("").Valid() {
-			t.Error("empty PagerDisplayMode should be valid (use theme config)")
+	// PagerBarDisplay/PageNumberDisplay 特例：空字符串有效，表示"使用主题配置"
+	t.Run("PagerBarDisplay empty string is valid", func(t *testing.T) {
+		if !PagerBarDisplay("").Valid() {
+			t.Error("empty PagerBarDisplay should be valid (use theme config)")
+		}
+	})
+	t.Run("PageNumberDisplay empty string is valid", func(t *testing.T) {
+		if !PageNumberDisplay("").Valid() {
+			t.Error("empty PageNumberDisplay should be valid (use theme config)")
 		}
 	})
 

@@ -62,7 +62,8 @@ func (c *Coordinator) UpdateUIConfig(uiConfig *config.UIConfig) {
 		// 候选窗在光标上方时反转 bands 排列（由 data/config.yaml 默认设为 true）
 		c.uiManager.SetFlipLayoutWhenAbove(uiConfig.FlipLayoutWhenAbove)
 		// Update pager display mode override
-		c.uiManager.SetPagerDisplayMode(uiConfig.PagerDisplayMode)
+		c.uiManager.SetPagerBarDisplay(uiConfig.PagerBarDisplay)
+		c.uiManager.SetPageNumberDisplay(uiConfig.PageNumberDisplay)
 		// Update status indicator config (旧字段兼容)
 		c.uiManager.UpdateStatusIndicatorConfig(
 			uiConfig.StatusIndicatorDuration,

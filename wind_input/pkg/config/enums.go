@@ -194,21 +194,40 @@ func (v S2TVariant) Valid() bool {
 	return false
 }
 
-// PagerDisplayMode 页码显示方式（用户级覆盖，优先级高于主题配置）
-type PagerDisplayMode string
+// PagerBarDisplay 翻页栏显示方式（用户级覆盖，优先级高于主题配置）
+// 空字符串（PagerBarDefault）表示跟随主题配置。
+type PagerBarDisplay string
 
 const (
-	PagerDisplayDefault PagerDisplayMode = ""       // 使用主题配置（默认）
-	PagerDisplayHide    PagerDisplayMode = "hide"   // 完全隐藏翻页区（含箭头）
-	PagerDisplayNever   PagerDisplayMode = "never"  // 不显示页码文字
-	PagerDisplayAuto    PagerDisplayMode = "auto"   // 仅在多页时显示
-	PagerDisplayAlways  PagerDisplayMode = "always" // 总是显示
+	PagerBarDefault PagerBarDisplay = ""       // 跟随主题
+	PagerBarAlways  PagerBarDisplay = "always" // 总是显示翻页栏（含单页）
+	PagerBarAuto    PagerBarDisplay = "auto"   // 大于一页时显示翻页栏
+	PagerBarHide    PagerBarDisplay = "hide"   // 完全隐藏翻页栏（含箭头）
 )
 
 // Valid 校验取值
-func (m PagerDisplayMode) Valid() bool {
+func (m PagerBarDisplay) Valid() bool {
 	switch m {
-	case PagerDisplayDefault, PagerDisplayHide, PagerDisplayNever, PagerDisplayAuto, PagerDisplayAlways:
+	case PagerBarDefault, PagerBarAlways, PagerBarAuto, PagerBarHide:
+		return true
+	}
+	return false
+}
+
+// PageNumberDisplay 页码文字显示方式（用户级覆盖，优先级高于主题配置）
+// 空字符串（PageNumberDefault）表示跟随主题配置。
+type PageNumberDisplay string
+
+const (
+	PageNumberDefault PageNumberDisplay = ""     // 跟随主题
+	PageNumberShow    PageNumberDisplay = "show" // 显示页码文字
+	PageNumberHide    PageNumberDisplay = "hide" // 隐藏页码文字
+)
+
+// Valid 校验取值
+func (m PageNumberDisplay) Valid() bool {
+	switch m {
+	case PageNumberDefault, PageNumberShow, PageNumberHide:
 		return true
 	}
 	return false

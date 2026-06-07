@@ -93,15 +93,22 @@ export const S2TVariant = {
 } as const;
 export type S2TVariantValue = (typeof S2TVariant)[keyof typeof S2TVariant];
 
-export const PagerDisplayMode = {
-  Default: "",       // 使用主题配置
-  Hide: "hide",      // 完全隐藏翻页区（含箭头）
-  Never: "never",    // 不显示页码文字
-  Auto: "auto",      // 仅在多页时显示
-  Always: "always",  // 总是显示
+export const PagerBarDisplay = {
+  Default: "",       // 跟随主题配置
+  Hide: "hide",      // 完全隐藏翻页栏（含箭头）
+  Auto: "auto",      // 大于一页时显示
+  Always: "always",  // 总是显示翻页栏
 } as const;
-export type PagerDisplayModeValue =
-  (typeof PagerDisplayMode)[keyof typeof PagerDisplayMode];
+export type PagerBarDisplayValue =
+  (typeof PagerBarDisplay)[keyof typeof PagerBarDisplay];
+
+export const PageNumberDisplay = {
+  Default: "",      // 跟随主题配置
+  Show: "show",     // 显示页码文字
+  Hide: "hide",     // 隐藏页码文字
+} as const;
+export type PageNumberDisplayValue =
+  (typeof PageNumberDisplay)[keyof typeof PageNumberDisplay];
 
 // ============================================================
 // 修饰键 / 按键名（对应 pkg/keys/keys.go）

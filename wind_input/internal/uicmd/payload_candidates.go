@@ -47,14 +47,15 @@ func (CandidatesMarkersPayload) CommandType() CommandType { return CmdCandidates
 
 // CandidatesConfigPayload 候选框布局/可见性配置。
 // 合并自旧 SetCandidateLayout / SetHideCandidateWindow / SetHidePreedit /
-// SetPreeditMode / SetPagerDisplayMode / SetCmdbarCandidatePrefix /
+// SetPreeditMode / SetPagerBarDisplay / SetPageNumberDisplay / SetCmdbarCandidatePrefix /
 // SetMaxCandidateChars / UpdateConfig 等同步 setter。
 type CandidatesConfigPayload struct {
 	Layout              CandidateLayout
 	HideCandidateWindow bool
 	HidePreedit         bool
 	PreeditMode         PreeditMode
-	PagerDisplayMode    PagerDisplayMode
+	PagerBarDisplay     PagerBarDisplay
+	PageNumberDisplay   PageNumberDisplay
 	CmdbarPrefix        string
 	MaxCandidateChars   int
 	FontSize            float64
@@ -185,7 +186,10 @@ func (p CandidatesConfigPayload) marshal(w *binWriter) error {
 	if err := w.writeString(string(p.PreeditMode)); err != nil {
 		return err
 	}
-	if err := w.writeString(string(p.PagerDisplayMode)); err != nil {
+	if err := w.writeString(string(p.PagerBarDisplay)); err != nil {
+		return err
+	}
+	if err := w.writeString(string(p.PageNumberDisplay)); err != nil {
 		return err
 	}
 	if err := w.writeString(p.CmdbarPrefix); err != nil {
@@ -216,7 +220,11 @@ func (p *CandidatesConfigPayload) unmarshal(r *binReader) error {
 	if s, err = r.readString(); err != nil {
 		return err
 	}
-	p.PagerDisplayMode = PagerDisplayMode(s)
+	p.PagerBarDisplay = PagerBarDisplay(s)
+	if s, err = r.readString(); err != nil {
+		return err
+	}
+	p.PageNumberDisplay = PageNumberDisplay(s)
 	if p.CmdbarPrefix, err = r.readString(); err != nil {
 		return err
 	}

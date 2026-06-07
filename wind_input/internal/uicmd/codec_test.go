@@ -105,7 +105,7 @@ func TestRoundtripCandidatesConfig(t *testing.T) {
 		HideCandidateWindow: true,
 		HidePreedit:         false,
 		PreeditMode:         "inline",
-		PagerDisplayMode:    "always",
+		PagerBarDisplay:     "always",
 		CmdbarPrefix:        "/",
 		MaxCandidateChars:   8,
 		FontSize:            14.5,

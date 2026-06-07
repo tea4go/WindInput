@@ -311,7 +311,7 @@ func (r *Renderer) SetBehaviorOverrides(
 // applyBehaviorOverrides 据「跟随主题/用户值」标志位把 pager/page_number 最终值写入
 // r.config（vertical_max_width 不在此——它由 viewbox_render 每帧据标志位选值）。
 // 跟随主题时用 r.resolvedV3.Behavior；用户自定义时用 r.user* 值。
-// 注意：用户 PagerDisplayMode（applyPagerOverride）是更上层的独立强制覆盖，仍在其后生效。
+// 注意：用户 PagerBarDisplay/PageNumberDisplay（applyPagerOverride）是更上层的独立强制覆盖，仍在其后生效。
 func (r *Renderer) applyBehaviorOverrides() {
 	if r.pagerFollowTheme {
 		if r.resolvedV3 != nil {
@@ -327,7 +327,7 @@ func (r *Renderer) applyBehaviorOverrides() {
 	} else {
 		r.config.ShowPageNumber = r.userShowPageNumber
 	}
-	// HidePager 始终跟随主题默认值；用户 PagerDisplayMode（applyPagerOverride）在其后强制覆盖。
+	// HidePager 始终跟随主题默认值；用户 PagerBarDisplay（applyPagerOverride）在其后强制覆盖。
 	if r.resolvedV3 != nil {
 		r.config.HidePager = r.resolvedV3.Behavior.HidePager
 	}
@@ -446,7 +446,7 @@ func (r *Renderer) SetTheme(rv *theme.ResolvedV3) {
 		indexLabels = v.Index.Labels
 	}
 	// page 策略：哲学Y 双层覆盖——最终值 = FollowTheme ? 主题 behavior : config.UI 用户值
-	// （applyBehaviorOverrides 据 r.*FollowTheme 标志位选源）。用户 PagerDisplayMode 是更上层的
+	// （applyBehaviorOverrides 据 r.*FollowTheme 标志位选源）。用户 PagerBarDisplay/PageNumberDisplay 是更上层的
 	// 独立强制覆盖，在 applyPagerOverride 注入（Default=不覆盖，保留此处选定值）。
 	r.applyBehaviorOverrides()
 	// 字号跟随：记录主题 behavior.font_size，按「跟随/自定义」重算有效基准字号 + 派生（含行高）。
