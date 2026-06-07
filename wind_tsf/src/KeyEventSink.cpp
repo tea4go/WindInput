@@ -479,6 +479,25 @@ STDAPI CKeyEventSink::OnTestKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM 
         }
         else if (keyType == HotkeyType::Letter)
         {
+            // 中文 + CapsLock ON + 非全角 + 无 input session：字母走真正的同步透传
+            // （与英文模式同构）。不吃键 → 系统按 CapsLock 自然产生大写、Shift 抵消产生
+            // 小写，同时保留 WM_KEYDOWN 供 CAD 等依赖原始按键的快捷键使用。
+            //
+            // 关键：必须在 OnTestKeyDown 阶段就不吃，否则形成 OnTestKeyDown(TRUE)+
+            // OnKeyDown(FALSE) 的"吃了再吐"翻转——Chrome/WindTerm/Electron 等宿主不会
+            // 回退合成 WM_CHAR，会直接吞掉字母（"部分应用大写下无法输入字母"的根因）。
+            // 仅 Go 层返回 PassThrough 不够，因为吃键决策发生在 IPC 之前的本步。
+            //
+            // 有 composition/candidates 时仍需拦截：让 Go 先提交候选再输出字母。
+            // 全角时也需拦截：让 Go 走全角转换。
+            if (!hasInputSession && !_pTextService->IsFullWidth() &&
+                (GetKeyState(VK_CAPITAL) & 0x0001))
+            {
+                _LogKeyDecision(L"test_down", _pTextService->GetFocusSessionId(), wParam, modifiers, keyType,
+                                isChineseMode, hasComposition, _hasCandidates, hasInputSession, FALSE,
+                                L"chinese_capslock_letter_passthrough");
+                return S_OK; // pfEaten 保持 FALSE → 同步透传
+            }
             // Letters: always eat in Chinese mode (they start composition)
             *pfEaten = TRUE;
             _LogKeyDecision(L"test_down", _pTextService->GetFocusSessionId(), wParam, modifiers, keyType,
@@ -851,6 +870,15 @@ STDAPI CKeyEventSink::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM lPar
     // _needsCompositionResync: 上次 IPC 失败后强行视作有会话, 让 ENTER/ESC 也能发给 Go 重握手。
     BOOL hasInputSession = hasComposition || _hasCandidates || _IsResyncActive();
 
+    // 与 OnTestKeyDown 对称：中文 + CapsLock ON + 非全角 + 无 session 的字母同步透传
+    // （不吃、不发 Go），由系统按 CapsLock 产生大写字母 + 保留 WM_KEYDOWN 供 CAD 快捷键
+    // 使用。OnTestKeyDown 已对此场景 pfEaten=FALSE；此处保持一致，避免漏网字母被下方
+    // "state_change_letter_consume" 兜底逻辑误吃。
+    BOOL capsLockLetterPassthrough =
+        isChineseMode && !hasInputSession && !_pTextService->IsFullWidth() &&
+        (wParam >= 'A' && wParam <= 'Z') && !(modifiers & (KEYMOD_CTRL | KEYMOD_ALT)) &&
+        (GetKeyState(VK_CAPITAL) & 0x0001);
+
     // Track whether this is a Ctrl/Alt combo that needs cleanup-then-passthrough
     BOOL isCtrlAltCleanup = FALSE;
 
@@ -884,7 +912,8 @@ STDAPI CKeyEventSink::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM lPar
             }
             else
             {
-                isInputKey = (keyType != HotkeyType::None);
+                // CapsLock 字母透传场景不视为输入键（保持 pfEaten=FALSE 同步透传，不发 Go）
+                isInputKey = capsLockLetterPassthrough ? FALSE : (keyType != HotkeyType::None);
             }
         }
     }
@@ -912,7 +941,10 @@ STDAPI CKeyEventSink::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM lPar
         // 3. OnKeyDown('d') now sees _isComposing=FALSE, but must still consume 'd'
         //
         // We detect this by checking if we're in Chinese mode and this is a letter key.
-        if (isChineseMode && wParam >= 'A' && wParam <= 'Z' && !(modifiers & (KEYMOD_CTRL | KEYMOD_ALT)))
+        // 但 CapsLock 透传字母例外：OnTestKeyDown 已主动不吃它，这里不能反过来强制消费，
+        // 否则字母既不发 Go 也被吃掉 → 彻底丢失。
+        if (isChineseMode && wParam >= 'A' && wParam <= 'Z' && !(modifiers & (KEYMOD_CTRL | KEYMOD_ALT))
+            && !capsLockLetterPassthrough)
         {
             // Letter key in Chinese mode slipped through due to state change - consume it
             *pfEaten = TRUE;
