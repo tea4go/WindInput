@@ -2,13 +2,19 @@
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { ChevronDown, Trash2 } from "lucide-vue-next";
 import type { Config } from "../api/settings";
-import type { ThemeInfo, ThemePreview, SystemFontInfo, ThemeServerStatus } from "../api/wails";
+import type {
+  ThemeInfo,
+  ThemePreview,
+  SystemFontInfo,
+  ThemeServerStatus,
+} from "../api/wails";
 import {
   startThemeServer,
   stopThemeServer,
   getThemeServerStatus,
   deleteTheme,
   openThemesFolder,
+  openExternalURL,
 } from "../api/wails";
 import {
   Select,
@@ -242,6 +248,12 @@ onMounted(async () => {
       const status = await getThemeServerStatus();
       themeServerRunning.value = status.running;
       themeServerURL.value = status.url;
+      // 配置了自动开启且服务尚未运行时，自动启动
+      if (props.formData.ui.theme_editor_auto_start && !status.running) {
+        const started = await startThemeServer();
+        themeServerRunning.value = true;
+        themeServerURL.value = started.url;
+      }
     } catch {
       // 后端未就绪时静默忽略，保持默认关闭状态
     }
@@ -252,30 +264,54 @@ onUnmounted(() => {
   document.removeEventListener("click", handleDocumentClick);
 });
 
-async function toggleThemeServer(enabled: boolean) {
+// Web 编辑器连接模式：off=关闭, once=本次开启, auto=打开设置时自动开启
+type ThemeEditorMode = "off" | "once" | "auto";
+
+const themeEditorMode = computed<ThemeEditorMode>(() => {
+  if (props.formData.ui.theme_editor_auto_start) return "auto";
+  if (themeServerRunning.value) return "once";
+  return "off";
+});
+
+async function setThemeEditorMode(mode: ThemeEditorMode) {
   themeServerError.value = "";
   themeServerLoading.value = true;
   try {
-    if (enabled) {
-      try {
-        const status = await startThemeServer();
-        themeServerRunning.value = true;
-        themeServerURL.value = status.url;
-      } catch (e) {
-        themeServerError.value = String(e);
-      }
-    } else {
-      try {
+    if (mode === "off") {
+      if (themeServerRunning.value) {
         await stopThemeServer();
         themeServerRunning.value = false;
         themeServerURL.value = "";
-      } catch (e) {
-        themeServerError.value = String(e);
+      }
+      props.formData.ui.theme_editor_auto_start = false;
+    } else if (mode === "once") {
+      props.formData.ui.theme_editor_auto_start = false;
+      if (!themeServerRunning.value) {
+        const status = await startThemeServer();
+        themeServerRunning.value = true;
+        themeServerURL.value = status.url;
+      }
+    } else if (mode === "auto") {
+      props.formData.ui.theme_editor_auto_start = true;
+      if (!themeServerRunning.value) {
+        const status = await startThemeServer();
+        themeServerRunning.value = true;
+        themeServerURL.value = status.url;
       }
     }
+  } catch (e) {
+    themeServerError.value = String(e);
   } finally {
     themeServerLoading.value = false;
   }
+}
+
+async function openThemeEditor() {
+  await openExternalURL("https://theme.windinput.com");
+}
+
+async function openThemeMarket() {
+  await openExternalURL("https://market.windinput.com");
 }
 
 async function copyServerURL() {
@@ -572,26 +608,74 @@ async function copyServerURL() {
         </div>
       </div>
 
-      <!-- 在线编辑开关（内嵌于主题卡片） -->
-      <div v-if="isWailsEnv" class="setting-item" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+      <!-- 主题工具入口 -->
+      <div
+        v-if="isWailsEnv"
+        class="setting-item"
+        style="
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid var(--border);
+        "
+      >
         <div class="setting-info">
-          <label>开启 Web 编辑器连接</label>
+          <label>主题工具</label>
+          <p class="setting-hint">在线编辑或浏览社区主题</p>
+        </div>
+        <div class="setting-control inline-control">
+          <Button variant="outline" size="sm" @click="openThemeEditor"
+            >主题编辑器</Button
+          >
+          <Button variant="outline" size="sm" @click="openThemeMarket"
+            >主题市场</Button
+          >
+        </div>
+      </div>
+      <!-- Web 编辑器连接 -->
+      <div
+        v-if="isWailsEnv"
+        class="setting-item"
+        style="padding-top: 12px; border-top: 1px solid var(--border)"
+      >
+        <div class="setting-info">
+          <label>Web 编辑器连接</label>
           <p class="setting-hint">允许 Web 编辑器推送主题到本地输入法</p>
         </div>
         <div class="setting-control">
-          <Switch
-            :checked="themeServerRunning"
+          <Select
+            :model-value="themeEditorMode"
             :disabled="themeServerLoading"
-            @update:checked="toggleThemeServer"
-          />
+            @update:model-value="setThemeEditorMode($event as ThemeEditorMode)"
+          >
+            <SelectTrigger class="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="off">关闭</SelectItem>
+              <SelectItem value="once">本次开启</SelectItem>
+              <SelectItem value="auto">打开设置时自动开启</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
-      <div v-if="isWailsEnv && themeServerRunning" class="flex items-center gap-2 text-xs" style="margin-top: 6px;">
+      <div
+        v-if="isWailsEnv && themeServerRunning"
+        class="flex items-center gap-2 text-xs"
+        style="margin-top: 6px"
+      >
         <span class="text-green-500">●</span>
-        <span class="text-muted-foreground flex-1 truncate">{{ themeServerURL }}</span>
-        <Button size="sm" variant="outline" @click="copyServerURL">复制地址</Button>
+        <span class="text-muted-foreground flex-1 truncate">{{
+          themeServerURL
+        }}</span>
+        <Button size="sm" variant="outline" @click="copyServerURL"
+          >复制地址</Button
+        >
       </div>
-      <p v-if="isWailsEnv && themeServerError" class="text-xs text-destructive" style="margin-top: 4px;">
+      <p
+        v-if="isWailsEnv && themeServerError"
+        class="text-xs text-destructive"
+        style="margin-top: 4px"
+      >
         {{ themeServerError }}
       </p>
     </div>
@@ -802,7 +886,11 @@ async function copyServerURL() {
     <!-- 删除主题确认弹框 -->
     <Dialog
       :open="deleteConfirmOpen"
-      @update:open="(v: boolean) => { if (!v) deleteConfirmOpen = false }"
+      @update:open="
+        (v: boolean) => {
+          if (!v) deleteConfirmOpen = false;
+        }
+      "
     >
       <DialogContent class="sm:max-w-[360px]">
         <DialogHeader>
@@ -1068,7 +1156,10 @@ async function copyServerURL() {
   color: hsl(var(--muted-foreground));
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    color 0.15s;
 }
 
 .theme-option-row:hover .theme-option-delete-btn {

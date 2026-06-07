@@ -134,6 +134,8 @@ export interface UIConfig {
   // 未设置 (undefined / 字段缺省) 时使用默认 "⚡"; 设为空串完全关闭; 可填自定义符号如 "▶"。
   // 仅 type(...) 上屏的命令视觉上与普通候选无差, 不会加前缀。
   cmdbar_candidate_prefix?: string | null;
+  // 打开设置界面时自动开启 Web 编辑器连接服务。
+  theme_editor_auto_start?: boolean;
 }
 
 // 工具栏配置
