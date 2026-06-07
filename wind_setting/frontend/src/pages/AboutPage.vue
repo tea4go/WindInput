@@ -96,6 +96,25 @@ function onUpdateDialogClose() {
         </div>
       </div>
 
+      <!-- 官网横幅 -->
+      <button
+        class="link-card website-banner"
+        @click="$emit('openExternalLink', 'https://windinput.com')"
+      >
+        <span class="link-card-icon icon-website" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
+            />
+          </svg>
+        </span>
+        <div class="link-card-text">
+          <span class="link-card-title">官方网站</span>
+          <span class="link-card-desc">文档、下载与最新动态</span>
+        </div>
+        <span class="website-url-chip">windinput.com</span>
+      </button>
+
       <!-- 链接卡片 -->
       <div class="about-links">
         <button class="link-card" @click="$emit('openExternalLink', repoUrl)">
@@ -347,6 +366,25 @@ function onUpdateDialogClose() {
 }
 .qq-card:hover .copy-btn {
   opacity: 1;
+}
+
+/* 官网横幅 */
+.website-banner {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.icon-website {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(210 100% 50%));
+}
+.website-url-chip {
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.1);
+  padding: 2px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* 版权 */
