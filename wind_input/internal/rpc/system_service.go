@@ -132,6 +132,20 @@ func (s *SystemService) NotifyReload(args *rpcapi.NotifyReloadArgs, reply *rpcap
 	}
 }
 
+// RebuildDictCache 清空词库缓存文件并强制重载当前方案以触发缓存重建
+func (s *SystemService) RebuildDictCache(args *rpcapi.Empty, reply *rpcapi.SystemRebuildDictCacheReply) error {
+	s.logger.Info("RPC System.RebuildDictCache")
+	if s.configReloader == nil {
+		return fmt.Errorf("config reloader not available")
+	}
+	deleted, err := s.configReloader.RebuildDictCache()
+	if err != nil {
+		return err
+	}
+	reply.Deleted = deleted
+	return nil
+}
+
 // ResetDB 重置数据库（清除用户词库、临时词库、Shadow 规则、词频数据）
 func (s *SystemService) ResetDB(args *rpcapi.SystemResetDBArgs, reply *rpcapi.SystemResetDBReply) error {
 	if s.store == nil {

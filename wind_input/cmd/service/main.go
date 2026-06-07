@@ -493,6 +493,10 @@ func main() {
 	// Without this, clients would show "…" until the next focus change.
 	bridgeServer.PushStateToActiveClient(coord.BuildCurrentStatus())
 
+	// 后台预生成所有已启用方案的词库缓存，消除用户首次切换方案时的同步转换卡顿。
+	// 缓存已最新（含此前已构建的活跃方案）的方案会被 NeedsRegenerate 快速跳过。
+	engineMgr.PrebuildAvailableCaches(cfg.Schema.Available)
+
 	// Listen for exit requests in a separate goroutine
 	go func() {
 		defer recoverPanic(logger, "exit-handler")

@@ -18,6 +18,7 @@ func (m *mockConfigReloader) ApplyConfigUpdate(oldCfg, newCfg *config.Config, _ 
 	*oldCfg = *newCfg
 	return false, nil
 }
+func (m *mockConfigReloader) RebuildDictCache() (int, error) { return 0, nil }
 
 // newTestConfigService 构建带 no-op saveFn 的 ConfigService，供各测试复用。
 func newTestConfigService(cfg *config.Config) *ConfigService {

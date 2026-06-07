@@ -75,6 +75,9 @@ type ConfigReloader interface {
 	ReloadConfig() error
 	// ApplyConfigUpdate 增量应用配置变更，返回是否需要重启生效
 	ApplyConfigUpdate(oldCfg, newCfg *config.Config, changedSections map[string]bool) (requiresRestart bool, err error)
+	// RebuildDictCache 清空词库缓存文件并强制重载当前方案以触发缓存重建
+	// 返回已删除的文件数量
+	RebuildDictCache() (int, error)
 }
 
 // SchemaOverrideResetter 用于 Config.ResetSchemaOverride 的 Layer 2 文件操作
@@ -225,6 +228,7 @@ func (s *Server) Start() error {
 	RegisterMethod(s.router, "System.ReloadShadow", systemSvc.ReloadShadow)
 	RegisterMethod(s.router, "System.ReloadUserDict", systemSvc.ReloadUserDict)
 	RegisterMethod(s.router, "System.NotifyReload", systemSvc.NotifyReload)
+	RegisterMethod(s.router, "System.RebuildDictCache", systemSvc.RebuildDictCache)
 	RegisterMethod(s.router, "System.Pause", systemSvc.Pause)
 	RegisterMethod(s.router, "System.Resume", systemSvc.Resume)
 	RegisterMethod(s.router, "System.Shutdown", systemSvc.Shutdown)

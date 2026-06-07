@@ -95,3 +95,18 @@ func (a *App) ResetData() string {
 	}
 	return ""
 }
+
+// RebuildDictCacheResult 重建词库缓存的结果
+type RebuildDictCacheResult struct {
+	Deleted int    `json:"deleted"`
+	Error   string `json:"error,omitempty"`
+}
+
+// RebuildDictCache 通知服务释放 mmap、删除词库缓存文件并强制重载方案
+func (a *App) RebuildDictCache() RebuildDictCacheResult {
+	result, err := a.rpcClient.SystemRebuildDictCache()
+	if err != nil {
+		return RebuildDictCacheResult{Error: fmt.Sprintf("重建失败: %v", err)}
+	}
+	return RebuildDictCacheResult{Deleted: result.Deleted}
+}

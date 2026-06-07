@@ -1,10 +1,13 @@
 package coordinator
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 
 	"github.com/huanfeng/wind_input/internal/dict"
+	"github.com/huanfeng/wind_input/internal/dict/dictcache"
 	"github.com/huanfeng/wind_input/internal/engine"
 	"github.com/huanfeng/wind_input/internal/schema"
 	"github.com/huanfeng/wind_input/pkg/config"
@@ -205,6 +208,47 @@ func (h *ReloadHandler) reloadActiveSchemaConfig() {
 	h.engineMgr.UpdateLearningConfig(&s.Learning)
 
 	h.logger.Debug("Schema config reloaded", "schema", activeID, "engineType", s.Engine.Type)
+}
+
+// RebuildDictCache 强制重建所有词库缓存。
+//
+// 实现策略：
+//  1. 将缓存目录内 .wdb / .wdat 文件的 mtime 设为 epoch，使 NeedsRegenerate 返回 true。
+//     不删除文件，避免提前释放 mmap 导致当前引擎返回空结果。
+//  2. 驱逐 Manager 内所有已缓存的引擎对象（保留 currentEngine 指针以维持输入可用），
+//     使 SwitchSchema 绕过快路径，走工厂慢路径重建。
+//  3. 调用 SwitchSchema(activeID)：工厂检测到 mtime 过期后重建缓存，
+//     并在 atomicWriteWdb 内部完成 mmap 释放与文件原子替换。
+//     对拼音 wdat 异步构建场景返回 ErrAssetBuilding，视为正常——后台完成后生效。
+func (h *ReloadHandler) RebuildDictCache() (int, error) {
+	marked := dictcache.MarkCacheStale()
+	h.logger.Info("词库缓存已标记过期", "marked", marked)
+
+	h.engineMgr.EvictAllEngines()
+
+	// 已启用方案列表快照：当前方案重建后，其余方案在后台预生成缓存，避免后续切换卡顿
+	h.cfgMu.RLock()
+	available := append([]string(nil), h.cfg.Schema.Available...)
+	h.cfgMu.RUnlock()
+
+	activeID := h.schemaMgr.GetActiveID()
+	if activeID != "" {
+		if err := h.engineMgr.SwitchSchema(activeID); err != nil {
+			if errors.Is(err, schema.ErrAssetBuilding) {
+				h.logger.Info("拼音词库正在后台重建，完成后自动生效", "schema", activeID)
+				h.engineMgr.PrebuildAvailableCaches(available)
+				return marked, nil
+			}
+			h.logger.Warn("强制重载方案失败", "schema", activeID, "err", err)
+			return marked, fmt.Errorf("缓存已标记过期但重载方案失败: %w", err)
+		}
+	}
+
+	// 当前方案已重建（其缓存已最新，预生成时被 NeedsRegenerate 跳过）；
+	// 其余已启用方案的缓存在后台串行预生成。
+	h.engineMgr.PrebuildAvailableCaches(available)
+
+	return marked, nil
 }
 
 // applyPinyinSpec 将 PinyinSpec 转换为 PinyinConfig 并更新引擎。

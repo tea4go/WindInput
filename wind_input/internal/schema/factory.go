@@ -892,6 +892,164 @@ func preGeneratePinyinWdb(s *Schema, exeDir, dataDir string, logger *slog.Logger
 	debug.FreeOSMemory()
 }
 
+// ensureCodetableWdb 确保码表的 wdb 缓存文件已是最新，但不加载引擎、不注册词库层。
+// 这是 loadCodetable 缓存判定逻辑的"只生成"版本：复刻其源文件发现与 NeedsRegenerate
+// 判定，仅在缓存过期时触发 ConvertXxxToWdb，省去 mmap 加载与层注册的副作用。
+// 用于启动 / 手动重建缓存时后台预生成所有已启用方案的缓存，消除首次切换方案的转换卡顿。
+func ensureCodetableWdb(srcPath string, dictType DictType, cacheKey string, norm *dict.WeightNormalizer, logger *slog.Logger) error {
+	if srcPath == "" {
+		return nil
+	}
+	var srcPaths []string
+	if dictType == DictTypeRimeCodetable {
+		srcPaths = dictcache.RimeCodetableSourcePaths(srcPath)
+	} else {
+		srcPaths = []string{srcPath}
+	}
+	if len(srcPaths) == 0 {
+		return nil
+	}
+
+	// 与 loadCodetable 一致：优先复用方案目录内的预编译 wdb，存在且不过期则无需生成缓存。
+	srcDir := filepath.Dir(srcPath)
+	wdbInDir := filepath.Join(srcDir, cacheKey+".wdb")
+	if !dictcache.NeedsRegenerate(srcPaths, wdbInDir) {
+		if changed, _ := dictcache.SourceListChanged(wdbInDir, srcPaths); !changed {
+			return nil
+		}
+	}
+
+	// 缓存目录内的 wdb 已是最新则跳过，否则转换重建。
+	wdbCachePath := dictcache.CachePath(cacheKey)
+	if !dictcache.NeedsRegenerate(srcPaths, wdbCachePath) {
+		if changed, _ := dictcache.SourceListChanged(wdbCachePath, srcPaths); !changed {
+			return nil
+		}
+	}
+	if dictType == DictTypeRimeCodetable {
+		return dictcache.ConvertRimeCodetableToWdb(srcPath, wdbCachePath, logger, norm)
+	}
+	return dictcache.ConvertCodeTableToWdb(srcPath, wdbCachePath, logger)
+}
+
+// EnsureSchemaCacheFiles 预生成指定方案的全部词库缓存文件（.wdb/.wdat），但不构建引擎、
+// 不注册词库层、不常驻内存。按引擎类型覆盖：
+//   - 码表：主词库 + 所有已启用的附加词库的 wdb
+//   - 拼音：wdat + unigram（经 preGeneratePinyinWdb，wdat 走全局单协程异步构建）
+//   - 混输：码表（自身或主方案的 default 词库）+ 自身附加词库 + 拼音（自身或辅方案）
+//
+// 目的是在启动 / 手动重建缓存时，提前把所有已启用方案的缓存备好，消除用户首次切换方案
+// 时的同步转换卡顿（rime yaml → 二进制，可达数百 ms~数秒）。失败仅记录警告、不中断其余。
+func EnsureSchemaCacheFiles(s *Schema, exeDir, dataDir string, resolver SchemaResolver, logger *slog.Logger) {
+	if s == nil {
+		return
+	}
+	switch s.Engine.Type {
+	case EngineTypeCodeTable:
+		ensureCodetableSchemaCaches(s, exeDir, dataDir, logger)
+	case EngineTypePinyin:
+		preGeneratePinyinWdb(s, exeDir, dataDir, logger)
+	case EngineTypeMixed:
+		ensureMixedSchemaCaches(s, exeDir, dataDir, resolver, logger)
+	}
+}
+
+// ensureExtraCodetableCaches 预生成方案所有"已启用的附加词库"的 wdb 缓存。
+// cacheKey 约定与 loadExtraCodetable 调用处一致：schemaID + "_" + dictID。
+func ensureExtraCodetableCaches(s *Schema, exeDir, dataDir string, logger *slog.Logger) {
+	for i := range s.Dicts {
+		dictSpec := s.Dicts[i]
+		if dictSpec.Default || !dictSpec.IsEnabled() {
+			continue
+		}
+		srcPath := resolvePath(exeDir, dataDir, dictSpec.Path)
+		cacheKey := s.Schema.ID + "_" + dictSpec.ID
+		var norm *dict.WeightNormalizer
+		if dictSpec.WeightSpec != nil {
+			norm = dictSpec.WeightSpec.NewWeightNormalizer()
+		}
+		if err := ensureCodetableWdb(srcPath, dictSpec.Type, cacheKey, norm, logger); err != nil {
+			logger.Warn("预生成附加码表缓存失败", "schemaID", s.Schema.ID, "dictID", dictSpec.ID, "err", err)
+		}
+	}
+}
+
+// ensureCodetableSchemaCaches 预生成码表方案的主词库 + 附加词库 wdb 缓存。
+func ensureCodetableSchemaCaches(s *Schema, exeDir, dataDir string, logger *slog.Logger) {
+	if mainSpec := s.GetDefaultDictSpec(); mainSpec != nil {
+		srcPath := resolvePath(exeDir, dataDir, mainSpec.Path)
+		cacheKey := s.Schema.ID + "_" + mainSpec.ID
+		var norm *dict.WeightNormalizer
+		if mainSpec.WeightSpec != nil {
+			norm = mainSpec.WeightSpec.NewWeightNormalizer()
+		}
+		if err := ensureCodetableWdb(srcPath, mainSpec.Type, cacheKey, norm, logger); err != nil {
+			logger.Warn("预生成主码表缓存失败", "schemaID", s.Schema.ID, "dictID", mainSpec.ID, "err", err)
+		}
+	}
+	ensureExtraCodetableCaches(s, exeDir, dataDir, logger)
+}
+
+// ensureMixedSchemaCaches 预生成混输方案的码表 + 附加词库 + 拼音缓存。
+// 路径解析复刻 createMixedEngine：码表 default 词库优先取自身 Dicts、否则主方案；
+// cacheKey 引用主方案时使用主方案 ID 以共享缓存。
+func ensureMixedSchemaCaches(s *Schema, exeDir, dataDir string, resolver SchemaResolver, logger *slog.Logger) {
+	mixedSpec := s.Engine.Mixed
+	var primarySchema, secondarySchema *Schema
+	if mixedSpec != nil && resolver != nil {
+		if mixedSpec.PrimarySchema != "" {
+			primarySchema = resolver(mixedSpec.PrimarySchema)
+		}
+		if mixedSpec.SecondarySchema != "" {
+			secondarySchema = resolver(mixedSpec.SecondarySchema)
+		}
+	}
+
+	// 码表 default 词库：优先混输自身，其次主方案
+	var codetableDictSpec *DictSpec
+	for i := range s.Dicts {
+		if s.Dicts[i].Default {
+			codetableDictSpec = &s.Dicts[i]
+			break
+		}
+	}
+	if codetableDictSpec == nil && primarySchema != nil {
+		for i := range primarySchema.Dicts {
+			if primarySchema.Dicts[i].Default {
+				codetableDictSpec = &primarySchema.Dicts[i]
+				break
+			}
+		}
+	}
+	codetableCacheID := s.Schema.ID
+	if primarySchema != nil {
+		codetableCacheID = primarySchema.Schema.ID
+	}
+	if codetableDictSpec != nil {
+		if codetableDictSpec.ID != "" {
+			codetableCacheID = codetableCacheID + "_" + codetableDictSpec.ID
+		}
+		srcPath := resolvePath(exeDir, dataDir, codetableDictSpec.Path)
+		var norm *dict.WeightNormalizer
+		if codetableDictSpec.WeightSpec != nil {
+			norm = codetableDictSpec.WeightSpec.NewWeightNormalizer()
+		}
+		if err := ensureCodetableWdb(srcPath, codetableDictSpec.Type, codetableCacheID, norm, logger); err != nil {
+			logger.Warn("预生成混输码表缓存失败", "schemaID", s.Schema.ID, "err", err)
+		}
+	}
+
+	// 混输自身已启用的附加词库
+	ensureExtraCodetableCaches(s, exeDir, dataDir, logger)
+
+	// 拼音 wdat + unigram：辅方案含 rime pinyin 主词库时优先用辅方案，否则用混输自身
+	pinyinSchema := s
+	if secondarySchema != nil {
+		pinyinSchema = secondarySchema
+	}
+	preGeneratePinyinWdb(pinyinSchema, exeDir, dataDir, logger)
+}
+
 // ResolveDictPath 解析相对路径为绝对路径（包内 resolvePath 的导出别名）
 // 搜索顺序：exeDir → exeDir/schemas → dataDir → dataDir/schemas
 // 这使得方案配置中的词库路径可以简写为相对于 schemas 目录的路径，

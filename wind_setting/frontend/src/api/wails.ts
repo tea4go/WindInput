@@ -1300,6 +1300,15 @@ export async function resetData(): Promise<string> {
   return App.ResetData() as unknown as string;
 }
 
+export interface RebuildDictCacheResult {
+  deleted: number;
+  error?: string;
+}
+
+export async function rebuildDictCache(): Promise<RebuildDictCacheResult> {
+  return App.RebuildDictCache() as unknown as RebuildDictCacheResult;
+}
+
 // ========== 在线主题编辑服务 ==========
 
 export interface ThemeServerStatus {

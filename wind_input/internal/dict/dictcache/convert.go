@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"io"
+	"sync/atomic"
 
 	"github.com/huanfeng/wind_input/internal/dict"
 	"github.com/huanfeng/wind_input/internal/dict/binformat"
@@ -688,10 +689,15 @@ func loadRimeCodetableFile(path string, codeEntries map[string][]dictEntry, glob
 // 但旧引擎仍缓存在 engine.Manager 中持锁），rename 会以 "Access is denied" 失败。
 // 替换前调用 binformat.CloseReadersForPath 强制释放本进程内所有同路径 reader，
 // 让 rename 得以成功；被强制关闭的 reader 在查询时安全返回空结果（见 binformat/registry.go）。
+// atomicWriteSeq 为 atomicWriteWdb 的临时文件名提供进程内唯一序号，避免多个
+// goroutine 并发写同一目标 wdb 时争用同一个 .tmp 文件导致内容交错损坏（典型场景：
+// 启动 / 重建缓存时多方案预生成同时触发 unigram 等全局共享缓存的转换）。
+var atomicWriteSeq atomic.Uint64
+
 func atomicWriteWdb(wdbPath string, writeFn func(w io.Writer) error) error {
 	os.MkdirAll(filepath.Dir(wdbPath), 0755)
 
-	tmpPath := wdbPath + ".tmp"
+	tmpPath := fmt.Sprintf("%s.tmp.%d", wdbPath, atomicWriteSeq.Add(1))
 	f, err := os.Create(tmpPath)
 	if err != nil {
 		return fmt.Errorf("创建临时文件失败: %w", err)

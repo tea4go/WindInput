@@ -27,6 +27,27 @@
       </div>
       <div
         class="setting-item"
+        data-search-anchor="advanced.action.rebuild_dict_cache"
+      >
+        <div class="setting-info">
+          <label>词库缓存</label>
+          <p class="setting-hint">
+            强制重新生成所有词库的二进制缓存，在升级或替换词库文件后出现异常时使用
+          </p>
+        </div>
+        <div class="setting-control">
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="rebuildCacheLoading"
+            @click="handleRebuildDictCache"
+          >
+            {{ rebuildCacheLoading ? "生成中…" : "重新生成缓存" }}
+          </Button>
+        </div>
+      </div>
+      <div
+        class="setting-item"
         data-search-anchor="advanced.action.backup_restore"
       >
         <div class="setting-info">
@@ -532,6 +553,7 @@ const restoreLoading = ref(false);
 
 const resetConfirmOpen = ref(false);
 const resetLoading = ref(false);
+const rebuildCacheLoading = ref(false);
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
@@ -621,6 +643,26 @@ async function handleDoReset() {
     toast("重置失败: " + (e.message || e), "error");
   } finally {
     resetLoading.value = false;
+  }
+}
+
+async function handleRebuildDictCache() {
+  rebuildCacheLoading.value = true;
+  try {
+    const result = await wailsApi.rebuildDictCache();
+    if (result.error) {
+      toast("重建缓存失败: " + result.error, "error");
+      return;
+    }
+    toast(
+      result.deleted > 0
+        ? `词库缓存重建已触发（共 ${result.deleted} 个缓存文件）`
+        : "词库缓存重建已触发（将在首次使用时自动生成）",
+    );
+  } catch (e: any) {
+    toast("重建缓存失败: " + (e.message || e), "error");
+  } finally {
+    rebuildCacheLoading.value = false;
   }
 }
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/huanfeng/wind_input/pkg/buildvariant"
 	"github.com/huanfeng/wind_input/pkg/config"
@@ -36,6 +37,39 @@ func CachePath(name string) string {
 // WdatCachePath 返回 wdat 缓存文件的完整路径
 func WdatCachePath(name string) string {
 	return filepath.Join(GetCacheDir(), name+".wdat")
+}
+
+// MarkCacheStale 将缓存目录中所有 .wdb / .wdat 文件的 mtime 设置为 epoch，
+// 使 NeedsRegenerate 在下次检查时返回 true，从而强制重建缓存。
+// 该函数不删除文件，因此不会干扰正在被 mmap 持有的 reader；
+// 实际的 mmap 释放由 atomicWriteWdb 在写入新文件前完成。
+// 返回被标记的文件数量。
+func MarkCacheStale() int {
+	dir := GetCacheDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	epoch := time.Unix(0, 0)
+	now := time.Now()
+	marked := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := filepath.Ext(entry.Name())
+		if ext != ".wdb" && ext != ".wdat" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		if err := os.Chtimes(path, now, epoch); err == nil {
+			marked++
+			slog.Info("词库缓存已标记过期", "path", path)
+		} else {
+			slog.Warn("标记词库缓存过期失败", "path", path, "err", err)
+		}
+	}
+	return marked
 }
 
 // NeedsRegenerate 判断是否需要重新生成 wdb 缓存

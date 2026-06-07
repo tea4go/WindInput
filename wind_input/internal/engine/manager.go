@@ -631,6 +631,58 @@ func (m *Manager) SetSystemExtras(schemaID string, layers []dict.DictLayer) {
 	m.systemExtras[schemaID] = layers
 }
 
+// EvictAllEngines 驱逐所有已缓存的引擎，使下次 SwitchSchema 走慢路径重新构建。
+// 当前活跃引擎（currentEngine）保持不变，以便在重建期间继续处理输入，
+// 避免出现候选词返回空的中间状态。
+// 典型使用场景：RebuildDictCache——词库缓存文件已被 mtime 标为过期，
+// 需要驱逐内存中仍指向旧缓存的引擎对象，再触发 SwitchSchema 走工厂重建。
+func (m *Manager) EvictAllEngines() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.engines = make(map[string]Engine)
+	m.systemLayers = make(map[string]dict.DictLayer)
+	m.systemExtras = make(map[string][]dict.DictLayer)
+	m.currentID = ""
+	m.warmedSchemas.Range(func(k, _ any) bool {
+		m.warmedSchemas.Delete(k)
+		return true
+	})
+}
+
+// PrebuildAvailableCaches 在后台串行预生成 ids 列表中所有方案的词库缓存文件（.wdb/.wdat），
+// 不构建引擎、不注册词库层、不常驻内存。消除用户首次切换方案时的同步转换卡顿。
+//
+// 串行执行：避免多个 rime 转换同时占用 CPU/IO 与构建期临时内存；缓存已最新的方案会被
+// NeedsRegenerate 快速跳过。整体在单个后台 goroutine 中运行，不阻塞调用方（启动 / 重建路径）。
+func (m *Manager) PrebuildAvailableCaches(ids []string) {
+	m.mu.RLock()
+	sm := m.schemaManager
+	m.mu.RUnlock()
+	if sm == nil || len(ids) == 0 {
+		return
+	}
+	exeDir, dataDir := sm.GetDirs()
+	resolver := func(id string) *schema.Schema { return sm.GetSchema(id) }
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				m.logger.Error("预生成词库缓存 goroutine 崩溃", "panic", r)
+			}
+		}()
+		start := time.Now()
+		built := 0
+		for _, id := range ids {
+			s := sm.GetSchema(id)
+			if s == nil {
+				continue
+			}
+			schema.EnsureSchemaCacheFiles(s, exeDir, dataDir, resolver, m.logger)
+			built++
+		}
+		m.logger.Info("已启用方案词库缓存预生成完成", "count", built, "elapsed", time.Since(start))
+	}()
+}
+
 // reRegisterSystemLayer 为缓存引擎重新注册系统词库层到 CompositeDict
 func (m *Manager) reRegisterSystemLayer(schemaID string) {
 	if m.dictManager == nil {

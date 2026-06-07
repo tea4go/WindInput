@@ -324,6 +324,11 @@ type SystemResetDBReply struct {
 	Success bool `json:"success"`
 }
 
+// SystemRebuildDictCacheReply 重建词库缓存响应
+type SystemRebuildDictCacheReply struct {
+	Deleted int `json:"deleted"` // 已删除的缓存文件数量
+}
+
 // ── Phrase 服务类型 ──
 //
 // 2026-05-16 schema 简化: 短语统一为 (code, text, weight) 三元组,

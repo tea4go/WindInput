@@ -353,6 +353,15 @@ func (c *Client) SystemResetDB(schemaID string) error {
 	}, &reply)
 }
 
+// SystemRebuildDictCache 清空词库缓存文件并强制重载当前方案以触发缓存重建
+func (c *Client) SystemRebuildDictCache() (*SystemRebuildDictCacheReply, error) {
+	var reply SystemRebuildDictCacheReply
+	if err := c.call("System.RebuildDictCache", &Empty{}, &reply); err != nil {
+		return nil, err
+	}
+	return &reply, nil
+}
+
 // SystemDeleteSchema 彻底删除方案 bucket（清理残留）
 func (c *Client) SystemDeleteSchema(schemaID string) error {
 	var reply SystemResetDBReply
