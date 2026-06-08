@@ -105,9 +105,9 @@ func TestStatCollectorActiveTime(t *testing.T) {
 	base := time.Now()
 
 	sc.Record(StatEvent{Timestamp: base, RuneCount: 1, Source: SourceCandidate})
-	// 10s 间隔 < 60s 阈值，应累加
+	// 10s 间隔 < 15s 阈值，应累加
 	sc.Record(StatEvent{Timestamp: base.Add(10 * time.Second), RuneCount: 1, Source: SourceCandidate})
-	// 90s 间隔 > 60s 阈值，应跳过
+	// 90s 间隔 > 15s 阈值，应跳过
 	sc.Record(StatEvent{Timestamp: base.Add(100 * time.Second), RuneCount: 1, Source: SourceCandidate})
 
 	today := sc.GetTodayStat()
@@ -159,12 +159,24 @@ func TestStatCollectorStreak(t *testing.T) {
 	}
 }
 
-func TestSpeedPerMinuteUsesOneMinuteFloor(t *testing.T) {
-	if got := SpeedPerMinute(252, 6); got != 252 {
-		t.Fatalf("SpeedPerMinute(252, 6) = %d, want 252", got)
+func TestSpeedPerMinute(t *testing.T) {
+	// 正常时间段：直接计算
+	if got := SpeedPerMinute(252, 6); got != 2520 {
+		t.Fatalf("SpeedPerMinute(252, 6) = %d, want 2520", got)
 	}
 	if got := SpeedPerMinute(252, 120); got != 126 {
 		t.Fatalf("SpeedPerMinute(252, 120) = %d, want 126", got)
+	}
+	// 极短时间触发 5s 下限
+	if got := SpeedPerMinute(60, 3); got != 720 {
+		t.Fatalf("SpeedPerMinute(60, 3) = %d, want 720", got)
+	}
+	// 零值边界
+	if got := SpeedPerMinute(0, 60); got != 0 {
+		t.Fatalf("SpeedPerMinute(0, 60) = %d, want 0", got)
+	}
+	if got := SpeedPerMinute(100, 0); got != 0 {
+		t.Fatalf("SpeedPerMinute(100, 0) = %d, want 0", got)
 	}
 }
 

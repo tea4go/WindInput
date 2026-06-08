@@ -84,13 +84,13 @@ type StatsMeta struct {
 	MaxSpeed      int    `json:"max_speed"` // 历史最快速度（字/分钟，按天计算）
 }
 
-// SpeedPerMinute returns chars/minute with a one-minute floor for active time.
+// SpeedPerMinute returns chars/minute with a 5-second floor for active time.
 func SpeedPerMinute(chars, activeSeconds int) int {
 	if chars <= 0 || activeSeconds <= 0 {
 		return 0
 	}
-	if activeSeconds < 60 {
-		activeSeconds = 60
+	if activeSeconds < 5 {
+		activeSeconds = 5
 	}
 	return chars * 60 / activeSeconds
 }

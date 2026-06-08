@@ -22,7 +22,7 @@ type StatEvent struct {
 }
 
 // 活跃输入判定阈值：两次上屏间隔小于此值视为持续输入
-const activeThreshold = 60 * time.Second
+const activeThreshold = 15 * time.Second
 
 // StatCollector 输入统计采集器，内存聚合 + 定期持久化
 type StatCollector struct {
