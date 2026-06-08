@@ -14,7 +14,7 @@
 ## Key Files
 | File | Description |
 |------|-------------|
-| `mixed.go` | `Engine`：混输引擎主体；`Config`（`MinPinyinLength`/`CodetableWeightBoost`/`ShowSourceHint`/`PinyinOnlyOverflow`/`TopCodeOverridePinyin`）；`ConvertEx` 核心转换逻辑（`convertCodetableOnly`/`convertMixed`/`convertPinyinOnly`）；`OnCandidateSelected` 按 `CandidateSource` 路由学习回调；`ConvertResult` 结构体（含 `IsPinyinFallback` 和拼音降级字段） |
+| `mixed.go` | `Engine`：混输引擎主体；`Config`（`MinPinyinLength`/`CodetableWeightBoost`/`ShowSourceHint`/`PinyinOnlyOverflow`/`TopCodeOverridePinyin`，全为纯数据字段）；`GetConfig`/`ApplyConfig`（`*e.config=*cfg` 整体覆盖，供热更新）；`ConvertEx` 核心转换逻辑（`convertCodetableOnly`/`convertMixed`/`convertPinyinOnly`）；`OnCandidateSelected` 按 `CandidateSource` 路由学习回调；`ConvertResult` 结构体（含 `IsPinyinFallback` 和拼音降级字段） |
 
 ## For AI Agents
 
@@ -23,7 +23,8 @@
 - **Phrase 独立 tier** (2026-05-16 引入, `PhraseWeightBoost = 1_000_000`): codetableCandidates 切片里 `IsPhrase=true` 的候选在 boost 阶段被分离, 改打 `SourcePhrase` 并仅 +1M, 永远 > 拼音、永远 < 码表词; 详见 docs/design/command-bar-followup.md §2.2
 - **Partial 独立 tier** (2026-05-17 引入, `PartialMatchBoost = 500_000`): 码表前缀补全 / 拆分组合 (`Code != input`) 不再加 codetable 6M, 改加 PartialMatchBoost, 让 phrase (1M) 全码命中优先于拆分组合; 解决输入 "date" 时 "d→大" 拆分候选抢在短语之前的问题
 - 混输模式**默认禁用码表顶字**（`HandleTopCode` 合法拼音序列时返回 false），超码长输入由拼音降级处理而非顶字上屏
-- **顶码歧义裁决**（2026-06-08）：`wang`/`aipu` 这类"既是完整拼音、又是终止性精确五笔全码"的串无法从编码判断意图。`HandleTopCode` 在 `isPossiblePinyinSequence` 为真时，若同时满足 `isWholeSyllablePinyin`（整音节，无残缺尾）+ `isTerminalExactCode`（`HasFullInputMatch && !HasLongerCode`）且开关 `TopCodeOverridePinyin=true`，则**放行顶码倒向五笔**。整音节门禁保证不会切在半个音节上（`zhon`/`yans` 残缺串永不放行，仍受保护）；终止性全码门禁把误伤限定到极小碰撞集。习惯打 `wang ba` 等拼音词的用户可将 schema 的 `topcode_override_pinyin` 设为 false 回退到纯拼音保护。`Config` 零值（`false`）= 旧行为，仅 `DefaultConfig`/factory 默认 true
+- **顶码歧义裁决**（2026-06-08）：`wang`/`aipu` 这类"既是完整拼音、又是终止性精确五笔全码"的串无法从编码判断意图。`HandleTopCode` 在 `isPossiblePinyinSequence` 为真时，若同时满足 `isWholeSyllablePinyin`（整音节，无残缺尾）+ `isTerminalExactCode`（`HasFullInputMatch && !HasLongerCode`）且开关 `TopCodeOverridePinyin=true`，则**放行顶码倒向五笔**。整音节门禁保证不会切在半个音节上（`zhon`/`yans` 残缺串永不放行，仍受保护）；终止性全码门禁把误伤限定到极小碰撞集。**默认 false**（`Config` 零值、`DefaultConfig`、factory 三处一致），即默认维持原拼音保护、不放行顶码；偏好五笔顶码连打的用户在 schema 设 `topcode_override_pinyin: true` 显式开启。设置程序"混输设置"区有对应开关。
+  - **配置单一来源（避免热更新漏接）**：`mixed.Config` 的 spec→config 映射唯一收敛在 `schema.MixedConfigFromSpec`，构建（`factory.createMixedEngine`）与热更新（`engine.Manager.UpdateMixedOptions` → `mixed.Engine.ApplyConfig`）都走它。**新增任何 mixed 标量开关只需在 `MixedConfigFromSpec` 补一行**，构建与热更新自动同步，不必在 `manager_config.go` 逐字段手抄。漂移由 `schema.TestMixedConfigFromSpec_ConstructionEqualsReload` 守护。⚠️ 该"整体覆盖"仅因 `mixed.Config` 全为纯数据字段成立；若引入资源型字段（mmap/词库等），`ApplyConfig` 不能再无脑整体覆盖，需显式处理副作用
 - `SetDictManager(dm)` 在引擎创建后由 factory 调用，用于 Shadow 规则访问
 - Shadow 规则在各 convert 路径末尾统一应用（幂等操作），防止合并+重排后位置偏移
 - `addSourceHints`：仅在拼音候选的 `Comment` 字段添加 `"拼"` 前缀，码表候选不添加标记

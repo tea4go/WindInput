@@ -195,6 +195,34 @@ func (m *Manager) UpdatePinyinOptions(pinyinCfg *config.PinyinConfig) {
 	m.logger.Info("更新拼音选项", "showCodeHint", pinyinCfg.ShowCodeHint, "fuzzyEnabled", pinyinCfg.Fuzzy.Enabled)
 }
 
+// UpdateMixedOptions 热更新混输引擎本体的 mixed 级配置（仅作用于当前活跃引擎）。
+//
+// 背景：mixed.Config 的字段原先只在 factory 构建引擎时读取一次，热重载只更新了码表子引擎
+// （UpdateCodetableOptions）和拼音子引擎（UpdatePinyinOptions），却没有任何路径回写混输
+// 引擎本体的 Config，导致改这类开关后必须重启服务才生效——设置里保存了、后端却"收不到"。
+//
+// 通用机制：复用与 factory 相同的 schema.MixedConfigFromSpec 推导，再 ApplyConfig 整体覆盖。
+// 因此【新增任何 mixed 标量开关，只需在 MixedConfigFromSpec 补一行】，构建与热更新自动同步，
+// 无需再来这里逐字段手抄（漂移由 schema 包的 TestMixedConfigFromSpec_ConstructionEqualsReload 守护）。
+//
+// 只更新 m.currentEngine：mixed 级配置是方案私有的，按活跃方案的 spec 回写，避免把一个混输
+// 方案的开关错误地套到另一个混输方案的缓存引擎上。
+func (m *Manager) UpdateMixedOptions(spec *schema.MixedSpec) {
+	if spec == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	mixedEngine, ok := m.currentEngine.(*mixed.Engine)
+	if !ok {
+		return
+	}
+	mixedEngine.ApplyConfig(schema.MixedConfigFromSpec(spec))
+
+	m.logger.Info("更新混输选项", "topCodeOverridePinyin", mixedEngine.GetConfig().TopCodeOverridePinyin)
+}
+
 // UpdateShuangpinLayout 热更新指定方案的双拼布局。
 //
 // 仅作用于 schemaID 对应的引擎，不再"通杀所有 engine"。这是修复

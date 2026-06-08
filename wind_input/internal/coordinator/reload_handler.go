@@ -191,6 +191,11 @@ func (h *ReloadHandler) reloadActiveSchemaConfig() {
 				}
 			}
 		}
+		// 混输引擎本体的 mixed 级配置（顶码歧义裁决开关等）热更新。
+		// 缺这一步会让 topcode_override_pinyin 等开关改后必须重启服务才生效。
+		if s.Engine.Mixed != nil {
+			h.engineMgr.UpdateMixedOptions(s.Engine.Mixed)
+		}
 	}
 
 	// 附加词库热重载（根据 enabled 字段动态加载/卸载 dict layer）。

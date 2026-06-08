@@ -1079,6 +1079,34 @@ func ReloadExtraDicts(dm *dict.DictManager, s *Schema, exeDir, dataDir string, l
 	return layers
 }
 
+// MixedConfigFromSpec 由 MixedSpec 推导出 mixed.Config，是 spec→运行时配置的【唯一】映射。
+//
+// 引擎构建（createMixedEngine）与配置热更新（engine.Manager.UpdateMixedOptions）都经此函数，
+// 保证两条路径永不漂移：新增 mixed 标量开关只需在此补一行，构建与热更新自动同时生效，不必再
+// 在 manager_config.go 里逐字段手抄。前提是 mixed.Config 全为纯数据字段（无 mmap/词库等副作用），
+// 故热更新侧可直接整体覆盖（mixed.Engine.ApplyConfig）。
+//
+// 缺省语义与历史保持一致：MinPinyinLength<=0→2；CodetableWeightBoost<=0→1000万；
+// PinyinOnlyOverflow 未设→true；TopCodeOverridePinyin 未设→false；ShowSourceHint 直取 spec 值。
+func MixedConfigFromSpec(spec *MixedSpec) *mixed.Config {
+	cfg := mixed.DefaultConfig()
+	if spec == nil {
+		return cfg
+	}
+	if spec.MinPinyinLength > 0 {
+		cfg.MinPinyinLength = spec.MinPinyinLength
+	}
+	if spec.CodetableWeightBoost > 0 {
+		cfg.CodetableWeightBoost = spec.CodetableWeightBoost
+	}
+	cfg.ShowSourceHint = spec.ShowSourceHint
+	if spec.PinyinOnlyOverflow != nil {
+		cfg.PinyinOnlyOverflow = *spec.PinyinOnlyOverflow
+	}
+	cfg.TopCodeOverridePinyin = spec.TopCodeOverridePinyin != nil && *spec.TopCodeOverridePinyin
+	return cfg
+}
+
 // createMixedEngine 创建混输引擎（五笔+拼音并行查询）
 // 五笔引擎使用 DictManager 的主 CompositeDict（含 codetable-system 层），
 // 拼音引擎使用独立的 CompositeDict（含 pinyin-system 层），避免交叉污染。
@@ -1430,27 +1458,8 @@ func createMixedEngine(s *Schema, exeDir, dataDir string, dm *dict.DictManager, 
 	}
 
 	// === 4. 创建混输引擎 ===
-	pinyinOnlyOverflow := true // 默认超过码长仅查拼音
-	if mixedSpec.PinyinOnlyOverflow != nil {
-		pinyinOnlyOverflow = *mixedSpec.PinyinOnlyOverflow
-	}
-	topCodeOverridePinyin := true // 默认歧义串(完整拼音∩终止性全码)放行顶码倒向五笔
-	if mixedSpec.TopCodeOverridePinyin != nil {
-		topCodeOverridePinyin = *mixedSpec.TopCodeOverridePinyin
-	}
-	mixedConfig := &mixed.Config{
-		MinPinyinLength:       mixedSpec.MinPinyinLength,
-		CodetableWeightBoost:  mixedSpec.CodetableWeightBoost,
-		ShowSourceHint:        mixedSpec.ShowSourceHint,
-		PinyinOnlyOverflow:    pinyinOnlyOverflow,
-		TopCodeOverridePinyin: topCodeOverridePinyin,
-	}
-	if mixedConfig.MinPinyinLength <= 0 {
-		mixedConfig.MinPinyinLength = 2
-	}
-	if mixedConfig.CodetableWeightBoost <= 0 {
-		mixedConfig.CodetableWeightBoost = 10000000
-	}
+	// 配置经 MixedConfigFromSpec 统一推导（构建与热更新共用同一映射，永不漂移）。
+	mixedConfig := MixedConfigFromSpec(mixedSpec)
 
 	mixedEngine := mixed.NewEngine(codetableEngine, pinyinEngine, mixedConfig, logger)
 

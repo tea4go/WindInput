@@ -77,12 +77,12 @@ type Config struct {
 	ShowSourceHint       bool // 是否在 Hint 中标记来源
 	PinyinOnlyOverflow   bool // 超过最大码长时仅查拼音（不查码表前缀），默认 true
 
-	// TopCodeOverridePinyin 歧义串顶码偏好开关，默认 true。
+	// TopCodeOverridePinyin 歧义串顶码偏好开关，默认 false。
 	//
 	// 当前 maxCodeLen 前缀同时满足"整音节拼音"+"终止性精确五笔全码"时（典型如
 	// wang / aipu —— 既是完整拼音、又是唯一五笔编码），无法从编码判断用户意图。
-	// 开关为 true 时放行顶码、倒向五笔连打；为 false 时维持拼音保护、继续累积成
-	// 拼音（习惯打 "wang ba" 等拼音词的用户应关闭）。详见 HandleTopCode 裁决注释。
+	// 开关为 true 时放行顶码、倒向五笔连打；为 false（默认）时维持拼音保护、继续
+	// 累积成拼音（习惯打 "wang ba" 等拼音词的用户保持默认即可）。详见 HandleTopCode 裁决注释。
 	TopCodeOverridePinyin bool
 }
 
@@ -93,7 +93,7 @@ func DefaultConfig() *Config {
 		CodetableWeightBoost:  10000000,
 		ShowSourceHint:        true,
 		PinyinOnlyOverflow:    true,
-		TopCodeOverridePinyin: true,
+		TopCodeOverridePinyin: false,
 	}
 }
 
@@ -1108,4 +1108,20 @@ func (e *Engine) GetPinyinEngine() *pinyin.Engine {
 // GetConfig 获取混输配置
 func (e *Engine) GetConfig() *Config {
 	return e.config
+}
+
+// ApplyConfig 用新配置【整体覆盖】当前配置。
+//
+// 采用 *e.config = *cfg 的整结构体赋值，而非逐字段拷贝：这样新增 Config 字段时无需改动本函数，
+// 配置热更新（manager_config.UpdateMixedOptions）即可零成本同步——这是"加一个开关只在
+// MixedConfigFromSpec 改一处"得以成立的另一半。保持 e.config 指针不变，避免已持有该指针的
+// 调用方（如 HandleTopCode 读取 e.config）拿到悬空引用。
+//
+// 仅适用于纯数据 Config（mixed.Config 全为 int/bool，无 mmap/词库等资源型字段）；若将来引入
+// 资源型字段，需在此显式处理其副作用，不能再无脑整体覆盖。
+func (e *Engine) ApplyConfig(cfg *Config) {
+	if cfg == nil || e.config == nil {
+		return
+	}
+	*e.config = *cfg
 }

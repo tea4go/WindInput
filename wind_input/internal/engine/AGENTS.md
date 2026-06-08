@@ -13,7 +13,7 @@
 |------|-------------|
 | `engine.go` | `Engine`、`ExtendedEngine` 接口定义，`ConvertResult` 结构体（含拼音专用字段） |
 | `manager.go` | `Manager`：Schema 驱动的引擎注册表；`SwitchSchema`（切换/懒加载方案引擎）、`ToggleSchema`（循环切换，返回 `ToggleSchemaResult`：`SkippedSchemas`=真失败方案，`PendingSchemas`=资源后台生成中的方案，调用方据此决定提示文案）、`ActivateTempSchema`/`DeactivateTempSchema`（临时方案）、`ActivateTempPinyin`/`DeactivateTempPinyin`（临时拼音词库层注入）；`Convert`/`ConvertEx`/`HandleTopCode`/`OnCandidateSelected`/`SaveUserFreqs` 等调度方法；`GetEncoderRules`/`GetEncoderMaxWordLength`/`GetReverseIndex`（加词编码支持）；`IsPinyinSchema()`/`GeneratePinyinCode()`（拼音方案判断与全拼编码生成）；兼容旧 API `RegisterEngine`/`SwitchEngine`/`ToggleEngine` |
-| `manager_config.go` | 配置热更新：`UpdateFilterMode`、`UpdateWubiOptions`、`UpdatePinyinOptions`（含五笔反查码表懒加载） |
+| `manager_config.go` | 配置热更新：`UpdateFilterMode`、`UpdateCodetableOptions`、`UpdatePinyinOptions`（含五笔反查码表懒加载）、`UpdateMixedOptions`（混输引擎本体 `mixed.Config` 级开关如 `TopCodeOverridePinyin`，仅作用于 `currentEngine`）。⚠️ 新增任何"构建期读入引擎 Config"的方案字段，必须同时在对应 `UpdateXxxOptions` 里热更新，否则改设置后需重启服务才生效 |
 
 ## Subdirectories
 | Directory | Purpose |

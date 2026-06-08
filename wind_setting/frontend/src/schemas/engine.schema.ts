@@ -457,4 +457,11 @@ export const engineSchema: EngineSchema = [
     hint: '输入z时首选为上一次上屏的内容，快速重复输入',
     engines: ['mixed'],
   },
+  {
+    type: 'toggle',
+    key: 'engine.mixed.topcode_override_pinyin',
+    label: '歧义码顶码上屏',
+    hint: '输入既是完整拼音、又是唯一五笔全码时（如 wang、aipu），继续输入下一字时顶码上屏五笔词；关闭则继续作为拼音输入（适合习惯输入「wang ba」等拼音词）',
+    engines: ['mixed'],
+  },
 ]

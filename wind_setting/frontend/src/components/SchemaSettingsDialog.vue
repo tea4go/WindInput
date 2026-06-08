@@ -460,6 +460,18 @@ function isReferencedBy(schemaID: string): boolean {
                 />
               </div>
             </div>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>歧义码顶码上屏</label>
+                <p class="setting-hint">输入既是完整拼音、又是唯一五笔全码时（如 wang、aipu），继续输入下一字时顶码上屏五笔词；关闭则继续作为拼音输入（适合习惯输入「wang ba」等拼音词）</p>
+              </div>
+              <div class="setting-control">
+                <Switch
+                  :checked="getMixedConfig(schemaID).topcode_override_pinyin"
+                  @update:checked="(v: boolean) => { getMixedConfig(schemaID).topcode_override_pinyin = v; }"
+                />
+              </div>
+            </div>
           </template>
 
           <!-- 非引用式混输：schema 渲染全部字段 + 模糊音手写 -->
