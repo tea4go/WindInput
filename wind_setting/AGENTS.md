@@ -20,7 +20,7 @@
 | `protocol_handler.go` | 协议导入投递与注册开关 API：`handleProtocolURL`、`ConsumePendingProtocol`、`GetProtocolStatus`、`SetProtocolRegistered`；emit `protocol-import` 事件 + pending 冷启动缓存 |
 | `protocol_register_windows.go` / `protocol_register_darwin.go` | 协议注册：Win 写/删/自愈 `HKCU\Software\Classes\windinput`（`RegisterProtocol`/`UnregisterProtocol`/`ProtocolStatus`/`SelfHealProtocol`）；darwin 声明式托管(no-op)，`protocolManagedBySystem` 区分 |
 | `app_theme.go` | 主题导入 API：`ImportThemeFromFile/URL/Text`、`PreviewThemeFromURL`（下载解析 meta 不落盘，供 URL schema 确认框） |
-| `singleton_windows.go` / `singleton_darwin.go` | 单实例 + 原生消息框 + 跨实例 IPC：Win 用互斥锁/窗口激活；darwin 靠 .app 天然单实例(no-op), 消息框走 osascript。`ensureSingleInstance(startPage, addWordParams, protocolURL)` 返回 `(release func(), ok bool)` 跨平台契约；IPC 消息支持 `add-word\|...` 与 `protocol\|<url>`；`startIPCListener(ctx, *App)` |
+| `singleton_windows.go` / `singleton_darwin.go` | 单实例 + 原生消息框 + 跨实例 IPC：Win 用互斥锁/窗口激活；darwin 靠 .app 天然单实例(no-op), 消息框走 osascript。`ensureSingleInstance(startPage, addWordParams, protocolURL)` 返回 `(release func(), ok bool)` 跨平台契约；IPC 消息支持 `add-word\|...` 与 `protocol\|<url>`；`startIPCListener(ctx, *App)`。**跨完整性级别**：mutex/event 经 `singletonSecurityAttributes()` 用低完整性标签创建(SDDL `D:(A;;GA;;;WD)S:(ML;;NW;;;LW)`)，使中/高完整性实例互相可见；`CreateMutex` 的 `ERROR_ACCESS_DENIED` 也按「已有实例」处理(兼容旧高标签对象)。改动同步对象创建处务必沿用同一 SA |
 | `open_windows.go` / `open_darwin.go` | `shellOpen`(打开文件/URL)：Win 用 ShellExecuteW, darwin 用 `open` 命令 |
 | `wails.json` | Wails 项目配置，前端包管理器为 pnpm; `frontend:build` 用 `pnpm exec vite build`(跳过 vue-tsc 严格门禁) |
 | `go.mod` | Go 模块：`wind_setting`，依赖 `wind_input`（本地 replace）和 `wailsapp/wails/v2 v2.11.0` |

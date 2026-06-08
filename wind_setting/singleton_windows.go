@@ -39,6 +39,35 @@ var (
 
 const swRestore = 9
 
+// sharedSA 缓存单例同步对象(mutex/event)使用的安全属性。
+var sharedSA *windows.SecurityAttributes
+
+// singletonSecurityAttributes 返回带「允许所有用户完全访问(DACL) + 低完整性标签(SACL)」
+// 的安全属性，使不同完整性级别(中/高)的实例都能打开同名 Global\ mutex/event。
+//
+// 为什么需要：设置程序可能被以不同完整性级别启动——IME 经 ShellExecuteW 打开设置时
+// 继承 TSF 宿主(可能是被聚焦的提权程序)的完整性，而浏览器点 windinput:// 链接启动的
+// 实例是中完整性。高完整性实例创建的 Global\ 对象默认带高完整性标签(no-write-up)，
+// 低完整性实例 CreateMutex 会被拒返回 ACCESS_DENIED 而非 ALREADY_EXISTS，导致单例
+// 判定失效、弹出第二个窗口。把对象标签降到 Low 后任意级别均可打开，单例恢复正常。
+//
+// 构建失败(理论上不会)时返回 nil，CreateMutex/CreateEvent 退化为默认安全属性。
+func singletonSecurityAttributes() *windows.SecurityAttributes {
+	if sharedSA != nil {
+		return sharedSA
+	}
+	sd, err := windows.SecurityDescriptorFromString("D:(A;;GA;;;WD)S:(ML;;NW;;;LW)")
+	if err != nil {
+		log.Printf("[singleton] 构建安全描述符失败，回退默认安全属性: %v", err)
+		return nil
+	}
+	sharedSA = &windows.SecurityAttributes{
+		Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+		SecurityDescriptor: sd,
+	}
+	return sharedSA
+}
+
 // navigateFilePath returns the path used to pass page name between instances.
 func navigateFilePath() string {
 	return filepath.Join(os.TempDir(), "WindInput_Setting_Navigate"+buildvariant.Suffix()+".txt")
@@ -51,11 +80,20 @@ func navigateFilePath() string {
 // release 用于退出前释放互斥锁 (跨平台统一契约, darwin 见 singleton_darwin.go)。
 func ensureSingleInstance(startPage string, addWordParams AddWordParams, protocolURL string) (func(), bool) {
 	name, _ := windows.UTF16PtrFromString(mutexName)
-	handle, err := windows.CreateMutex(nil, false, name)
-	if err == windows.ERROR_ALREADY_EXISTS {
+	handle, err := windows.CreateMutex(singletonSecurityAttributes(), false, name)
+	// 已有实例在运行的两种信号：
+	//   - ERROR_ALREADY_EXISTS：同/低完整性，成功打开既有对象(handle 有效)。
+	//   - ERROR_ACCESS_DENIED：既有对象由更高完整性实例创建且无许可 SD(升级前的旧
+	//     实例)，当前进程无权打开(handle==0)，但仍说明已有实例在运行。
+	// 新版本通过 singletonSecurityAttributes 把对象标签降到 Low，正常情况下不会再
+	// 出现 ACCESS_DENIED；保留该分支用于兼容仍在运行的旧实例。
+	if err == windows.ERROR_ALREADY_EXISTS || err == windows.ERROR_ACCESS_DENIED {
 		if handle != 0 {
 			windows.CloseHandle(handle)
 		}
+		// startPage 与 protocolURL 在真实启动中互斥（windinput:// 协议参数不会与
+		// --page 同时出现），且 IPC 用「单临时文件 + auto-reset event」只能可靠投递一条
+		// 消息——背靠背两次发送会因文件覆盖/信号合并丢消息。故用 else if 只发一条。
 		if startPage != "" {
 			// 加词模式：发送 "add-word|text|code|schema" 格式
 			if startPage == "add-word" {
@@ -64,9 +102,8 @@ func ensureSingleInstance(startPage string, addWordParams AddWordParams, protoco
 			} else {
 				sendPageToExisting(startPage)
 			}
-		}
-		// 协议导入：发送 "protocol|<rawURL>" 给已有实例
-		if protocolURL != "" {
+		} else if protocolURL != "" {
+			// 协议导入：发送 "protocol|<rawURL>" 给已有实例
 			sendPageToExisting("protocol|" + protocolURL)
 		}
 		if !activateExistingWindow() {
@@ -105,7 +142,7 @@ func sendPageToExisting(page string) {
 	// CreateEvent returns a valid handle even when the event already exists
 	// (err == ERROR_ALREADY_EXISTS), so we only fail on handle == 0.
 	evtName, _ := windows.UTF16PtrFromString(eventName)
-	evtHandle, _ := windows.CreateEvent(nil, 0, 0, evtName)
+	evtHandle, _ := windows.CreateEvent(singletonSecurityAttributes(), 0, 0, evtName)
 	if evtHandle == 0 {
 		log.Printf("[singleton] 打开导航事件失败")
 		return
@@ -125,7 +162,8 @@ func sendPageToExisting(page string) {
 func startIPCListener(ctx context.Context, app *App) {
 	evtName, _ := windows.UTF16PtrFromString(eventName)
 	// auto-reset event (manualReset=0), initial state not signaled (initialState=0)
-	evtHandle, _ := windows.CreateEvent(nil, 0, 0, evtName)
+	// 用许可安全属性创建，确保不同完整性级别的新实例能 SetEvent 触发本监听。
+	evtHandle, _ := windows.CreateEvent(singletonSecurityAttributes(), 0, 0, evtName)
 	if evtHandle == 0 {
 		log.Printf("[singleton] 创建导航事件失败")
 		return
