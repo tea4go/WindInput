@@ -273,6 +273,12 @@ func (c *Coordinator) isZKeyHybridMode() bool {
 	if c.engineMgr == nil || !c.engineMgr.IsZKeyRepeatEnabled() {
 		return false
 	}
+	// Z 键混合的"临时拼音回退"分支仅在码表引擎下有意义：混输引擎自带拼音层，
+	// 无需也不应走 z 回退。缺这道门禁会让混输方案（其 Mixed.ZKeyRepeat 也被
+	// IsZKeyRepeatEnabled 读取）误判为 hybrid，导致 "zhang" 丢首字母 z 进临时拼音。
+	if !c.engineMgr.IsCurrentEngineType(schema.EngineTypeCodeTable) {
+		return false
+	}
 	if c.config == nil {
 		return false
 	}
@@ -299,10 +305,16 @@ func (c *Coordinator) zHybridFallback(lowerKey string) (pinyinBuffer string, ok 
 	if len(c.inputBuffer) == 0 || c.inputBuffer[0] != 'z' {
 		return "", false
 	}
-	if !c.isZKeyHybridMode() && !c.isTempPinyinZTrigger() {
+	if c.engineMgr == nil {
 		return "", false
 	}
-	if c.engineMgr == nil {
+	// 权威门禁：临时拼音回退只对码表引擎有意义。混输引擎自带拼音层, 绝不回退。
+	// 与 getTempPinyinTriggerKey 的引擎类型门禁保持一致, 作为唯一入口的兜底,
+	// 不依赖 isZKeyHybridMode / isTempPinyinZTrigger 各自的内部判定。
+	if !c.engineMgr.IsCurrentEngineType(schema.EngineTypeCodeTable) {
+		return "", false
+	}
+	if !c.isZKeyHybridMode() && !c.isTempPinyinZTrigger() {
 		return "", false
 	}
 	if c.engineMgr.HasPrefix(c.inputBuffer + lowerKey) {

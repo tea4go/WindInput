@@ -132,3 +132,25 @@ func TestZHybridFallback(t *testing.T) {
 		})
 	}
 }
+
+// TestZHybridFallback_MixedEngineNeverTriggers 回归: 混输引擎自带拼音, z 键混合
+// (临时拼音回退) 不应生效。即使混输方案开了 ZKeyRepeat 且 z 在临时拼音触发键里,
+// isZKeyHybridMode 必须返回 false, zHybridFallback 必须不切——否则 "zhang" 会丢首
+// 字母 z 误入临时拼音, 打不出"张"。
+func TestZHybridFallback_MixedEngineNeverTriggers(t *testing.T) {
+	h := newTestCoordinator(t,
+		withEngineMgr(withCodetableEntry("zz", "占位短语")),
+		withZHybridMixedSchema(true),
+	)
+
+	if h.isZKeyHybridMode() {
+		t.Fatal("isZKeyHybridMode() = true in mixed engine, want false")
+	}
+
+	// 模拟混输下输入 "zh": inputBuffer="z" + 新键 'h', 即便码表层无 "zh" 前缀,
+	// 也不应回退到临时拼音。
+	h.inputBuffer = "z"
+	if buf, ok := h.zHybridFallback("h"); ok {
+		t.Errorf("zHybridFallback triggered in mixed engine: buf=%q", buf)
+	}
+}

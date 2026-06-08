@@ -217,6 +217,41 @@ func withZHybridSchema(zRepeat bool) testOption {
 	}
 }
 
+// withZHybridMixedSchema 与 withZHybridSchema 类似, 但注入的是混输 (Mixed) 方案,
+// 用于验证 z 回退 / isZKeyHybridMode 在混输引擎下被正确门禁掉.
+//  1. 如未挂载 engineMgr, 用 withEngineMgr 默认参数补一个;
+//  2. 注入一个 Mixed schema, MixedSpec.ZKeyRepeat = zRepeat;
+//  3. 把 "z" 加入 config.Input.TempPinyin.TriggerKeys.
+func withZHybridMixedSchema(zRepeat bool) testOption {
+	return func(c *Coordinator) {
+		if c.engineMgr == nil {
+			withEngineMgr()(c)
+		}
+		zRepeatVal := zRepeat
+		sm := schema.NewSchemaManager("", "", slog.New(slog.DiscardHandler))
+		const id = "test-mixed"
+		sm.InjectSchemaForTest(id, &schema.Schema{
+			Schema: schema.SchemaInfo{ID: id, Name: "Test Mixed"},
+			Engine: schema.EngineSpec{
+				Type: schema.EngineTypeMixed,
+				Mixed: &schema.MixedSpec{
+					ZKeyRepeat: &zRepeatVal,
+				},
+			},
+		})
+		sm.SetActiveForTest(id)
+		c.engineMgr.SetSchemaManager(sm)
+		c.engineMgr.SetCurrentIDForTest(id)
+
+		if c.config == nil {
+			c.config = &config.Config{}
+		}
+		c.config.Input.TempPinyin.TriggerKeys = append(
+			c.config.Input.TempPinyin.TriggerKeys, "z",
+		)
+	}
+}
+
 // pressKeyCode 直接以 VK 码触发一次按键 (用于 backspace / 方向键等没有 ASCII 字面值的键).
 func (h *testCoordinator) pressKeyCode(keyCode int) *bridge.KeyEventResult {
 	h.t.Helper()
