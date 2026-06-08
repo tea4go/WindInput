@@ -266,6 +266,57 @@ func TestHandleTopCode_ShadowPinRespected(t *testing.T) {
 	}
 }
 
+// TestMixedEngine_ClearOnEmptyAt4 回归测试：混输模式下开启五笔「全码清空」
+// (ClearOnEmptyAt4) 时，达到码长的空码（码表与拼音都无候选）应清空。
+//
+// 复现场景：简拼关闭时输入 "ssej"（既非码表前缀、也非合法拼音序列），
+// 旧实现 convertMixed 永不设置 ShouldClear，导致空码卡住不清空。
+//
+// 守护用例：输入是合法拼音前缀（如 "shan"，长拼音可能尚未输入完）时，
+// 即便码表判定可清空，也应被 isPossiblePinyinSequence 守护拦下，不清空。
+func TestMixedEngine_ClearOnEmptyAt4(t *testing.T) {
+	// 极简码表：仅 abcd 有候选，其余编码皆空码。
+	ctFile := filepath.Join(t.TempDir(), "test.txt")
+	ctContent := "[CodeTableHeader]\nName = test\nCodeLength = 4\n[CodeTable]\nabcd\t茶道\t1000\n"
+	if err := os.WriteFile(ctFile, []byte(ctContent), 0644); err != nil {
+		t.Fatalf("write codetable file: %v", err)
+	}
+
+	ctCfg := codetable.DefaultConfig()
+	ctCfg.MaxCodeLength = 4
+	ctCfg.ClearOnEmptyAt4 = true
+	ctEng := codetable.NewEngine(ctCfg, nil)
+	if err := ctEng.LoadCodeTable(ctFile); err != nil {
+		t.Fatalf("LoadCodeTable: %v", err)
+	}
+
+	// 无拼音子引擎：convertMixed 只查码表，pinyinParser 由 NewEngine 注入用于守护判定。
+	me := NewEngine(ctEng, nil, &Config{MinPinyinLength: 2}, nil)
+
+	tests := []struct {
+		name      string
+		input     string
+		wantEmpty bool
+		wantClear bool
+	}{
+		{name: "ssej 非码表前缀非拼音 → 清空", input: "ssej", wantEmpty: true, wantClear: true},
+		{name: "shan 合法拼音前缀 → 守护不清空", input: "shan", wantEmpty: true, wantClear: false},
+		{name: "abcd 有候选 → 不空不清", input: "abcd", wantEmpty: false, wantClear: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := me.ConvertEx(tt.input, 0)
+			if result.IsEmpty != tt.wantEmpty {
+				t.Errorf("IsEmpty = %v, want %v", result.IsEmpty, tt.wantEmpty)
+			}
+			if result.ShouldClear != tt.wantClear {
+				t.Errorf("ShouldClear = %v, want %v", result.ShouldClear, tt.wantClear)
+			}
+		})
+	}
+}
+
 func TestMixedEngine_CommonWordsFromPinyinFallback(t *testing.T) {
 	engine := newRealMixedEngine(t)
 

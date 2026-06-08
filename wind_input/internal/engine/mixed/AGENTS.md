@@ -44,6 +44,7 @@
 - 调用点（4 条全部）：`convertCodetableOnly` / `convertMixed` / `convertMixedOverflow` / `convertPinyinOnly` 末端均调用 `recheckAutoCommit`，分别按各自路径传 `hasPinyinCandidate`（纯码表 false，其余按拼音候选数 > 0）
 - **长码场景**（`len(input) > maxCodeLen`）：`convertMixedOverflow` 与 `convertPinyinOnly` 在 `codetableEngine.HasFullInputMatch(input) || HasLongerCode(input)` 为真时，额外用完整 input 查码表并合并，避免 `abcde→乙` 类长码精确匹配被前 N 码截断吞掉；拼音候选在 `convertPinyinOnly` 此分支同步走 `PinyinTierScale` 归一化以维持 tier 分层
 - `HandleEmptyCode` 在 `ClearOnEmptyAt4` 触发清空前调用 `codetableEngine.HasLongerCode(input)` 守护，存在更长后继时不清空
+- **空码清空走 ConvertEx 而非 HandleEmptyCode**：协调器只认 `ConvertResult.ShouldClear`（`HandleEmptyCode` 在当前流程未被调用）。`convertMixed` 末端在 `result.IsEmpty`（merged 为空 == 码表与拼音都无候选）时继承 `codetableResult.ShouldClear`（即码表的全码清空决策），并用 `!isPossiblePinyinSequence(input)` 守护：长拼音可能尚未输入完处于暂时无候选状态，此时不清空。**勿改回无条件 `ShouldClear=false`**——那会让简拼关闭时的 4 码空码（如 `ssej`）卡住不清空（回归测试 `TestMixedEngine_ClearOnEmptyAt4`）
 
 #### ⚠️ 学习路由（OnCandidateSelected）与 charBuffer 连续性
 

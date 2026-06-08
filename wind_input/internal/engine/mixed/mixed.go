@@ -821,11 +821,17 @@ func (e *Engine) convertMixed(input string, maxCandidates int) *ConvertResult {
 		result.ShouldCommit, result.CommitText = e.recheckAutoCommit(input, merged, len(pinyinCandidates) > 0)
 	}
 
-	// 如果码表空码但拼音有结果，不标记为空码
-	if result.IsEmpty && e.codetableEngine != nil {
-		codetableEmpty := codetableResult != nil && codetableResult.IsEmpty
-		if codetableEmpty {
-			result.ShouldClear = false // 不清空，拼音兜底
+	// 空码清空决策：result.IsEmpty == (merged 为空) == 码表与拼音都无候选，
+	// 此时"拼音兜底"不成立（拼音确实没有候选），应继承码表子引擎已算好的全码
+	// 清空决策（ClearOnEmptyAt4 + 达码长 + 无更长后继）。否则像 "ssej"（简拼关闭、
+	// 既非码表前缀也非合法拼音）这类 4 码空码会卡住不清空。
+	//
+	// 守护：输入构成合法拼音序列时不清空——长拼音可能尚未输入完，处于暂时无候选
+	// 状态（用户可能再敲一码补全音节），与 recheckAutoCommit/HandleTopCode 的
+	// isPossiblePinyinSequence 守护对称。
+	if result.IsEmpty && codetableResult != nil {
+		if codetableResult.ShouldClear && !e.isPossiblePinyinSequence(input) {
+			result.ShouldClear = true
 		}
 	}
 
