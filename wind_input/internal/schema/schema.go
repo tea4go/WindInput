@@ -55,6 +55,10 @@ type MixedSpec struct {
 	PinyinOnlyOverflow   *bool  `yaml:"pinyin_only_overflow"`     // 超过最大码长时仅查拼音（默认 true）
 	ZKeyRepeat           *bool  `yaml:"z_key_repeat,omitempty"`   // Z键重复上屏：输入z时首选为上次上屏的内容
 	EnableEnglish        *bool  `yaml:"enable_english,omitempty"` // 混输模式下是否启用英文候选（默认 false）
+	// TopCodeOverridePinyin 歧义串顶码偏好（默认 true）：当前 maxCodeLen 前缀既是
+	// 完整拼音音节、又是终止性精确五笔全码时（如 wang/aipu），是否放行顶码倒向五笔。
+	// 习惯打 "wang ba" 等拼音词的用户可设为 false 维持拼音保护。
+	TopCodeOverridePinyin *bool `yaml:"topcode_override_pinyin,omitempty"`
 }
 
 // TempPinyinSpec 码表方案的临时拼音配置

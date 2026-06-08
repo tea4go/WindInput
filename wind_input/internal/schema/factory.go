@@ -1434,11 +1434,16 @@ func createMixedEngine(s *Schema, exeDir, dataDir string, dm *dict.DictManager, 
 	if mixedSpec.PinyinOnlyOverflow != nil {
 		pinyinOnlyOverflow = *mixedSpec.PinyinOnlyOverflow
 	}
+	topCodeOverridePinyin := true // 默认歧义串(完整拼音∩终止性全码)放行顶码倒向五笔
+	if mixedSpec.TopCodeOverridePinyin != nil {
+		topCodeOverridePinyin = *mixedSpec.TopCodeOverridePinyin
+	}
 	mixedConfig := &mixed.Config{
-		MinPinyinLength:      mixedSpec.MinPinyinLength,
-		CodetableWeightBoost: mixedSpec.CodetableWeightBoost,
-		ShowSourceHint:       mixedSpec.ShowSourceHint,
-		PinyinOnlyOverflow:   pinyinOnlyOverflow,
+		MinPinyinLength:       mixedSpec.MinPinyinLength,
+		CodetableWeightBoost:  mixedSpec.CodetableWeightBoost,
+		ShowSourceHint:        mixedSpec.ShowSourceHint,
+		PinyinOnlyOverflow:    pinyinOnlyOverflow,
+		TopCodeOverridePinyin: topCodeOverridePinyin,
 	}
 	if mixedConfig.MinPinyinLength <= 0 {
 		mixedConfig.MinPinyinLength = 2

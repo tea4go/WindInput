@@ -341,6 +341,55 @@ func TestIsPossiblePinyinSequence(t *testing.T) {
 	}
 }
 
+// TestIsWholeSyllablePinyin 验证"整音节"判断逻辑（顶码歧义裁决的核心门禁，纯逻辑、不依赖词库）。
+//
+// 区别于 isPossiblePinyinSequence：本函数只在前缀"恰好切在音节边界、无残缺尾音节"时为真，
+// 用于把 wang/aipu 这类"既是完整拼音又可能是五笔全码"的歧义串放行顶码，而 zhon/yans 这类
+// 残缺串永远不放行（继续受拼音保护）。
+func TestIsWholeSyllablePinyin(t *testing.T) {
+	engine := &Engine{
+		maxCodeLen:   4,
+		pinyinParser: pinyin.NewPinyinParser(),
+	}
+
+	tests := []struct {
+		input string
+		want  bool
+		desc  string
+	}{
+		// 整音节（单音节填满码长）→ 是
+		{"wang", true, "wang: 单个完整音节"},
+		{"shen", true, "shen: 单个完整音节"},
+		{"gong", true, "gong: 单个完整音节"},
+		{"zhua", true, "zhua: 单个完整音节"},
+		{"shuo", true, "shuo: 单个完整音节"},
+
+		// 整音节（多音节恰好覆盖）→ 是
+		{"aipu", true, "aipu: ai+pu 两完整音节恰好覆盖"},
+		{"niha", true, "niha: ni+ha 两完整音节恰好覆盖"},
+		{"woai", true, "woai: wo+ai 两完整音节恰好覆盖"},
+
+		// 残缺尾音节 / 残缺前缀 → 否（仍受拼音保护，不放行顶码）
+		{"zhon", false, "zhon: zhong 的残缺前缀，非完整音节"},
+		{"yans", false, "yans: yan + 残缺 s"},
+		{"nizh", false, "nizh: ni + 残缺 zh"},
+
+		// 首音节单字母简拼 / 非拼音 → 否
+		{"abcd", false, "abcd: 首音节 a 为单字母简拼"},
+		{"rcqn", false, "rcqn: 非拼音序列"},
+		{"sfgh", false, "sfgh: 纯声母序列"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			got := engine.isWholeSyllablePinyin(tt.input)
+			if got != tt.want {
+				t.Errorf("isWholeSyllablePinyin(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestMixedOverflow_PinyinWithCodetable 验证超过码长时码表和拼音都参与查询
 func TestMixedOverflow_PinyinWithCodetable(t *testing.T) {
 	dictRoot := getBuiltDictRoot(t)

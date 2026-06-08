@@ -76,15 +76,24 @@ type Config struct {
 	CodetableWeightBoost int  // 码表候选权重提升基线，默认10000000
 	ShowSourceHint       bool // 是否在 Hint 中标记来源
 	PinyinOnlyOverflow   bool // 超过最大码长时仅查拼音（不查码表前缀），默认 true
+
+	// TopCodeOverridePinyin 歧义串顶码偏好开关，默认 true。
+	//
+	// 当前 maxCodeLen 前缀同时满足"整音节拼音"+"终止性精确五笔全码"时（典型如
+	// wang / aipu —— 既是完整拼音、又是唯一五笔编码），无法从编码判断用户意图。
+	// 开关为 true 时放行顶码、倒向五笔连打；为 false 时维持拼音保护、继续累积成
+	// 拼音（习惯打 "wang ba" 等拼音词的用户应关闭）。详见 HandleTopCode 裁决注释。
+	TopCodeOverridePinyin bool
 }
 
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		MinPinyinLength:      2,
-		CodetableWeightBoost: 10000000,
-		ShowSourceHint:       true,
-		PinyinOnlyOverflow:   true,
+		MinPinyinLength:       2,
+		CodetableWeightBoost:  10000000,
+		ShowSourceHint:        true,
+		PinyinOnlyOverflow:    true,
+		TopCodeOverridePinyin: true,
 	}
 }
 
@@ -242,11 +251,26 @@ func (e *Engine) HandleTopCode(input string) (commitText string, newInput string
 		return "", input, false
 	}
 
-	// 检查前 N 码是否为合法拼音序列：如果是，抑制顶码
-	if e.isPossiblePinyinSequence(input[:e.maxCodeLen]) {
-		e.logger.Debug("HandleTopCode: prefix is valid pinyin, suppress top-code",
-			"prefix", input[:e.maxCodeLen])
-		return "", input, false
+	prefix := input[:e.maxCodeLen]
+
+	// 检查前 N 码是否为合法拼音序列：默认抑制顶码（保护正在输入的拼音）。
+	//
+	// 歧义裁决（2026-06-08）：当前缀同时满足"整音节拼音"+"终止性精确五笔全码"
+	// 时（典型如 wang / aipu —— 既是完整拼音又是唯一五笔编码），其意图无法从编码
+	// 区分。此时按 TopCodeOverridePinyin 开关放行顶码、倒向五笔连打。
+	//   - 整音节门禁（isWholeSyllablePinyin）确保前缀切在音节边界上，无论裁决给
+	//     哪一侧都不会落实半个音节；zhon/yans 这类残缺尾音节永远不进此分支，仍受保护。
+	//   - 终止性全码门禁（isTerminalExactCode）把误伤限定到极小的碰撞集——只有
+	//     "恰好是唯一五笔全码"的整音节串才放行。
+	// 开关为 false 时维持原拼音保护（习惯打 "wang ba" 等拼音词的用户应关闭）。
+	if e.isPossiblePinyinSequence(prefix) {
+		override := e.config != nil && e.config.TopCodeOverridePinyin &&
+			e.isWholeSyllablePinyin(prefix) && e.isTerminalExactCode(prefix)
+		if !override {
+			e.logger.Debug("HandleTopCode: prefix is valid pinyin, suppress top-code", "prefix", prefix)
+			return "", input, false
+		}
+		e.logger.Debug("HandleTopCode: ambiguous prefix overridden to top-code", "prefix", prefix)
 	}
 
 	if e.codetableEngine == nil {
@@ -277,7 +301,6 @@ func (e *Engine) HandleTopCode(input string) (commitText string, newInput string
 	//
 	// prefix 长度恒等于 maxCodeLen，ConvertEx 分支必然落到 convertMixed（2~maxCodeLen
 	// 码），即用户输入到第 maxCodeLen 码时候选框所展示的同一结果。
-	prefix := input[:e.maxCodeLen]
 	convResult := e.ConvertEx(prefix, 0)
 	if len(convResult.Candidates) == 0 {
 		e.logger.Debug("HandleTopCode: no candidates found", "prefix", prefix)
@@ -337,6 +360,44 @@ func (e *Engine) isPossiblePinyinSequence(prefix string) bool {
 	// 剩余部分必须是合法的音节前缀（如 "s" 可续写为 se/si/su 等）
 	remainder := prefix[endPos:]
 	return trie.HasPrefix(remainder)
+}
+
+// isWholeSyllablePinyin 判断 prefix 是否恰好由完整拼音音节构成（切在音节边界、无残缺尾音节）。
+//
+// 用于顶码歧义裁决：只有"整音节"前缀才允许放行顶码覆盖拼音保护，这样无论裁决倒向
+// 五笔还是拼音，都不会在半个音节上落实。与 isPossiblePinyinSequence 的区别在于：后者
+// 把"残缺前缀/残缺尾音节"也算合法（用于保护正在输入的拼音），本函数则把它们排除。
+//   - "wang"  → 单个完整音节                → true
+//   - "aipu"  → ai+pu 两完整音节，恰好覆盖   → true
+//   - "zhon"  → zhong 的残缺前缀（非完整音节）→ false
+//   - "yans"  → yan + 残缺 s                 → false
+//   - "abcd"  → 首音节 a 为单字母简拼         → false
+func (e *Engine) isWholeSyllablePinyin(prefix string) bool {
+	if e.pinyinParser == nil {
+		return false
+	}
+	trie := e.pinyinParser.GetSyllableTrie()
+	// 整体即是一个完整音节（覆盖 wang/shen/zhua 等"单音节填满码长"场景）
+	if trie != nil && trie.Contains(prefix) {
+		return true
+	}
+	// 多音节：从起始位置连续的完整音节恰好覆盖整个 prefix，且首音节非单字母简拼
+	parsed := e.pinyinParser.Parse(prefix)
+	completed, endPos := parsed.ContiguousCompletedFromStart()
+	if len(completed) == 0 || len(completed[0]) < 2 {
+		return false
+	}
+	return endPos == len(prefix)
+}
+
+// isTerminalExactCode 判断 prefix 是否为"终止性精确五笔全码"：码表中存在 Code==prefix
+// 的精确词条，且没有更长后继编码。这是五笔顶码连打的典型形态（编码已确定、可立即上屏），
+// 作为顶码裁决倒向五笔的硬条件，把误伤面限定在"恰好是唯一全码"的极小碰撞集内。
+func (e *Engine) isTerminalExactCode(prefix string) bool {
+	if e.codetableEngine == nil {
+		return false
+	}
+	return e.codetableEngine.HasFullInputMatch(prefix) && !e.codetableEngine.HasLongerCode(prefix)
 }
 
 // --- 核心转换逻辑 ---

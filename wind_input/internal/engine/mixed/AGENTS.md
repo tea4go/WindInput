@@ -14,7 +14,7 @@
 ## Key Files
 | File | Description |
 |------|-------------|
-| `mixed.go` | `Engine`：混输引擎主体；`Config`（`MinPinyinLength`/`CodetableWeightBoost`/`ShowSourceHint`）；`ConvertEx` 核心转换逻辑（`convertCodetableOnly`/`convertMixed`/`convertPinyinOnly`）；`OnCandidateSelected` 按 `CandidateSource` 路由学习回调；`ConvertResult` 结构体（含 `IsPinyinFallback` 和拼音降级字段） |
+| `mixed.go` | `Engine`：混输引擎主体；`Config`（`MinPinyinLength`/`CodetableWeightBoost`/`ShowSourceHint`/`PinyinOnlyOverflow`/`TopCodeOverridePinyin`）；`ConvertEx` 核心转换逻辑（`convertCodetableOnly`/`convertMixed`/`convertPinyinOnly`）；`OnCandidateSelected` 按 `CandidateSource` 路由学习回调；`ConvertResult` 结构体（含 `IsPinyinFallback` 和拼音降级字段） |
 
 ## For AI Agents
 
@@ -22,7 +22,8 @@
 - **权重策略**（双向夹击）：码表精确匹配 +10M、前缀匹配 +6M；拼音纯辅音简拼按长度递减（3码 -2M，4码 -3.5M），含元音输入保持原值
 - **Phrase 独立 tier** (2026-05-16 引入, `PhraseWeightBoost = 1_000_000`): codetableCandidates 切片里 `IsPhrase=true` 的候选在 boost 阶段被分离, 改打 `SourcePhrase` 并仅 +1M, 永远 > 拼音、永远 < 码表词; 详见 docs/design/command-bar-followup.md §2.2
 - **Partial 独立 tier** (2026-05-17 引入, `PartialMatchBoost = 500_000`): 码表前缀补全 / 拆分组合 (`Code != input`) 不再加 codetable 6M, 改加 PartialMatchBoost, 让 phrase (1M) 全码命中优先于拆分组合; 解决输入 "date" 时 "d→大" 拆分候选抢在短语之前的问题
-- 混输模式**禁用码表顶字**（`HandleTopCode` 合法拼音序列时返回 false），超码长输入由拼音降级处理而非顶字上屏
+- 混输模式**默认禁用码表顶字**（`HandleTopCode` 合法拼音序列时返回 false），超码长输入由拼音降级处理而非顶字上屏
+- **顶码歧义裁决**（2026-06-08）：`wang`/`aipu` 这类"既是完整拼音、又是终止性精确五笔全码"的串无法从编码判断意图。`HandleTopCode` 在 `isPossiblePinyinSequence` 为真时，若同时满足 `isWholeSyllablePinyin`（整音节，无残缺尾）+ `isTerminalExactCode`（`HasFullInputMatch && !HasLongerCode`）且开关 `TopCodeOverridePinyin=true`，则**放行顶码倒向五笔**。整音节门禁保证不会切在半个音节上（`zhon`/`yans` 残缺串永不放行，仍受保护）；终止性全码门禁把误伤限定到极小碰撞集。习惯打 `wang ba` 等拼音词的用户可将 schema 的 `topcode_override_pinyin` 设为 false 回退到纯拼音保护。`Config` 零值（`false`）= 旧行为，仅 `DefaultConfig`/factory 默认 true
 - `SetDictManager(dm)` 在引擎创建后由 factory 调用，用于 Shadow 规则访问
 - Shadow 规则在各 convert 路径末尾统一应用（幂等操作），防止合并+重排后位置偏移
 - `addSourceHints`：仅在拼音候选的 `Comment` 字段添加 `"拼"` 前缀，码表候选不添加标记
