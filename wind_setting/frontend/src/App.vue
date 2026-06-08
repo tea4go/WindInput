@@ -804,22 +804,23 @@ onMounted(async () => {
       } catch {}
     });
 
-    // 监听协议导入事件（windinput://，从 IPC 透传或 mac.OnUrlOpen）
-    EventsOn("protocol-import", (payload: ProtocolImportPayload) => {
-      protocolPayload.value = payload;
-      try {
-        Show();
-      } catch {}
-    });
-    // 冷启动兜底：主动拉取早于 EventsOn 到达的协议请求
-    consumePendingProtocol().then((p) => {
-      if (p) {
-        protocolPayload.value = p;
-        try {
-          Show();
-        } catch {}
-      }
-    });
+    // 协议导入（windinput://，从 IPC 透传或 mac.OnUrlOpen）：
+    // 信号通道与冷启动兜底都通过 consumePendingProtocol 拉取，后端「取出即清空」保证幂等，
+    // 避免 push(事件)/pull(主动拉取) 双通道在时序竞争下重复弹出导入对话框。
+    const drainPendingProtocol = () => {
+      consumePendingProtocol().then((p) => {
+        if (p) {
+          protocolPayload.value = p;
+          try {
+            Show();
+          } catch {}
+        }
+      });
+    };
+    // 监听协议导入信号（不携带负载，仅提示前端来拉取）
+    EventsOn("protocol-import", () => drainPendingProtocol());
+    // 冷启动兜底：主动拉取早于 EventsOn 注册到达的协议请求
+    drainPendingProtocol();
 
     // 监听系统外观变化, 跟随系统模式下刷新主题预览
     systemDarkMql?.addEventListener("change", handleSystemThemeChange);
@@ -888,12 +889,14 @@ onUnmounted(() => {
               variant="outline"
               :disabled="!canResetPage"
               @click="resetCurrentPageDefaults"
-            >恢复本页</Button>
+              >恢复本页</Button
+            >
             <Button
               variant="outline"
               :disabled="!canReloadPage"
               @click="handleReloadConfig"
-            >重新加载</Button>
+              >重新加载</Button
+            >
           </div>
           <Button
             @click="saveConfig"
