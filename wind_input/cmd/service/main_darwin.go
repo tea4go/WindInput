@@ -31,6 +31,11 @@ func showErrorMessageBox(message string) {
 // setDPIAwareness darwin 上 no-op (系统自动 retina 缩放)。
 func setDPIAwareness() {}
 
+// isInstallerRunning darwin 上恒为 false。
+// 安装器重拉防护是 Windows 专属机制 (wind_tsf.dll 在安装/卸载窗口期重拉服务),
+// macOS 无对应的 DLL 重拉路径, 故此处仅提供对称桩保持 main.go 跨平台可编译。
+func isInstallerRunning() bool { return false }
+
 // pidFilePath 返回单例 PID 文件路径, 与 bridge socket 同目录方便清理。
 func pidFilePath() string {
 	dir := filepath.Dir(bridge.BridgePipeName)
