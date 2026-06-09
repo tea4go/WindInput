@@ -503,39 +503,71 @@ Function GenRandomSuffix
   IntFmt $RANDOM_SUFFIX "%u" $5
 FunctionEnd
 
-; WaitForProcessExit: 轮询等待指定进程退出
-;   Push <process_name>     ; 如 "wind_input.exe"
-;   Push <max_attempts>     ; 每次 Sleep 200ms；20 ≈ 4s，25 ≈ 5s
-;   Call WaitForProcessExit
-; 为什么需要：taskkill /F 返回时进程内核对象可能尚未释放（mmap、pipe handle 异步回收）。
-; 固定 Sleep 1000ms 在 EDR 干预或 mmap 较大时仍可能不够，新启动的同名进程会撞上文件占用。
-!macro _DefineWaitForProcessExit _prefix
-Function ${_prefix}WaitForProcessExit
-  Exch $1   ; max_attempts
-  Exch
-  Exch $0   ; process name
-  Push $2
-  Push $3
+; RobustKill: 健壮杀进程——taskkill 异步重试，失败转 PowerShell Stop-Process，仍失败则交 REBOOTOK 兜底
+;   Push <base_name>     ; 进程基名，不含 .exe，如 "wind_input"
+;   Call ${_prefix}RobustKill
+; 为什么不直接 nsExec 同步 taskkill：当目标进程有线程卡在不可中断的内核 I/O 时，
+;   taskkill /F 的内部 TerminateProcess 会同步等待该进程消失，约 60s 才超时返回，
+;   nsExec 同步等待会让安装器整体卡死几分钟。这里用 start /b 异步发起 taskkill（无窗口、
+;   不阻塞），自行轮询判定；taskkill 两次仍杀不掉，则改用 PowerShell Stop-Process
+;   （.NET Process.Kill 发出终止信号即返回，不傻等进程消失），实测对 taskkill 杀不掉的
+;   “活死人”进程有效。两阶段都失败则放弃强杀，由后续 BackupIfLocked + REBOOTOK 在重启后清理。
+!macro _DefineRobustKill _prefix
+Function ${_prefix}RobustKill
+  Exch $0          ; base name (无 .exe)
+  Push $1          ; 完整镜像名
+  Push $2          ; taskkill 尝试计数
+  Push $3          ; tasklist/nsExec 结果
+  Push $4          ; 轮询计数
 
-  StrCpy $2 0
-${_prefix}wfpe_loop:
-  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq $0" /NH | findstr /I "$0" >nul'
+  StrCpy $1 "$0.exe"
+
+  ; 进程不存在则直接返回
+  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq $1" /NH | findstr /I "$1" >nul'
   Pop $3
-  StrCmp $3 "0" 0 ${_prefix}wfpe_done     ; findstr 退出 1 = 未找到 = 进程已退出
-  IntOp $2 $2 + 1
-  IntCmp $2 $1 ${_prefix}wfpe_timeout 0 ${_prefix}wfpe_timeout
+  StrCmp $3 "0" 0 ${_prefix}rk_done
+
+  ; --- 阶段1: taskkill 异步重试 2 次（start /b 后台发起，避免同步阻塞 ~60s 与窗口闪烁）---
+  StrCpy $2 0
+${_prefix}rk_taskkill:
+  DetailPrint "  正在结束 $1 ..."
+  nsExec::Exec 'cmd /c start /b "" taskkill /F /IM $1 >nul 2>&1'
+  Pop $3   ; 弃 start 的退出码（不代表 taskkill 真实结果，靠下面轮询判定）
+  StrCpy $4 0
+${_prefix}rk_poll1:
   Sleep 200
-  Goto ${_prefix}wfpe_loop
-${_prefix}wfpe_timeout:
-  DetailPrint "  警告：等待 $0 退出超时，继续后续步骤"
-${_prefix}wfpe_done:
+  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq $1" /NH | findstr /I "$1" >nul'
+  Pop $3
+  StrCmp $3 "0" 0 ${_prefix}rk_done       ; findstr=1 未找到 → 进程已消失
+  IntOp $4 $4 + 1
+  IntCmp $4 15 0 ${_prefix}rk_poll1 0      ; 15*200ms ≈ 3s
+  IntOp $2 $2 + 1
+  IntCmp $2 2 ${_prefix}rk_powershell ${_prefix}rk_taskkill ${_prefix}rk_powershell
+
+  ; --- 阶段2: 改用 PowerShell Stop-Process（发信号即返回，对卡死进程有效）---
+${_prefix}rk_powershell:
+  DetailPrint "  taskkill 未能结束 $1，改用 PowerShell 强制结束..."
+  nsExec::ExecToLog 'powershell -NoProfile -NonInteractive -Command "Get-Process -Name $0 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"'
+  Pop $3
+  StrCpy $4 0
+${_prefix}rk_poll2:
+  Sleep 200
+  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq $1" /NH | findstr /I "$1" >nul'
+  Pop $3
+  StrCmp $3 "0" 0 ${_prefix}rk_done
+  IntOp $4 $4 + 1
+  IntCmp $4 30 0 ${_prefix}rk_poll2 0      ; 30*200ms ≈ 6s
+  DetailPrint "  警告: 仍无法结束 $1，占用的文件将在重启后自动清理"
+
+${_prefix}rk_done:
+  Pop $4
   Pop $3
   Pop $2
-  Pop $0
   Pop $1
+  Pop $0
 FunctionEnd
 !macroend
-!insertmacro _DefineWaitForProcessExit ""
+!insertmacro _DefineRobustKill ""
 
 ; RenameViaCmdRen: rename using "cmd /c ren" (identical to install.bat).
 ;   $0 = full source path, $2 = new filename only (no path, ren syntax)
@@ -605,7 +637,7 @@ Function un.GenRandomSuffix
   IntFmt $RANDOM_SUFFIX "%u" $5
 FunctionEnd
 
-!insertmacro _DefineWaitForProcessExit "un."
+!insertmacro _DefineRobustKill "un."
 
 Function un.BackupIfLocked
   ClearErrors
@@ -750,43 +782,20 @@ install_skip_old_uninstall:
   StrCmp $InstallMode "portable" install_stop_portable_only
   WriteRegStr HKLM "Software\WindInput" "InstallerRunning" "1"
   DetailPrint "正在停止旧进程..."
-  nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_setting.exe >nul 2>&1'
-  Pop $0
-  nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_portable.exe >nul 2>&1'
-  Pop $0
-  nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
-  Pop $0
-  ; 轮询等待 wind_input 真正退出（首轮 10s；mmap/pipe handle 异步回收，EDR 延迟终止均需额外时间）
-  Push "wind_input.exe"
-  Push 50
-  Call WaitForProcessExit
-  ; 首轮超时后进程仍存在时再发一次终止信号（处理 EDR 延迟或 handle 慢回收的情况）
-  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq wind_input.exe" /NH | findstr /I "wind_input.exe" >nul'
-  Pop $0
-  StrCmp $0 "0" 0 install_wind_input_gone
-    DetailPrint "  wind_input.exe 首轮等待超时，重新发送终止信号..."
-    nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
-    Pop $0
-    Push "wind_input.exe"
-    Push 25
-    Call WaitForProcessExit
-  install_wind_input_gone:
-  Push "wind_setting.exe"
-  Push 15
-  Call WaitForProcessExit
-  Push "wind_portable.exe"
-  Push 15
-  Call WaitForProcessExit
+  ; RobustKill 内部：taskkill 异步重试 → 失败转 PowerShell Stop-Process → 仍失败交 REBOOTOK 兜底
+  Push "wind_setting"
+  Call RobustKill
+  Push "wind_portable"
+  Call RobustKill
+  Push "wind_input"
+  Call RobustKill
   Goto install_stop_procs_done
 
 install_stop_portable_only:
   ; 便携模式：只停旧便携进程，不触碰系统安装的服务进程
   DetailPrint "正在停止旧便携进程..."
-  nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_portable.exe >nul 2>&1'
-  Pop $0
-  Push "wind_portable.exe"
-  Push 15
-  Call WaitForProcessExit
+  Push "wind_portable"
+  Call RobustKill
 
 install_stop_procs_done:
 
@@ -1085,33 +1094,14 @@ Section "Uninstall"
 
   ; --- Step 1: Stop processes ---
   DetailPrint "正在停止进程..."
-  nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_setting.exe >nul 2>&1'
-  Pop $0 ; discard nsExec exit code
-  nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_portable.exe >nul 2>&1'
-  Pop $0
-  nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
-  Pop $0
-  ; 轮询等待真正退出（首轮 10s；升级模式下后续要立刻删除 $INSTDIR\data，必须确保 mmap 已释放）
-  Push "wind_input.exe"
-  Push 50
-  Call un.WaitForProcessExit
-  ; 首轮超时后进程仍存在时再发一次终止信号
-  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq wind_input.exe" /NH | findstr /I "wind_input.exe" >nul'
-  Pop $0
-  StrCmp $0 "0" 0 uninst_wind_input_gone
-    DetailPrint "  wind_input.exe 首轮等待超时，重新发送终止信号..."
-    nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
-    Pop $0
-    Push "wind_input.exe"
-    Push 25
-    Call un.WaitForProcessExit
-  uninst_wind_input_gone:
-  Push "wind_setting.exe"
-  Push 15
-  Call un.WaitForProcessExit
-  Push "wind_portable.exe"
-  Push 15
-  Call un.WaitForProcessExit
+  ; RobustKill 内部：taskkill 异步重试 → 失败转 PowerShell Stop-Process → 仍失败交 REBOOTOK 兜底
+  ; （升级模式下后续要立刻删除 $INSTDIR\data，必须确保进程退出、mmap 已释放）
+  Push "wind_setting"
+  Call un.RobustKill
+  Push "wind_portable"
+  Call un.RobustKill
+  Push "wind_input"
+  Call un.RobustKill
 
   ; --- Step 2: Unregister input method and DLL ---
   DetailPrint "正在从系统输入法列表移除..."
