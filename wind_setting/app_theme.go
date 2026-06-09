@@ -281,7 +281,7 @@ func (a *App) DeleteTheme(themeName string) error {
 	if _, err := os.Stat(themeDir); os.IsNotExist(err) {
 		return fmt.Errorf("主题不存在: %s", themeName)
 	}
-	wailsRuntime.LogInfof(a.ctx, "[setting] 删除主题 id=%s", themeName)
+	a.logInfof("[setting] 删除主题 id=%s", themeName)
 	return os.RemoveAll(themeDir)
 }
 
@@ -294,7 +294,7 @@ func (a *App) OpenThemesFolder() error {
 	if err := os.MkdirAll(userThemesDir, 0o755); err != nil {
 		return fmt.Errorf("创建主题目录失败: %w", err)
 	}
-	wailsRuntime.LogInfof(a.ctx, "[setting] 打开主题目录 len=%d", len(userThemesDir))
+	a.logInfof("[setting] 打开主题目录 len=%d", len(userThemesDir))
 	return shellOpen(userThemesDir)
 }
 

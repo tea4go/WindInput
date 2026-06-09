@@ -9,13 +9,21 @@ import (
 	"github.com/huanfeng/wind_input/pkg/buildvariant"
 	"github.com/huanfeng/wind_input/pkg/rpcapi"
 	"wind_setting/updater"
-
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
 type App struct {
 	ctx context.Context
+
+	// webMode 为 true 表示运行在 Web 形态（无 Wails runtime）。此时 ctx 是占位的
+	// context.Background()，不能传给 wailsRuntime.*（无效 ctx 会触发 log.Fatalf 终止
+	// 进程，且 recover 拦不住）。所有 wailsRuntime 日志/事件调用须改走
+	// a.logInfof / a.logErrorf / a.emitEvent 包装（见 app_runtime_compat.go）。
+	webMode bool
+
+	// webEmit 在 Web 形态下由 runWebMode 接到 webServer.broadcast，使 a.emitEvent
+	// 能把事件（如下载进度 update:*）经 SSE 投递到浏览器；非 Web 模式为 nil。
+	webEmit func(name string, data ...any)
 
 	// 启动页面（通过命令行参数指定）
 	startPage string
@@ -122,7 +130,7 @@ func (a *App) runStartupUpdateCheck() {
 	a.startupUpdateMu.Lock()
 	a.startupUpdateResult = result
 	a.startupUpdateMu.Unlock()
-	wailsRuntime.EventsEmit(a.ctx, "update:available", result)
+	a.emitEvent("update:available", result)
 }
 
 // startEventListener 启动事件监听，将 RPC 事件转发为 Wails 前端事件
@@ -141,13 +149,13 @@ func (a *App) startEventListener() {
 				}
 				switch msg.Type {
 				case rpcapi.EventTypeConfig:
-					wailsRuntime.EventsEmit(a.ctx, rpcapi.WailsEventConfig, payload)
+					a.emitEvent(rpcapi.WailsEventConfig, payload)
 				case rpcapi.EventTypeStats:
-					wailsRuntime.EventsEmit(a.ctx, rpcapi.WailsEventStats, payload)
+					a.emitEvent(rpcapi.WailsEventStats, payload)
 				case rpcapi.EventTypeSystem:
-					wailsRuntime.EventsEmit(a.ctx, rpcapi.WailsEventSystem, payload)
+					a.emitEvent(rpcapi.WailsEventSystem, payload)
 				default:
-					wailsRuntime.EventsEmit(a.ctx, rpcapi.WailsEventDict, payload)
+					a.emitEvent(rpcapi.WailsEventDict, payload)
 				}
 			})
 			if err != nil {

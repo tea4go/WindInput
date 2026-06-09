@@ -1,9 +1,5 @@
 package main
 
-import (
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
-)
-
 // ProtocolImportPayload 是投递给前端的协议导入负载（含解析成功/失败）。
 type ProtocolImportPayload struct {
 	OK      bool             `json:"ok"`
@@ -40,7 +36,7 @@ func (a *App) handleProtocolURL(raw string) {
 	a.pendingMu.Unlock()
 	if a.ctx != nil {
 		// 仅发信号（不带 payload），前端收到后调 ConsumePendingProtocol 拉取
-		wailsRuntime.EventsEmit(a.ctx, "protocol-import")
+		a.emitEvent("protocol-import")
 	}
 }
 

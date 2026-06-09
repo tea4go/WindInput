@@ -2,8 +2,6 @@ package main
 
 import (
 	"wind_setting/updater"
-
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // GetUpdateConfig 返回当前更新设置。
@@ -29,13 +27,13 @@ func (a *App) CheckUpdate() (*updater.CheckResult, error) {
 func (a *App) StartDownload(downloadURL, assetName string, expectedSize int64) {
 	go func() {
 		path, err := updater.DownloadRelease(downloadURL, assetName, expectedSize, func(p updater.DownloadProgress) {
-			wailsRuntime.EventsEmit(a.ctx, "update:progress", p)
+			a.emitEvent("update:progress", p)
 		})
 		if err != nil {
-			wailsRuntime.EventsEmit(a.ctx, "update:error", err.Error())
+			a.emitEvent("update:error", err.Error())
 			return
 		}
-		wailsRuntime.EventsEmit(a.ctx, "update:done", path)
+		a.emitEvent("update:done", path)
 	}()
 }
 

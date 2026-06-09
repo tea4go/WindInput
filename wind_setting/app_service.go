@@ -386,17 +386,17 @@ func (a *App) GetPathInfo() (*PathInfo, error) {
 func (a *App) OpenLogFolder() error {
 	path, err := config.GetLogsDir()
 	if err != nil {
-		wailsRuntime.LogErrorf(a.ctx, "[setting] 获取日志目录失败: %v", err)
+		a.logErrorf("[setting] 获取日志目录失败: %v", err)
 		return err
 	}
 	// 日志目录在首次写入前可能尚未创建，提前确保其存在
 	if err := os.MkdirAll(path, 0o755); err != nil {
-		wailsRuntime.LogErrorf(a.ctx, "[setting] 创建日志目录失败: %v", err)
+		a.logErrorf("[setting] 创建日志目录失败: %v", err)
 		return err
 	}
-	wailsRuntime.LogInfof(a.ctx, "[setting] 打开日志目录 len=%d", len(path))
+	a.logInfof("[setting] 打开日志目录 len=%d", len(path))
 	if err := shellOpen(path); err != nil {
-		wailsRuntime.LogErrorf(a.ctx, "[setting] 打开日志目录失败: %v", err)
+		a.logErrorf("[setting] 打开日志目录失败: %v", err)
 		return err
 	}
 	return nil
@@ -406,12 +406,12 @@ func (a *App) OpenLogFolder() error {
 func (a *App) OpenConfigFolder() error {
 	path, err := config.GetConfigDir()
 	if err != nil {
-		wailsRuntime.LogErrorf(a.ctx, "[setting] 获取配置目录失败: %v", err)
+		a.logErrorf("[setting] 获取配置目录失败: %v", err)
 		return err
 	}
-	wailsRuntime.LogInfof(a.ctx, "[setting] 打开配置目录 len=%d", len(path))
+	a.logInfof("[setting] 打开配置目录 len=%d", len(path))
 	if err := shellOpen(path); err != nil {
-		wailsRuntime.LogErrorf(a.ctx, "[setting] 打开配置目录失败: %v", err)
+		a.logErrorf("[setting] 打开配置目录失败: %v", err)
 		return err
 	}
 	return nil
@@ -422,9 +422,9 @@ func (a *App) OpenExternalURL(url string) error {
 	if url == "" {
 		return fmt.Errorf("empty url")
 	}
-	wailsRuntime.LogInfof(a.ctx, "[setting] 打开外部链接 len=%d", len(url))
+	a.logInfof("[setting] 打开外部链接 len=%d", len(url))
 	if err := shellOpen(url); err != nil {
-		wailsRuntime.LogErrorf(a.ctx, "[setting] 打开外部链接失败: %v", err)
+		a.logErrorf("[setting] 打开外部链接失败: %v", err)
 		return err
 	}
 	return nil

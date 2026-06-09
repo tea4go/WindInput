@@ -13,6 +13,8 @@
 | `enums.ts` | 所有有限取值字符串常量（行为/模式枚举、按键名、组合键群、Wails 事件名等）的 TypeScript 定义；导出 `as const` 对象 + 联合类型 |
 | `utils.ts` | 样式类合并函数 `cn()`，使用 `clsx` + `tailwind-merge` 组合 CSS 类名，支持条件类名和 Tailwind 冲突解决 |
 | `configDiff.ts` | 配置增量 diff 纯函数 `diffConfigToItems(base, current)`：对加载快照与编辑中 formData 做 deep-diff，产出 `{key, value}` 列表供按-key 提交；点路径与后端 `resolveKeyPath` 对齐 |
+| `webShim.ts` | **Web 形态专用**（非 Wails 桌面环境）：`installWebShimIfNeeded()` 注入 `window.go.main.App`（Proxy → `POST /api/call`，拆 `{data,error}` 信封）与 `window.runtime`（忠实实现 `EventsOnMultiple`/`EventsOn`/`EventsOff`/`EventsOffAll`/`EventsEmit`，其余方法 Proxy no-op）；`EventSource('/api/events')` 桥接事件（含 `update:*`）；存活心跳 `POST /api/ping` + `pagehide` `sendBeacon('/api/bye')`；桌面专属方法黑名单拦截弹 toast；`InstallRelease` 安装前确认。桌面 Wails 环境下整体早退为 no-op |
+| `webEnv.ts` | Web 形态判据与文案：`isWebMode()`（读 `window.__WEB_MODE__`，由 webShim 置位）、`DESKTOP_ONLY_HINT`。判断「是否具备原生能力」用 `isWebMode()` 而非 `isWailsEnv` |
 
 ## 常量清单（`enums.ts`）
 

@@ -9,8 +9,11 @@
 ## Key Files
 | 文件 | 说明 |
 |------|------|
-| `main.go` | 程序入口：解析 `--page` / `windinput://` 协议参数，初始化 Wails App（含 `Mac.OnUrlOpen` 接收协议链接），注册 Go 绑定 |
-| `app.go` | `App` 结构体定义及生命周期（startup/shutdown），初始化各编辑器和文件监控 |
+| `main.go` | 程序入口：解析 `--page` / `windinput://` 协议参数；按 `resolveRunMode` 分流——`--web` 走 Web 形态（`runWebMode`），否则初始化 Wails App（GUI，含 `Mac.OnUrlOpen`）注册 Go 绑定 |
+| `app.go` | `App` 结构体定义及生命周期（startup/shutdown）；含 `webMode`/`webEmit`（Web 形态标志与事件投递回调），初始化各编辑器和文件监控 |
+| `run_mode.go` / `run_mode_test.go` | 运行形态决策与 Web 启动：`resolveRunMode(args)`（**仅显式 `--web` 进 Web 形态**，否则 GUI；缺 WebView2 交由 Wails 自带安装引导，不再自动降级）、`runWebMode`（起 HTTP 服务、开浏览器、心跳空闲自动退出、日志写 `%TEMP%/wind_setting/web.log`） |
+| `web_server.go` / `web_server_test.go` | Web 形态 HTTP 服务（不依赖 WebView2）：`/api/call` 反射网关（`callReflect` 镜像 Wails 对 `*App` 的方法绑定）、`/api/events` SSE 事件桥 + `broadcast`（投递 rpcClient 事件与 App 直接 emit 的 `update:*`）、`/api/ping`·`/api/bye` 存活心跳、端口探测（18923+）启停 |
+| `app_runtime_compat.go` | wailsRuntime 调用的 **Web 安全包装**：`a.logInfof`/`a.logErrorf`/`a.emitEvent`。Web 模式下降级为标准库 `log` / SSE 广播；桌面模式原样转发到 `wailsRuntime.*(a.ctx,...)`。**关键**：Web 形态 `a.ctx` 为占位 `context.Background()`，直接调 `wailsRuntime.*` 会触发 `log.Fatalf` 终止进程 |
 | `app_config.go` | 配置读写 API：`GetConfig`、`SetConfigItems`（按 key 增量保存）、`ReloadConfig`、`CheckConfigModified` |
 | `app_dict.go` | 词库管理 API：短语（Phrase）、用户词库（UserDict）、Shadow 规则（pin+delete 架构），含导入/导出 |
 | `app_schema.go` | 输入方案管理 API：`GetAvailableSchemas`、`GetSchemaConfig` 等方案相关操作 |
@@ -35,8 +38,9 @@
 ## For AI Agents
 ### Working In This Directory
 - Go 后端方法自动绑定为 Wails JS API，前端通过 `wailsjs/go/main/App` 调用
-- 所有绑定方法定义在 `app*.go`（5 个文件）中，方法名即为前端调用名（PascalCase）
-- 支持双模式运行：Wails 环境（生产）通过 IPC 调用 Go；HTTP 模式（开发调试）通过 REST API
+- 所有绑定方法定义在 `app*.go` 中，方法名即为前端调用名（PascalCase）
+- 支持双形态运行：**GUI 形态**（默认，Wails + WebView2）；**Web 形态**（`--web`，HTTP 服务 + 浏览器访问，无需 WebView2）。Web 形态用 `/api/call` 反射网关镜像同一套 `*App` 绑定，前端经 `webShim` 注入 `window.go`/`window.runtime` 透明走 HTTP/SSE，页面零改动
+- **Web 形态铁律**：被前端调到的 `*App` 方法内若需日志/事件，**必须**走 `a.logInfof`/`a.logErrorf`/`a.emitEvent`，禁止直接 `wailsRuntime.Log*`/`EventsEmit(a.ctx,...)`（Web 下 `a.ctx` 无效会 `log.Fatalf` 杀进程）；文件对话框类（`*Dialog`）方法在 Web 无法工作，由前端 `webShim` 黑名单拦截提示
 - 命令行参数格式：`wind_setting.exe --page=dictionary` 或 `--dictionary`
 - 有效页面名：`general`、`input`、`hotkey`、`appearance`、`dictionary`、`advanced`、`about`、`add-word`
 - `add-word` 页面为独立加词窗口模式：不显示主界面侧边栏，仅显示 `AddWordPage` 对话框，关闭后退出进程；也可通过 Wails 事件 `navigate-addword` 在已运行的实例中弹出加词对话框
@@ -53,7 +57,7 @@
 ### Common Patterns
 - 每次写入文件后调用 `a.fileWatcher.UpdateState(path)` 更新快照，防止误报外部修改
 - 配置保存后异步 `go a.NotifyReload(target)` 通知主程序
-- 前端通过 `isWailsEnv` 判断运行环境，自动切换 API 来源
+- 注意：`webShim` 安装后 `window.go` 存在，前端 `isWailsEnv` 在 Web 形态恒为 true；判断「是否具备原生能力」一律用 `isWebMode()`（见 `frontend/src/lib/webEnv.ts`），不要再用 `isWailsEnv`
 
 ## Dependencies
 ### Internal

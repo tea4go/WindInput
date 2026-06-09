@@ -123,6 +123,13 @@ func main() {
 	app.addWordParams = addWordParams
 	app.protocolURL = protocolURL
 
+	// 形态决策：仅在显式 --web 时进入 Web 形态（HTTP 服务，浏览器访问）；否则原 GUI。
+	// 缺 WebView2 不再自动降级，交由 Wails 自带的 Runtime 安装引导处理（详见 run_mode.go）。
+	if resolveRunMode(os.Args[1:]) == modeWeb {
+		runWebMode(app, assets)
+		return
+	}
+
 	// 加词对话框模式使用较小的窗口
 	winWidth := 800
 	winHeight := 600

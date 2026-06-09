@@ -17,13 +17,7 @@
       </Button>
     </div>
 
-    <!-- 非 Wails 环境提示 -->
-    <div v-if="!isWailsEnv" class="dict-note-center-wrap">
-      <p>词库管理功能需要在桌面应用中使用</p>
-      <p class="dict-note">请使用 <code>wails dev</code> 或编译后的应用</p>
-    </div>
-
-    <template v-else>
+    <template>
       <!-- ===== 内容卡片（包含类型选择器 + 面板） ===== -->
       <div
         class="dict-content-card"
