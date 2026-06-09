@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"encoding/json"
+	"io"
+	"log/slog"
 	"sync"
 	"testing"
 
@@ -27,6 +29,7 @@ func newTestConfigService(cfg *config.Config) *ConfigService {
 		cfg:            cfg,
 		configReloader: &mockConfigReloader{},
 		broadcaster:    NewEventBroadcaster(nil),
+		logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		saveFn:         func(*config.Config) error { return nil },
 	}
 }
@@ -374,6 +377,33 @@ func TestConfigSetAll_PreservesStats(t *testing.T) {
 	}
 	if cfg.Stats.IsEnabled() != true {
 		t.Errorf("stats.enabled 被全局保存覆盖：want true, got %v", cfg.Stats.IsEnabled())
+	}
+}
+
+// TestConfigSetAll_TypeMismatchTolerant 防回归：单个字段类型不匹配（如 ui.font_size 传成字符串）
+// 不应让整体保存失败。encoding/json 会部分填充 newCfg，SetAll 应记录字段名并继续保存。
+func TestConfigSetAll_TypeMismatchTolerant(t *testing.T) {
+	cfg := config.SystemDefaultConfig()
+	saved := false
+	svc := newTestConfigService(cfg)
+	svc.saveFn = func(*config.Config) error {
+		saved = true
+		return nil
+	}
+
+	// 合法 JSON，但 ui.font_size 被写成字符串（应是数字）→ *json.UnmarshalTypeError，
+	// 同时 ui.theme 等其余字段仍可被部分填充。
+	data := []byte(`{"ui":{"font_size":"not-a-number","theme":"custom-theme"}}`)
+
+	var reply rpcapi.ConfigSetAllReply
+	if err := svc.SetAll(&rpcapi.ConfigSetAllArgs{Config: data}, &reply); err != nil {
+		t.Fatalf("SetAll 应容忍单字段类型不匹配，got err: %v", err)
+	}
+	if !saved {
+		t.Error("saveFn 未被调用：类型不匹配时仍应保存部分填充的配置")
+	}
+	if cfg.UI.Theme != "custom-theme" {
+		t.Errorf("类型不匹配字段之外的字段应被部分填充：theme want %q got %q", "custom-theme", cfg.UI.Theme)
 	}
 }
 

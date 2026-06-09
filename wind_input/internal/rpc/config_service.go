@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -116,7 +117,15 @@ func (s *ConfigService) SetAll(args *rpcapi.ConfigSetAllArgs, reply *rpcapi.Conf
 
 	newCfg := deepCopyConfig(s.cfg)
 	if err := json.Unmarshal(args.Config, newCfg); err != nil {
-		return fmt.Errorf("unmarshal config: %w", err)
+		// 类型不匹配（*json.UnmarshalTypeError）时，encoding/json 仍会部分填充 newCfg，
+		// 不应让单个字段类型错误导致整体保存失败。只记字段名元数据，继续用部分填充的 newCfg。
+		var jsonTypeErr *json.UnmarshalTypeError
+		if errors.As(err, &jsonTypeErr) {
+			s.logger.Warn("保存配置时部分字段类型不匹配，已忽略该字段", "field", jsonTypeErr.Field)
+		} else {
+			// 其它错误（如 JSON 语法错误）无法部分解码，保持失败返回。
+			return fmt.Errorf("unmarshal config: %w", err)
+		}
 	}
 
 	// stats 配置由专用接口 Stats.UpdateConfig 独立管理，全局配置表单（前端 formData）

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -618,7 +619,31 @@ func LoadFrom(path string) (*Config, error) {
 	}
 
 	if err := yaml.Unmarshal(userData, cfg); err != nil {
-		return DefaultConfig(), fmt.Errorf("failed to parse config file: %w", err)
+		// 区分错误类型，尽量自愈，避免每次启动都解析失败而永久降级。
+		var typeErr *yaml.TypeError
+		if errors.As(err, &typeErr) {
+			// TypeError（部分解码）：yaml.v3 已把所有可解析字段填进了 cfg，
+			// 仅出错字段维持默认值，保留 cfg 现状，不重置为 DefaultConfig。
+			// 隐私：只记录数量等元数据，typeErr.Errors 为字段路径描述，不含字段值内容。
+			fmt.Fprintf(os.Stderr, "[config] warning: 配置部分字段不兼容，已保留其余配置并对不兼容字段使用默认值 count=%d\n", len(typeErr.Errors))
+		} else {
+			// 其它错误（语法损坏）：无法部分解码，回退到默认配置。
+			fmt.Fprintf(os.Stderr, "[config] warning: 配置文件损坏，使用默认配置 path=%s err=%v\n", path, err)
+			cfg = DefaultConfig()
+		}
+
+		// 兜底校验，确保自愈写回的配置是合法可加载状态。
+		ApplyConfigFallbacks(cfg)
+
+		// 自愈文件：先备份原始内容（best-effort），再原子回写当前有效配置。
+		if bakErr := os.WriteFile(path+".bak", userData, 0o644); bakErr != nil {
+			fmt.Fprintf(os.Stderr, "[config] warning: 备份损坏配置失败 path=%s err=%v\n", path+".bak", bakErr)
+		}
+		if saveErr := SaveTo(cfg, path); saveErr != nil {
+			fmt.Fprintf(os.Stderr, "[config] warning: 自愈回写配置失败 path=%s err=%v\n", path, saveErr)
+		}
+
+		return cfg, nil
 	}
 
 	// 兜底校验
