@@ -574,6 +574,11 @@ func (c *Coordinator) showQuickInputUI() {
 
 	// 构建预编辑文本
 	preedit := c.quickInputPrefix() + c.quickInputBuffer
+	// 嵌入编码下刚进入模式（buffer 为空）：触发符已内嵌宿主，窗口预编辑置空，
+	// 让渲染层改显「只含模式徽标」的提示条，避免空壳窗。
+	if c.isInlinePreedit() && len(c.quickInputBuffer) == 0 {
+		preedit = ""
+	}
 
 	c.uiManager.SetQuickInputMode(true)
 	c.uiManager.SetModeLabel("快捷输入")

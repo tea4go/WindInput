@@ -29,6 +29,18 @@ func (r *Renderer) buildModeLabelView(scale float64) *View {
 	}
 }
 
+// shouldShowModeHintBand 判定是否渲染「只含模式徽标」的提示条。
+// 触发条件（全部满足）：嵌入编码开启(hidePreedit)、处于触发键模式(modeLabel 非空)、
+// 无输入文本(input=="")、无候选(candCount==0)。
+//
+// 用途：嵌入编码下刚进入临时拼音/临时英文/快捷输入等模式的瞬间，触发符已内嵌宿主、
+// 候选尚为空，预编辑条本被 HidePreedit 整条关掉，导致只剩一个空壳候选窗、毫无模式提示。
+// 此时单独把承载徽标的预编辑条放出来（input=="" → buildPreeditBand 自动只画徽标、不画光标），
+// 给出与「关闭嵌入编码时预编辑栏」一致的模式提示。一旦用户开始输入（input 非空）即恢复原逻辑。
+func shouldShowModeHintBand(hidePreedit bool, modeLabel, input string, candCount int) bool {
+	return hidePreedit && modeLabel != "" && input == "" && candCount == 0
+}
+
 // buildEmbeddedPreedit 构建内嵌预编辑（PreeditEmbedded 模式）：编码 + ModeLabel 内嵌到候选行首，
 // 与首个候选间留 16*scale 分隔；含内嵌光标。无内容返回 nil。
 func (r *Renderer) buildEmbeddedPreedit(input string, cursorPos, rowH int, scale float64, sc func(float64) int) *View {
@@ -528,7 +540,9 @@ func (r *Renderer) buildHorizontalCandidateTree(
 
 	// ---- band 列表（preedit + 候选列表）----
 	bands := make([]*View, 0, 2)
-	if (input != "" || cfg.ModeLabel != "") && !cfg.HidePreedit && !isEmbedded {
+	// hintBand：嵌入编码下刚进入模式（无输入、无候选）时单独放出只含徽标的预编辑条作为提示。
+	hintBand := shouldShowModeHintBand(cfg.HidePreedit, cfg.ModeLabel, input, len(candidates))
+	if hintBand || ((input != "" || cfg.ModeLabel != "") && !cfg.HidePreedit && !isEmbedded) {
 		inputH := int(rv.PreeditBar.FontSize+0.5) + scD(rv.PreeditBar.PadTop) + scD(rv.PreeditBar.PadBottom) // 条高=内容+preedit 上下 padding（无 max 魔法）
 		bands = append(bands, r.buildPreeditBand(input, cursorPos, inputH, scale, sc))
 	}

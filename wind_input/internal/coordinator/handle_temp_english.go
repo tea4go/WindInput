@@ -795,6 +795,12 @@ func (c *Coordinator) showTempEnglishUI() {
 	prefix := c.tempEnglishTriggerPrefix()
 	preedit := prefix + c.tempEnglishBuffer
 	caretPosUI := len(prefix) + c.tempEnglishCursorPos
+	// 嵌入编码下刚进入模式（buffer 为空）：触发符已内嵌宿主，窗口预编辑置空，
+	// 让渲染层改显「只含模式徽标」的提示条，避免空壳窗。
+	if c.isInlinePreedit() && len(c.tempEnglishBuffer) == 0 {
+		preedit = ""
+		caretPosUI = 0
+	}
 
 	// 分级加载：负值 totalPages 表示还有更多候选未加载，渲染层据此显示 "N / M+"
 	displayTotalPages := c.totalPages

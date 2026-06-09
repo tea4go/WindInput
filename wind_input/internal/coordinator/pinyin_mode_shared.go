@@ -605,6 +605,13 @@ func (c *Coordinator) showPinyinModeUI(ops *pinyinModeOps) {
 		}
 	}
 
+	// 嵌入编码下刚进入模式（无 committed、无 buffer）：触发符已内嵌宿主，窗口预编辑置空，
+	// 让渲染层改显「只含模式徽标」的提示条，避免空壳窗（buildPreeditBand 对空 input 只画徽标）。
+	if c.isInlinePreedit() && committed == "" && len(*ops.buffer) == 0 {
+		preedit = ""
+		preeditCaret = 0
+	}
+
 	modeLabel := "临时拼音"
 	if c.engineMgr != nil {
 		modeLabel = c.engineMgr.GetTempPinyinModeLabel()

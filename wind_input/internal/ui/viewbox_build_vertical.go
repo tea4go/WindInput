@@ -252,7 +252,9 @@ func (r *Renderer) buildVerticalCandidateTree(
 
 	// ---- band 列表 ----
 	bands := make([]*View, 0, 3)
-	if (input != "" || cfg.ModeLabel != "") && !cfg.HidePreedit {
+	// hintBand：嵌入编码下刚进入模式（无输入、无候选）时单独放出只含徽标的预编辑条作为提示（与横排一致）。
+	hintBand := shouldShowModeHintBand(cfg.HidePreedit, cfg.ModeLabel, input, len(candidates))
+	if hintBand || ((input != "" || cfg.ModeLabel != "") && !cfg.HidePreedit) {
 		inputH := int(rv.PreeditBar.FontSize+0.5) + scD(rv.PreeditBar.PadTop) + scD(rv.PreeditBar.PadBottom) // 条高=内容+preedit 上下 padding（无 max 魔法，横竖统一）
 		bands = append(bands, r.buildPreeditBand(input, cursorPos, inputH, scale, sc))
 	}
