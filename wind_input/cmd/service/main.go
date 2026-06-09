@@ -152,6 +152,11 @@ func main() {
 	// Set DPI awareness BEFORE any UI operations
 	setDPIAwareness()
 
+	// 安装器运行期间立即静默退出，防止 wind_tsf.dll 在安装/卸载窗口期重拉服务
+	if isInstallerRunning() {
+		os.Exit(0)
+	}
+
 	// Initialize effective DPI with system DPI value
 	ui.SetEffectiveDPI(ui.GetSystemDPI())
 

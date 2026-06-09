@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 
 	"github.com/huanfeng/wind_input/internal/bridge"
 	"github.com/huanfeng/wind_input/pkg/buildvariant"
@@ -92,6 +93,19 @@ func waitForPreviousExit() {
 		}
 		time.Sleep(pollInterval)
 	}
+}
+
+// isInstallerRunning 检查安装器是否正在运行。
+// 安装/卸载流程在杀进程前写入此标记，防止 wind_tsf.dll 在安装窗口期重拉服务；
+// 服务若在此标记存在时被启动，应立即静默退出而非正常运行。
+func isInstallerRunning() bool {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `Software\WindInput`, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+	val, _, err := k.GetStringValue("InstallerRunning")
+	return err == nil && val == "1"
 }
 
 // isPipeAlreadyExists 探测 bridge 命名管道是否存在(另一服务实例正在跑)。

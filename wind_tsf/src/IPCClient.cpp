@@ -329,6 +329,26 @@ BOOL CIPCClient::_StartService()
 {
     _LogInfo(L"Attempting to start Go service...");
 
+    // Guard: installer running flag — set by NSIS before killing processes,
+    // cleared after installation completes. Prevents respawn during install/uninstall.
+    {
+        HKEY hKey = NULL;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\WindInput", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+        {
+            WCHAR value[8] = {};
+            DWORD size = sizeof(value);
+            DWORD type = REG_SZ;
+            BOOL found = (RegQueryValueExW(hKey, L"InstallerRunning", nullptr, &type,
+                                           reinterpret_cast<LPBYTE>(value), &size) == ERROR_SUCCESS);
+            RegCloseKey(hKey);
+            if (found && value[0] == L'1')
+            {
+                _LogInfo(L"InstallerRunning flag set, not starting service");
+                return FALSE;
+            }
+        }
+    }
+
     WCHAR dllPath[MAX_PATH];
 
     if (GetModuleFileNameW(g_hInstance, dllPath, MAX_PATH) == 0)

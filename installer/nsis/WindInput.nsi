@@ -746,8 +746,9 @@ install_skip_old_uninstall:
   SetOutPath "$INSTDIR"
 
   ; --- Step 1: Stop processes ---
+  ; 标准模式设置安装器运行标记，防止 wind_tsf.dll 在安装窗口期重拉服务
   StrCmp $InstallMode "portable" install_stop_portable_only
-  ; 标准模式：停止所有相关进程
+  WriteRegStr HKLM "Software\WindInput" "InstallerRunning" "1"
   DetailPrint "正在停止旧进程..."
   nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_setting.exe >nul 2>&1'
   Pop $0
@@ -755,10 +756,21 @@ install_skip_old_uninstall:
   Pop $0
   nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
   Pop $0
-  ; 轮询等待 wind_input 真正退出（mmap/pipe handle 异步回收）
+  ; 轮询等待 wind_input 真正退出（首轮 10s；mmap/pipe handle 异步回收，EDR 延迟终止均需额外时间）
   Push "wind_input.exe"
-  Push 25
+  Push 50
   Call WaitForProcessExit
+  ; 首轮超时后进程仍存在时再发一次终止信号（处理 EDR 延迟或 handle 慢回收的情况）
+  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq wind_input.exe" /NH | findstr /I "wind_input.exe" >nul'
+  Pop $0
+  StrCmp $0 "0" 0 install_wind_input_gone
+    DetailPrint "  wind_input.exe 首轮等待超时，重新发送终止信号..."
+    nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
+    Pop $0
+    Push "wind_input.exe"
+    Push 25
+    Call WaitForProcessExit
+  install_wind_input_gone:
   Push "wind_setting.exe"
   Push 15
   Call WaitForProcessExit
@@ -1002,6 +1014,9 @@ install_standard_mode:
   WriteRegStr HKCU "Software\Classes\windinput\shell\open\command" "" '"$INSTDIR\wind_setting.exe" "%1"'
 
   ; --- Step 9: Pre-start service (background, so dictionary can be pre-loaded) ---
+  ; 安装完成，清除安装器运行标记（允许 wind_tsf.dll 在安装后重新启动服务）
+  DeleteRegValue HKLM "Software\WindInput" "InstallerRunning"
+
   ; 预启动前等待 data\schemas 目录可枚举：覆盖安装时 Defender 实时扫描 + 旧进程 mmap 回收
   ; 可能让新写入的 schemas 短时间内被其他进程看到 PATH_NOT_FOUND，造成服务卡在 initializing。
   ; 这里以 *.schema.yaml 是否能 FindFirst 到为就绪判据（与 Go 端 os.ReadDir 行为一致）。
@@ -1058,13 +1073,15 @@ install_prestart_skip:
   WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" "$0"
 
   IfRebootFlag 0 install_done
-    IfSilent install_done 0
-    MessageBox MB_ICONEXCLAMATION|MB_OK "部分文件正在使用中，已安排重启后清理旧文件。"
+    DetailPrint "INFO: 部分旧文件正在使用中，已安排在下次重启后自动清理，无需手动处理。"
 install_done:
 SectionEnd
 
 Section "Uninstall"
   SetShellVarContext all
+
+  ; 设置安装器运行标记，防止 wind_tsf.dll 在卸载窗口期重拉服务
+  WriteRegStr HKLM "Software\WindInput" "InstallerRunning" "1"
 
   ; --- Step 1: Stop processes ---
   DetailPrint "正在停止进程..."
@@ -1074,10 +1091,21 @@ Section "Uninstall"
   Pop $0
   nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
   Pop $0
-  ; 轮询等待真正退出（升级模式下后续要立刻删除 $INSTDIR\data，必须确保 mmap 已释放）
+  ; 轮询等待真正退出（首轮 10s；升级模式下后续要立刻删除 $INSTDIR\data，必须确保 mmap 已释放）
   Push "wind_input.exe"
-  Push 25
+  Push 50
   Call un.WaitForProcessExit
+  ; 首轮超时后进程仍存在时再发一次终止信号
+  nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq wind_input.exe" /NH | findstr /I "wind_input.exe" >nul'
+  Pop $0
+  StrCmp $0 "0" 0 uninst_wind_input_gone
+    DetailPrint "  wind_input.exe 首轮等待超时，重新发送终止信号..."
+    nsExec::ExecToLog 'cmd /c taskkill /F /IM wind_input.exe >nul 2>&1'
+    Pop $0
+    Push "wind_input.exe"
+    Push 25
+    Call un.WaitForProcessExit
+  uninst_wind_input_gone:
   Push "wind_setting.exe"
   Push 15
   Call un.WaitForProcessExit
@@ -1240,13 +1268,14 @@ uninst_skip_userdata:
   SetShellVarContext all
 
   ; --- Step 7: Registry ---
+  ; 清除安装器运行标记
+  DeleteRegValue HKLM "Software\WindInput" "InstallerRunning"
   ; Remove auto-start entry
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "WindInput"
   ; Remove windinput:// URL protocol registration
   DeleteRegKey HKCU "Software\Classes\windinput"
   DeleteRegKey HKLM "${UNINST_KEY}"
   IfRebootFlag 0 uninst_done
-    IfSilent uninst_done 0
-    MessageBox MB_ICONEXCLAMATION|MB_OK "部分文件正在使用中，将在重启后完成清理。"
+    DetailPrint "INFO: 部分文件正在使用中，已安排在下次重启后自动清理，无需手动处理。"
 uninst_done:
 SectionEnd
