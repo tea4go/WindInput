@@ -644,7 +644,16 @@ async function resetCurrentPageDefaults() {
         theme: { ...defaults.ui.theme },
         toolbar: { ...defaults.ui.toolbar },
         status_indicator: { ...defaults.ui.status_indicator },
-        tooltip: { ...defaults.ui.tooltip },
+        // tooltip 含嵌套子对象（code/pinyin/chaizi/debug），必须逐层拷贝——
+        // 浅展开会让 formData 与 systemDefaults 缓存共享子对象引用，
+        // 后续开关写入会污染默认值缓存（终审 MEDIUM 修复）。
+        tooltip: {
+          ...defaults.ui.tooltip,
+          code: { ...defaults.ui.tooltip.code },
+          pinyin: { ...defaults.ui.tooltip.pinyin },
+          chaizi: { ...defaults.ui.tooltip.chaizi },
+          debug: { ...defaults.ui.tooltip.debug },
+        },
       };
       if (isWailsEnv.value) {
         await loadThemePreview(formData.value.ui.theme.name);

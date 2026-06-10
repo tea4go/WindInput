@@ -184,6 +184,8 @@ export interface ShiftTempEnglishConfig {
 // 临时拼音配置（v1: 吸收 accent_color）
 export interface TempPinyinConfig {
   trigger_keys: string[];
+  // z 触发临时拼音后 Enter 上屏是否包含触发键 z 本身（后端内部预留开关，无 UI）
+  z_include_on_commit: boolean;
   accent_color: string; // 模式内发光边框颜色，空=内置默认色
 }
 
@@ -487,6 +489,7 @@ export function getDefaultConfig(): Config {
       },
       temp_pinyin: {
         trigger_keys: ["backtick"],
+        z_include_on_commit: true,
         accent_color: "",
       },
       auto_pair: {
