@@ -61,6 +61,7 @@ func normalizeToYAML(path string, data []byte) ([]byte, error) {
 // marshalTOML 把任意值（struct 或 map）序列化为 TOML 字节流。
 // 值先经 YAML 往返归一化为 map（字段命名沿用 yaml tag），再剔除 TOML
 // 无法表达的 nil 值后编码。空 map 序列化为空文件。
+// 输出经 stripEmptyParentTables 省略空中间表头（go-toml v2 无此选项）。
 func marshalTOML(v interface{}) ([]byte, error) {
 	m, err := toYAMLMap(v)
 	if err != nil {
@@ -70,7 +71,77 @@ func marshalTOML(v interface{}) ([]byte, error) {
 	if len(m) == 0 {
 		return []byte{}, nil
 	}
-	return toml.Marshal(m)
+	data, err := toml.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return stripEmptyParentTables(data), nil
+}
+
+// stripEmptyParentTables 删除多余的空中间表头：当一个表头自身没有任何
+// 键值、且紧随其后（忽略空行）的表头是它的子表时，TOML 的隐式 super-table
+// 规则保证省略它语义完全不变（如 [pinyin] [pinyin.engine] 仅为
+// [pinyin.engine.fuzzy] 铺路时全部可省）。go-toml v2 marshal 嵌套 map 会
+// 输出每层中间表头，diff-save 的深层小改动尤其啰嗦，这里统一后处理。
+// 真正的空叶子表（无子表跟随）保留——空表与键缺失在 TOML 语义上不同
+// （键存在且为空表），不替用户做删除决定。
+func stripEmptyParentTables(data []byte) []byte {
+	lines := strings.Split(string(data), "\n")
+	out := make([]string, 0, len(lines))
+	inMultiline := "" // 非空 = 处于多行字符串中，值为闭合定界符（""" 或 '''）
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+
+		// 多行字符串守卫：块内的 "[xxx]" 形式行是字符串内容而非表头，原样保留。
+		if inMultiline != "" {
+			out = append(out, line)
+			if strings.Contains(line, inMultiline) {
+				inMultiline = ""
+			}
+			continue
+		}
+		for _, delim := range []string{`"""`, `'''`} {
+			if strings.Count(line, delim)%2 == 1 { // 奇数个定界符 = 开启未闭合
+				inMultiline = delim
+				break
+			}
+		}
+		if inMultiline != "" {
+			out = append(out, line)
+			continue
+		}
+
+		trimmed := strings.TrimSpace(line)
+		if name, ok := parseTableHeader(trimmed); ok && !strings.Contains(name, `"`) {
+			// 找下一个非空行；若是本表的子表头，则当前表头为空中间表，可省略
+			j := i + 1
+			for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
+				j++
+			}
+			if j < len(lines) {
+				if next, ok := parseTableHeader(strings.TrimSpace(lines[j])); ok &&
+					!strings.Contains(next, `"`) && strings.HasPrefix(next, name+".") {
+					continue // 省略本表头（其后空行保留，由子表头自然衔接）
+				}
+			}
+		}
+		out = append(out, line)
+	}
+	return []byte(strings.Join(out, "\n"))
+}
+
+// parseTableHeader 解析 TOML 表头行，返回表名（标准表 [a.b] 与数组表
+// [[a.b]] 均支持——数组表同样隐式定义其父表）。
+func parseTableHeader(line string) (string, bool) {
+	if !strings.HasPrefix(line, "[") || !strings.HasSuffix(line, "]") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(line, "["), "]")
+	name = strings.TrimSuffix(strings.TrimPrefix(name, "["), "]") // 数组表第二层括号
+	if name == "" {
+		return "", false
+	}
+	return name, true
 }
 
 // marshalForPath 按目标路径扩展名选择序列化格式（.toml → TOML，其余 → YAML）。

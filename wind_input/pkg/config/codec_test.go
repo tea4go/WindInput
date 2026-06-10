@@ -121,6 +121,119 @@ func TestLoadFrom_DefaultTrueBool(t *testing.T) {
 	}
 }
 
+// ---- 空中间表头省略（stripEmptyParentTables）----
+
+// 深层嵌套 map（schema_overrides / diff-save 深层小改动的典型形态）序列化后
+// 不应出现只为铺路的空中间表头；round-trip 语义不变。
+func TestMarshalTOML_StripsEmptyParentTables(t *testing.T) {
+	m := map[string]any{
+		"pinyin": map[string]any{
+			"engine": map[string]any{
+				"pinyin": map[string]any{
+					"fuzzy": map[string]any{"zh_z": true, "ch_c": true},
+				},
+			},
+		},
+	}
+	data, err := marshalTOML(m)
+	if err != nil {
+		t.Fatalf("marshalTOML: %v", err)
+	}
+	content := string(data)
+	for _, empty := range []string{"[pinyin]", "[pinyin.engine]", "[pinyin.engine.pinyin]"} {
+		if strings.Contains(content, empty+"\n") || strings.HasSuffix(content, empty) {
+			t.Errorf("空中间表头 %s 应被省略, 实际:\n%s", empty, content)
+		}
+	}
+	if !strings.Contains(content, "[pinyin.engine.pinyin.fuzzy]") {
+		t.Errorf("叶子表头应保留, 实际:\n%s", content)
+	}
+
+	// round-trip 语义不变
+	yamlData, err := normalizeToYAML("x.toml", data)
+	if err != nil {
+		t.Fatalf("normalizeToYAML: %v", err)
+	}
+	var back map[string]any
+	if err := yaml.Unmarshal(yamlData, &back); err != nil {
+		t.Fatalf("round-trip unmarshal: %v", err)
+	}
+	fz, _ := safeGetMap(back, "pinyin")
+	fz, _ = safeGetMap(fz, "engine")
+	fz, _ = safeGetMap(fz, "pinyin")
+	fz, _ = safeGetMap(fz, "fuzzy")
+	if v, _ := safeGetBool(fz, "zh_z"); !v {
+		t.Errorf("round-trip 后 fuzzy.zh_z 丢失: %v", back)
+	}
+}
+
+// 真正的空叶子表（无子表跟随）保留——空表与键缺失语义不同，不替用户删除。
+func TestMarshalTOML_KeepsEmptyLeafTables(t *testing.T) {
+	m := map[string]any{
+		"a": map[string]any{}, // 空叶子表，无子表
+		"b": map[string]any{"x": 1},
+	}
+	data, err := marshalTOML(m)
+	if err != nil {
+		t.Fatalf("marshalTOML: %v", err)
+	}
+	if !strings.Contains(string(data), "[a]") {
+		t.Errorf("空叶子表 [a] 应保留, 实际:\n%s", data)
+	}
+}
+
+// 数组表（[[...]]）同样隐式定义父表：空父表头应省略。
+func TestMarshalTOML_StripsParentOfArrayTables(t *testing.T) {
+	m := map[string]any{
+		"features": map[string]any{
+			"special_modes": []any{
+				map[string]any{"id": "sym"},
+			},
+		},
+	}
+	data, err := marshalTOML(m)
+	if err != nil {
+		t.Fatalf("marshalTOML: %v", err)
+	}
+	content := string(data)
+	if strings.Contains(content, "[features]\n") {
+		t.Errorf("数组表父表头 [features] 应被省略, 实际:\n%s", content)
+	}
+	if !strings.Contains(content, "[[features.special_modes]]") {
+		t.Errorf("数组表头应保留, 实际:\n%s", content)
+	}
+}
+
+// 字符串值含换行+伪表头内容时不被误处理（多行字符串守卫），round-trip 值不变。
+func TestMarshalTOML_MultilineStringNotMangled(t *testing.T) {
+	m := map[string]any{
+		"a": map[string]any{
+			"text": "line1\n[a.b]\nline3", // 值里藏一行伪表头
+			"b":    map[string]any{"x": 1},
+		},
+	}
+	data, err := marshalTOML(m)
+	if err != nil {
+		t.Fatalf("marshalTOML: %v", err)
+	}
+	yamlData, err := normalizeToYAML("x.toml", data)
+	if err != nil {
+		t.Fatalf("normalizeToYAML: %v\n%s", err, data)
+	}
+	var back map[string]any
+	if err := yaml.Unmarshal(yamlData, &back); err != nil {
+		t.Fatalf("round-trip unmarshal: %v", err)
+	}
+	a, _ := safeGetMap(back, "a")
+	if v, _ := safeGetString(a, "text"); v != "line1\n[a.b]\nline3" {
+		t.Errorf("含伪表头的字符串值 round-trip 被破坏: %q", v)
+	}
+	sub, _ := safeGetMap(a, "b")
+	if n, _ := safeGetInt(sub, "x"); n != 1 {
+		t.Errorf("真实子表 round-trip 丢失: %v", back)
+	}
+}
+
 // ---- diff 保存 ----
 
 // SaveTo 到 .toml 路径应只写入与系统默认的差异字段。
