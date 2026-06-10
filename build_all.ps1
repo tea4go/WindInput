@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet("all", "dll", "service", "setting", "portable")]
     [string[]]$Module = @("all"),
 
@@ -746,3 +746,4 @@ Write-Host "  .\build_all.ps1 -Module portable               (仅构建便携启
 Write-Host "  .\build_all.ps1 -Module dll,service            (构建 DLL + 服务)"
 Write-Host "  .\build_all.ps1 -DebugVariant                  (调试版变体)"
 exit 0
+
