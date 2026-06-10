@@ -199,8 +199,9 @@ type Coordinator struct {
 	uiManager    *ui.Manager
 	logger       *slog.Logger
 	config       *config.Config
-	bridgeServer BridgeServer // Interface for broadcasting state to TSF clients
-	version      string       // App version for display in menu
+	bridgeServer BridgeServer   // Interface for broadcasting state to TSF clients
+	version      string         // App version for display in menu
+	memTrim      idleMemTrimmer // 空闲内存修剪器（见 mem_idle_trim.go）
 
 	mu    sync.Mutex
 	cfgMu *sync.RWMutex // 与 rpc.Server 共享，守护 *config 读写（cfgMu → mu 顺序）
@@ -780,6 +781,7 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 	c.rebuildTooltipServiceLocked()
 
 	c.startGoroutineWatchdog()
+	c.startIdleMemoryTrim()
 
 	// 初始化命令直通车 (cmdbar): Services 装配 + 动作函数注册 + 短语 hook 注入。
 	// last() 复用 c.inputHistory, 不再单独维护 cmdbar 历史缓冲。

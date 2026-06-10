@@ -185,6 +185,22 @@ func NewEngine(codetableEng *codetable.Engine, pinyinEng *pinyin.Engine, config 
 
 // --- Engine 接口实现 ---
 
+// Close 释放两个子引擎持有的 mmap 资源。由引擎管理器在 LRU 驱逐时调用。
+//
+// 已知良性遗留：混输内部的 PinyinDict（wdat reader）由其私有 composite 的
+// pinyin-system 层持有，此处无法触达，驱逐时少减一次引用计数。由于
+// pinyin.wdat 与主拼音方案（被钉住不驱逐）共享同一 reader，该引用不会
+// 导致额外映射；词库重建走 CloseReadersForPath 强关，亦不受引用计数影响。
+func (e *Engine) Close() error {
+	if e.codetableEngine != nil {
+		_ = e.codetableEngine.Close()
+	}
+	if e.pinyinEngine != nil {
+		_ = e.pinyinEngine.Close()
+	}
+	return nil
+}
+
 // Type 返回引擎类型
 func (e *Engine) Type() string {
 	return "mixed"

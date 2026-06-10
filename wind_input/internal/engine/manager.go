@@ -96,6 +96,11 @@ type Manager struct {
 	// 仅记录"本 Manager 生命周期内 OS 页缓存是否还热"的代理信号; 长时间不用后 OS
 	// 自然 evict 不在这里追踪 (用户切回时下次按键自然会重新冷加载, 是少数派场景)。
 	warmedSchemas sync.Map
+
+	// warming 记录预热 goroutine 正在使用的 schema（schemaID -> struct{}）。
+	// evictStaleEnginesLocked 跳过这些方案，避免关闭一个正被后台 Convert
+	// 使用的引擎；预热结束后下次切换自然驱逐。
+	warming sync.Map
 }
 
 // NewManager 创建引擎管理器
@@ -268,7 +273,9 @@ func (m *Manager) SwitchSchema(schemaID string) error {
 		return nil
 	}
 	if _, ok := m.engines[schemaID]; ok {
+		prevID := m.currentID
 		m.applySwitchLocked(schemaID)
+		m.evictStaleEnginesLocked(prevID)
 		m.mu.Unlock()
 		m.logger.Info("切换到已加载方案", "schemaID", schemaID)
 		m.warmupSchemaAsync(schemaID)
@@ -287,11 +294,64 @@ func (m *Manager) SwitchSchema(schemaID string) error {
 		m.mu.Unlock()
 		return fmt.Errorf("方案 %q 构建后未注册", schemaID)
 	}
+	prevID := m.currentID
 	m.applySwitchLocked(schemaID)
+	m.evictStaleEnginesLocked(prevID)
 	m.mu.Unlock()
 	m.logger.Info("加载并切换方案", "schemaID", schemaID)
 	m.warmupSchemaAsync(schemaID)
 	return nil
+}
+
+// evictStaleEnginesLocked 驱逐保留集之外的已加载引擎，释放其词库 mmap 引用，
+// 控制多方案反复切换后的常驻内存（引擎堆结构 + 独占词库的映射）。
+// 调用方必须持有 m.mu 写锁。
+//
+// 保留集：
+//   - 当前方案与上一个方案：toggle（A→B→A）是最高频切换模式，保留上一个
+//     避免每次切换都重建引擎；
+//   - 主拼音方案：临时拼音（ActivateTempPinyin）依赖 m.systemLayers[pinyinID]
+//     恢复词库层，且其词库与混输/双拼共享 mmap，驱逐它得不偿失；
+//   - 临时方案及其返回目标（tempSchemaID/savedSchemaID）；
+//   - 正在后台预热的方案（warming），避免关闭正被预热 Convert 使用的引擎。
+//
+// 被驱逐方案的词库层已在 applySwitchLocked 中从 CompositeDict 注销，
+// 此处只需释放资源并清理缓存映射；切回时走慢路径重建（缓存文件已预生成，
+// 重建仅是 mmap 加载，非 rime 全量转换）。
+func (m *Manager) evictStaleEnginesLocked(prevID string) {
+	keep := map[string]bool{
+		m.currentID:       true,
+		prevID:            true,
+		m.primaryPinyinID: true,
+		m.tempSchemaID:    true,
+		m.savedSchemaID:   true,
+	}
+	for id, eng := range m.engines {
+		if keep[id] {
+			continue
+		}
+		if _, busy := m.warming.Load(id); busy {
+			continue
+		}
+		if c, ok := eng.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+		if l := m.systemLayers[id]; l != nil {
+			if c, ok := l.(interface{ Close() error }); ok {
+				_ = c.Close()
+			}
+		}
+		for _, l := range m.systemExtras[id] {
+			if c, ok := l.(interface{ Close() error }); ok {
+				_ = c.Close()
+			}
+		}
+		delete(m.engines, id)
+		delete(m.systemLayers, id)
+		delete(m.systemExtras, id)
+		m.warmedSchemas.Delete(id)
+		m.logger.Info("驱逐闲置方案引擎", "schemaID", id)
+	}
 }
 
 // warmupSchemaAsync 在后台对该 schema 的引擎跑 a-z 单字符查询, 预加载 mmap 页 +
@@ -317,7 +377,11 @@ func (m *Manager) warmupSchemaAsync(schemaID string) {
 	if eng == nil {
 		return
 	}
+	// 标记预热进行中：evictStaleEnginesLocked 跳过 warming 中的方案，
+	// 避免快速连续切换时关闭一个正被本 goroutine Convert 的引擎。
+	m.warming.Store(schemaID, struct{}{})
 	go func() {
+		defer m.warming.Delete(schemaID)
 		start := time.Now()
 		for c := 'a'; c <= 'z'; c++ {
 			// limit=1: 走完查询路径 + 加载 mmap 即可, 不需要展开候选。
@@ -639,6 +703,26 @@ func (m *Manager) SetSystemExtras(schemaID string, layers []dict.DictLayer) {
 func (m *Manager) EvictAllEngines() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// 释放被驱逐引擎的词库 mmap 引用。当前活跃引擎跳过（重建期间继续服务，
+	// 其 reader 随后由 dictcache 的 CloseReadersForPath 强制关闭）。
+	for id, eng := range m.engines {
+		if eng == m.currentEngine {
+			continue
+		}
+		if c, ok := eng.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+		if l := m.systemLayers[id]; l != nil {
+			if c, ok := l.(interface{ Close() error }); ok {
+				_ = c.Close()
+			}
+		}
+		for _, l := range m.systemExtras[id] {
+			if c, ok := l.(interface{ Close() error }); ok {
+				_ = c.Close()
+			}
+		}
+	}
 	m.engines = make(map[string]Engine)
 	m.systemLayers = make(map[string]dict.DictLayer)
 	m.systemExtras = make(map[string][]dict.DictLayer)

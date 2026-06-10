@@ -104,6 +104,20 @@ func NewEngine(config *Config, logger *slog.Logger) *Engine {
 	}
 }
 
+// Close 释放引擎持有的码表资源（mmap 引用计数减一）。
+// 由引擎管理器在 LRU 驱逐时调用。
+//
+// 注意：不把 e.codeTable 置 nil——可能存在在途查询（如未跟踪到的后台路径），
+// 保留壳对象可让查询经 CodeTable 内部的关闭防护安全返回空。
+// CodeTable.Close 自身幂等（关闭后置 nil binReader），与系统词库层
+// （CodeTableLayer，包装同一 CodeTable 实例）的 Close 重复调用安全。
+func (e *Engine) Close() error {
+	if e.codeTable != nil {
+		return e.codeTable.Close()
+	}
+	return nil
+}
+
 // LoadCodeTable 加载主码表（文本格式）
 func (e *Engine) LoadCodeTable(path string) error {
 	ct, err := dict.LoadCodeTable(path)

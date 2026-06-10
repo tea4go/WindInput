@@ -28,6 +28,8 @@
 - `Manager` 使用 `sync.RWMutex` 保护引擎注册表，读操作（Convert）用读锁，切换用写锁
 - 引擎以 **SchemaID**（字符串）为键，不再使用固定的 `"pinyin"`/`"wubi"` 常量（但保留兼容方法）
 - `SwitchSchema` 懒加载：首次切换某方案时调用 `schema.CreateEngineFromSchema` 创建引擎并缓存；后续切换已加载的方案直接复用缓存
+- **LRU 驱逐**：每次切换后 `evictStaleEnginesLocked` 释放保留集之外的引擎（Close 引擎 + 系统层/附加层，清理 engines/systemLayers/systemExtras/warmedSchemas）。保留集 = 当前方案 + 上一方案 + 主拼音方案（临时拼音依赖）+ tempSchemaID/savedSchemaID + 正在预热（`warming`）的方案。被驱逐方案切回时走慢路径重建（缓存文件已预生成，仅 mmap 加载）
+- 三类引擎（codetable/pinyin/mixed）均实现 `Close() error`，释放各自持有的词库 mmap 引用（底层为引用计数共享 reader，见 `dict/binformat/shared.go`）；Close 不把热路径字段置 nil，在途查询经资源内部的关闭防护安全返回空
 - 切换方案时通过 `systemLayers` 缓存各方案的系统词库层，重新激活缓存引擎时通过 `reRegisterSystemLayer` 重新注册
 - `ActivateTempPinyin`/`DeactivateTempPinyin` 操作 `DictManager` 的 `CompositeDict`，向其注入/卸载拼音词库层，不切换 `currentEngine`
 - `SaveUserFreqs` 遍历所有已加载引擎，仅对开启了 `EnableUserFreq` 的拼音引擎保存词频；混输引擎通过 `GetPinyinEngine()` 取内部拼音引擎

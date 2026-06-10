@@ -28,6 +28,15 @@ func (l *CodeTableLayer) Name() string {
 	return l.name
 }
 
+// Close 释放底层码表资源（mmap 引用计数减一）。
+// 引擎驱逐路径调用；CodeTable.Close 自带 nil 防护，与引擎侧的 Close 重复调用安全。
+func (l *CodeTableLayer) Close() error {
+	if l.codeTable != nil {
+		return l.codeTable.Close()
+	}
+	return nil
+}
+
 // Type 返回层类型
 func (l *CodeTableLayer) Type() LayerType {
 	return l.layerType

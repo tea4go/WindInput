@@ -259,6 +259,15 @@ func NewPinyinDictLayer(name string, layerType LayerType, d *PinyinDict) *Pinyin
 	}
 }
 
+// Close 释放底层拼音词库资源（mmap 引用计数减一）。
+// 引擎驱逐路径调用；PinyinDict.Close 自带 nil 防护，重复调用安全。
+func (l *PinyinDictLayer) Close() error {
+	if l.dict != nil {
+		return l.dict.Close()
+	}
+	return nil
+}
+
 // Name 返回层名称
 func (l *PinyinDictLayer) Name() string {
 	return l.name

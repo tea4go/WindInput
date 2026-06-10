@@ -315,6 +315,7 @@ type BinaryUnigramModel struct {
 	reader    *binformat.UnigramReader
 	userFreqs map[string]int // 用户选词频次（运行时累积，在内存中）
 	mu        sync.RWMutex   // 保护 userFreqs 的并发读写
+	closed    bool           // Close 幂等标记：reader 共享 + 引用计数，本实例只许减一次
 }
 
 // NewBinaryUnigramModel 从二进制文件加载 Unigram 模型
@@ -373,14 +374,15 @@ func (m *BinaryUnigramModel) Size() int {
 
 // Close 关闭底层 mmap 资源。
 // reader 是进程级共享 + 引用计数的，Close 必须每持有者恰好一次——
-// 置 nil 保证本实例重复 Close 不会多扣别的持有者的引用。
+// closed 标记保证本实例重复 Close 不会多扣别的持有者的引用。
+// 不把 reader 置 nil：LogProb/Size 等方法无 nil 防护，在途查询需要
+// 壳对象存活（UnigramReader 关闭后内部短路返回 minProb）。
 func (m *BinaryUnigramModel) Close() error {
-	if m.reader == nil {
+	if m.closed || m.reader == nil {
 		return nil
 	}
-	r := m.reader
-	m.reader = nil
-	return r.Close()
+	m.closed = true
+	return m.reader.Close()
 }
 
 // LoadUserFreqsFromStore 从 Store 的 Freq bucket 加载用户词频

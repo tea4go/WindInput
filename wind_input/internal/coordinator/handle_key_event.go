@@ -51,6 +51,7 @@ func numpadKeyToChar(keyCode int) string {
 // Returns a result indicating what action to take
 func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.KeyEventResult) {
 	startTime := time.Now()
+	c.memTrim.noteActivity()
 
 	c.mu.Lock()
 	lockTime := time.Since(startTime)

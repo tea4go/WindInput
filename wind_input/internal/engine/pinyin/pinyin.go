@@ -236,6 +236,23 @@ func (e *Engine) GetBinaryUnigramModel() *BinaryUnigramModel {
 // 	return nil
 // }
 
+// Close 释放引擎独有的 mmap 资源：编码反查码表与 unigram 语言模型。
+// 由引擎管理器在 LRU 驱逐时调用。共享的 CompositeDict 与系统词库层
+// 归管理器所有，这里不动。堆上的懒构建索引（codeHintReverse / charPinyinIdx）
+// 随引擎对象一起被 GC 回收，无需显式清理。
+//
+// 不把字段置 nil——可能存在在途查询，保留壳对象可让查询经各资源内部的
+// 关闭防护安全返回空；底层 Close 均幂等。
+func (e *Engine) Close() error {
+	if e.codeHintTable != nil {
+		_ = e.codeHintTable.Close()
+	}
+	if c, ok := e.unigram.(interface{ Close() error }); ok {
+		_ = c.Close()
+	}
+	return nil
+}
+
 // LoadCodeHintTableBinary 加载编码反查码表的 wdb 二进制格式（mmap 模式，几乎不占堆内存）
 func (e *Engine) LoadCodeHintTableBinary(wdbPath string) error {
 	ct := dict.NewCodeTable()
