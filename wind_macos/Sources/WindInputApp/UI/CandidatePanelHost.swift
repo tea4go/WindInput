@@ -344,8 +344,11 @@ public final class CandidatePanelHost {
         guard let r = reader, let frame = r.snapshot() else { return }
         guard let img = Self.makeNSImage(from: frame, scale: scale) else { return }
         let pt = NSPoint(x: CGFloat(p.x), y: CGFloat(p.y))
+        let useSoftwareShadow = frame.hasSoftwareShadow
         lock.lock(); currentScale = scale; let rects = Self.scaleRects(latestRects, by: scale); lock.unlock()
         DispatchQueue.main.async { [weak self] in
+            // 软件阴影已渲染在 image 中时禁用系统窗口阴影，避免在画布边缘产生黑边。
+            self?.panel.hasShadow = !useSoftwareShadow
             self?.panel.show(image: img, atScreenPoint: pt, rects: rects)
         }
     }

@@ -290,8 +290,9 @@ const (
 	SharedRenderVersion uint32 = 1
 
 	// SharedRenderHeader flags
-	SharedFlagVisible      uint32 = 0x0001 // Window should be visible
-	SharedFlagContentReady uint32 = 0x0002 // New content is ready to render
+	SharedFlagVisible        uint32 = 0x0001 // Window should be visible
+	SharedFlagContentReady   uint32 = 0x0002 // New content is ready to render
+	SharedFlagSoftwareShadow uint32 = 0x0004 // Frame includes a software-rendered shadow; host should disable system window shadow
 
 	// SharedRenderHeaderSize is the fixed header size in shared memory (64 bytes)
 	SharedRenderHeaderSize = 64

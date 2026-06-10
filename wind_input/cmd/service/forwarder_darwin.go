@@ -576,7 +576,10 @@ func (f *darwinForwarder) renderAndPush() {
 
 	x := p.CaretX
 	y := p.CaretY + p.CaretHeight + 4
-	seq, err := state.SHM.WriteFrame(img, x, y)
+	hasSoftwareShadow := renderResult != nil &&
+		(renderResult.ShadowMarginLeft > 0 || renderResult.ShadowMarginTop > 0 ||
+			renderResult.ShadowMarginRight > 0 || renderResult.ShadowMarginBottom > 0)
+	seq, err := state.SHM.WriteFrame(img, x, y, hasSoftwareShadow)
 	if err != nil {
 		f.logger.Warn("darwin forwarder WriteFrame", "err", err)
 		return

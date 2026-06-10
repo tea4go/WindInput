@@ -111,8 +111,9 @@ func NewSharedMemory(name string, size uint32) (*SharedMemory, error) {
 
 // WriteFrame 把一张 RGBA 候选框图写入 SHM, RGBA→BGRA inline 转换 (与 Win 同协议)。
 // screenX/screenY = 候选框左上角屏幕坐标 (top-left, wire 坐标系)。
+// softwareShadow=true 时在 flags 中置 SharedFlagSoftwareShadow，通知 Swift 端禁用系统窗口阴影。
 // 返回写入的 sequence (调用方应通过 bridge push 通知客户端此 seq)。
-func (sm *SharedMemory) WriteFrame(img *image.RGBA, screenX, screenY int) (uint32, error) {
+func (sm *SharedMemory) WriteFrame(img *image.RGBA, screenX, screenY int, softwareShadow bool) (uint32, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -139,7 +140,11 @@ func (sm *SharedMemory) WriteFrame(img *image.RGBA, screenX, screenY int) (uint3
 	binary.LittleEndian.PutUint32(hdr[0:4], ipc.SharedRenderMagic)
 	binary.LittleEndian.PutUint32(hdr[4:8], ipc.SharedRenderVersion)
 	binary.LittleEndian.PutUint32(hdr[8:12], seq)
-	binary.LittleEndian.PutUint32(hdr[12:16], ipc.SharedFlagVisible|ipc.SharedFlagContentReady)
+	flags := ipc.SharedFlagVisible | ipc.SharedFlagContentReady
+	if softwareShadow {
+		flags |= ipc.SharedFlagSoftwareShadow
+	}
+	binary.LittleEndian.PutUint32(hdr[12:16], flags)
 	binary.LittleEndian.PutUint32(hdr[16:20], uint32(int32(screenX)))
 	binary.LittleEndian.PutUint32(hdr[20:24], uint32(int32(screenY)))
 	binary.LittleEndian.PutUint32(hdr[24:28], width)

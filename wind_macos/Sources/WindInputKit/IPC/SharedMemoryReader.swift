@@ -34,8 +34,9 @@ public struct SharedFrame {
     public let stride: Int
     public let bgra: Data    // 完整 BGRA 像素 (stride * height 字节, 已复制出 SHM)
 
-    public var isVisible: Bool { (flags & 0x1) != 0 }
-    public var hasContent: Bool { (flags & 0x2) != 0 }
+    public var isVisible: Bool         { (flags & 0x1) != 0 }
+    public var hasContent: Bool        { (flags & 0x2) != 0 }
+    public var hasSoftwareShadow: Bool { (flags & 0x4) != 0 }
 }
 
 public enum SharedMemoryError: Error {
