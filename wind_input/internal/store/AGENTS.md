@@ -16,8 +16,6 @@
 | `migration.go` | `MigratePhraseRecordsToAA()`: 一次性扫描 Phrases bucket, 把旧的 `Texts`+`Name` 字符组记录重写为 `Text` 字段中的 `$AA(...)` marker, 幂等 (`$AA(` 开头跳过); 用内部 `legacyPhraseRecord` 读旧字段, 写新 `PhraseRecord`。`dict.DictManager.OpenStore` 后立即调用 |
 | `shadow.go` | `ShadowStorage`：Shadow 规则（pin/delete）存储。**方案桶设计**: pin / delete 都按方案隔离, 写 `Schemas/{schemaID}/Shadow` 子桶。`DeleteShadow(schemaID, code, word, candID)` 写方案桶; `RemoveShadowRule` 清方案桶; `GetShadowRules` / `GetAllShadowRules` 读方案桶。**短语候选 delete 不走 Shadow**, 改写 `PhraseRecord.Enabled = false` (见 `dict.DictManager.DisablePhrase`), 因此 Shadow delete 自然按方案隔离即可。**R2 (2026-05-17)**: `ShadowPin`/`ShadowDelete` 含 `CandID` 字段, `Deleted` 从 `[]string` 升级为 `[]ShadowDelete{Word, CandID}`; `shadowMatchPin`/`shadowMatchDel` 优先 CandID 匹配; ShadowDelete.UnmarshalJSON 兼容旧版纯字符串格式。**注释历史**: 2026-05-17 一度引入 ShadowGlobal 全局桶承载"跨方案 delete", 后撤销 — 详见 shadow.go 顶部注释 |
 | `freq.go` | `FreqStorage`：词频统计存储；`Update`/`Get`/`GetTop`/`Delete` |
-| `write_buffer.go` | `WriteBuffer`：构建模式的原子事务写入缓冲，用于批量操作；`Put`/`Delete`/`Commit` |
-| `write_buffer_test.go` | WriteBuffer 单元测试 |
 | `pause_race_test.go` | Pause/Resume 热替换与并发读写的回归测试（需 `go test -race` 才能发挥作用） |
 | `freq_test.go`/`phrases_test.go`/`shadow_test.go`/`user_words_test.go` | 各模块单元测试 |
 
@@ -31,7 +29,7 @@
 - **初始化**：`initBuckets(db)` 创建必要 bucket 并初始化 Meta 默认值（版本=1、设备 ID=UUID）；由 `Open` 和持写锁的 `Resume` 直接调用（不经 view/update，避免自死锁）
 - **事务语义**：所有写操作通过 `s.update()`、读操作通过 `s.view()` 保证原子性；二者在 `dbMu` 读锁下执行，暂停期间返回 `ErrPaused`。**新增读写方法必须走这两个辅助方法，不要直接访问 `s.db`**（会重新引入 Pause 竞争）
 - **schema 隔离**：不同方案的词典、频率、规则独立存储在各自的 bucket 下，切换方案时通过 `schemaBucket(schemaID, create=true)` 导航
-- **WriteBuffer**：批量 Put/Delete 操作时先缓冲，最后 `Commit()` 一次性写入 bbolt，减少事务次数
+- **批量写入**：大批量导入用 `BatchAddUserWords`（单事务），避免逐条 fsync；词频走 `IncrementFreqAsync`（内存累积 + 定时/按量 flush）
 - **清理操作**：
   - `ClearSchema(schemaID)` 删除后重建空 bucket（保持结构）
   - `DeleteSchema(schemaID)` 完全删除 bucket（无重建）

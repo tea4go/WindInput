@@ -447,7 +447,9 @@ func (c *Coordinator) updateCandidatesEx() *engine.ConvertResult {
 	c.markKeyPhase("pre_convert")
 	result := c.engineMgr.ConvertEx(c.inputBuffer, initialLimit)
 	c.markKeyPhase("convert")
-	if result != nil && result.Timing != nil {
+	// ConvertEx 契约：永不返回 nil（nil 引擎也返回 &ConvertResult{}），故下方
+	// 各处可无条件解引用；仅 Timing 可能为 nil（引擎未填性能样本时）。
+	if result.Timing != nil {
 		// engine 内部各阶段补充到 phase breakdown, 定位 convert 内部瓶颈
 		c.markKeyPhaseDuration("eng_exact", result.Timing.Exact)
 		c.markKeyPhaseDuration("eng_prefix", result.Timing.Prefix)

@@ -86,7 +86,7 @@ func (s *Server) processRequest(header *ipc.IpcHeader, payload []byte, clientID 
 	// Update active process ID for events that indicate this client is active.
 	// CMD_IME_ACTIVATED / CMD_FOCUS_GAINED also carry a per-instance token that
 	// allows precise push targeting within multi-instance hosts (e.g. explorer).
-	// Token format: (PID & 0xFFFF) << 16 | per-process-instance-counter
+	// Token format: ((uint64)PID << 32) | per-process-instance-counter（见 IPCClient _clientToken）
 	switch header.Command {
 	case ipc.CmdKeyEvent, ipc.CmdCommitRequest, ipc.CmdFocusGained, ipc.CmdIMEActivated, ipc.CmdCaretUpdate:
 		if processID != 0 {

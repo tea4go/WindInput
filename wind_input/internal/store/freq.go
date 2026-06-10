@@ -301,26 +301,6 @@ func CalcFreqBoostWithProfile(rec FreqRecord, now int64, p *FreqProfile) int {
 	return int(total)
 }
 
-// BatchIncrementFreq enqueues a freq update via the WriteBuffer.
-// The caller supplies the current rec (e.g. from GetFreq) so we can
-// pre-compute the next state without a separate read transaction.
-func BatchIncrementFreq(wb *WriteBuffer, schemaID, code, text string, rec FreqRecord) {
-	rec.Count++
-	rec.LastUsed = time.Now().Unix()
-	if rec.Streak < 255 {
-		rec.Streak++
-	}
-	data, err := json.Marshal(rec)
-	if err != nil {
-		return
-	}
-	wb.Enqueue(WriteOp{
-		Bucket: [][]byte{bucketSchemas, []byte(schemaID), bucketFreq},
-		Key:    freqKey(code, text),
-		Value:  data,
-	})
-}
-
 // IncrementFreqAsync 异步增加词频计数（内存累积，批量写入）。
 // 与 IncrementFreq 的区别：不立即写 BoltDB，大幅减少写锁竞争。
 // 崩溃时最多丢失最近一个 flush 周期内的增量，对词频排序可接受。
