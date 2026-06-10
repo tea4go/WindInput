@@ -132,14 +132,14 @@ func TestClone_DeepEqualAndNoAliasing(t *testing.T) {
 func TestClone_MutationIsolation(t *testing.T) {
 	orig := DefaultConfig()
 	orig.Input.PunctCustom.Mappings = map[string][]string{"a": {"x"}}
-	orig.Input.SpecialModes = []SpecialModeConfig{{ID: "m1", TriggerKeys: []string{"k"}}}
+	orig.Features.SpecialModes = []SpecialModeConfig{{ID: "m1", TriggerKeys: []string{"k"}}}
 	orig.Hotkeys.ToggleModeKeys = []string{"shift"}
 
 	cl := orig.Clone()
 
 	orig.Input.PunctCustom.Mappings["a"][0] = "mutated"
 	orig.Input.PunctCustom.Mappings["b"] = []string{"new"}
-	orig.Input.SpecialModes[0].TriggerKeys[0] = "mutated"
+	orig.Features.SpecialModes[0].TriggerKeys[0] = "mutated"
 	orig.Hotkeys.ToggleModeKeys[0] = "mutated"
 
 	if cl.Input.PunctCustom.Mappings["a"][0] != "x" {
@@ -148,7 +148,7 @@ func TestClone_MutationIsolation(t *testing.T) {
 	if _, ok := cl.Input.PunctCustom.Mappings["b"]; ok {
 		t.Errorf("克隆体 Mappings 出现原件新增的键")
 	}
-	if cl.Input.SpecialModes[0].TriggerKeys[0] != "k" {
+	if cl.Features.SpecialModes[0].TriggerKeys[0] != "k" {
 		t.Errorf("克隆体 SpecialModes 被原件修改污染")
 	}
 	if cl.Hotkeys.ToggleModeKeys[0] != "shift" {

@@ -44,7 +44,7 @@ func (c *Coordinator) enterAddWordMode() *bridge.KeyEventResult {
 
 	// 加词模式强制纵排，退出时恢复
 	if c.config != nil && c.uiManager != nil {
-		c.savedLayout = c.config.UI.CandidateLayout
+		c.savedLayout = c.config.UI.Candidate.Layout
 		c.uiManager.SetCandidateLayout(config.LayoutVertical)
 	}
 

@@ -13,7 +13,7 @@ func (c *Coordinator) HandleInputStats(chars, digits, puncts, spaces, elapsedMs 
 	if c.statCollector == nil {
 		return
 	}
-	if c.config != nil && (!c.config.Stats.IsEnabled() || !c.config.Stats.IsTrackEnglish()) {
+	if c.config != nil && (!c.config.Features.Stats.Enabled || !c.config.Features.Stats.TrackEnglish) {
 		return
 	}
 	c.statCollector.RecordTSFEnglish(chars, digits, puncts, spaces, elapsedMs)
@@ -48,7 +48,7 @@ func (c *Coordinator) recordCommit(text string, codeLen int, candidatePos int, s
 	if c.statCollector == nil || text == "" {
 		return
 	}
-	if c.config != nil && !c.config.Stats.IsEnabled() {
+	if c.config != nil && !c.config.Features.Stats.Enabled {
 		return
 	}
 

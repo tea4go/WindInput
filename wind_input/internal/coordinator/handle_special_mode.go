@@ -67,7 +67,7 @@ func (c *Coordinator) setupSpecialMode(id, triggerKey string) (string, bool) {
 	// 强制竖排：保存当前布局并切换
 	if inst.cfg.ForceVertical {
 		if c.config != nil {
-			c.specialSavedLayout = c.config.UI.CandidateLayout
+			c.specialSavedLayout = c.config.UI.Candidate.Layout
 		}
 		if c.uiManager != nil {
 			c.uiManager.SetCandidateLayout(config.LayoutVertical)
@@ -526,7 +526,7 @@ func (c *Coordinator) showSpecialUI() {
 	caretX := c.caretX
 	caretY := c.caretY
 	caretHeight := c.caretHeight
-	if c.config != nil && c.config.UI.InlinePreedit && c.compositionStartValid {
+	if c.config != nil && c.config.UI.Candidate.InlinePreedit && c.compositionStartValid {
 		caretX = c.compositionStartX
 		caretY = c.compositionStartY
 	}

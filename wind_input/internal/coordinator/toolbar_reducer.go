@@ -97,7 +97,7 @@ func newToolbarReducer(c *Coordinator) *toolbarReducer {
 	c.mu.Lock()
 	r.userWantsVisible = c.toolbarVisible
 	if c.config != nil {
-		r.hideInFullscreen = c.config.Toolbar.IsHideInFullscreen()
+		r.hideInFullscreen = c.config.UI.Toolbar.HideInFullscreen
 	}
 	r.caretX, r.caretY, r.caretValid = c.caretX, c.caretY, c.caretValid
 	c.mu.Unlock()

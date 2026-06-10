@@ -10,43 +10,31 @@ import (
 	"github.com/huanfeng/wind_input/pkg/keys"
 )
 
-// Config represents the application configuration
+// Config 应用配置（v1 结构，见 docs/design/config-restructure.md §3）。
+//
+// 顶层分类原则：用户心智域 = 设置页（§2.1）；input vs features 边界 =
+// 按键流水线耦合 vs 可整体拔掉的自包含功能。
+//
+// 三态规范（§2.3）：struct 禁指针、bool 永不为 null、标量 tag 禁 omitempty
+// （slice/map 豁免）；"未设置=继承默认"由磁盘键缺失 + diff-save 表达。
+// 注意：Config 不含 version 字段——version 只存活于磁盘文件与 map 层。
 type Config struct {
-	Startup  StartupConfig  `yaml:"startup" json:"startup"`
+	General  GeneralConfig  `yaml:"general" json:"general"`
 	Schema   SchemaConfig   `yaml:"schema" json:"schema"`
 	Hotkeys  HotkeyConfig   `yaml:"hotkeys" json:"hotkeys"`
-	UI       UIConfig       `yaml:"ui" json:"ui"`
-	Toolbar  ToolbarConfig  `yaml:"toolbar" json:"toolbar"`
 	Input    InputConfig    `yaml:"input" json:"input"`
-	Advanced AdvancedConfig `yaml:"advanced" json:"advanced"`
-	Stats    StatsConfig    `yaml:"stats" json:"stats"`
-	S2T      S2TConfig      `yaml:"s2t" json:"s2t"`
+	UI       UIConfig       `yaml:"ui" json:"ui"`
+	Features FeaturesConfig `yaml:"features" json:"features"`
+	Compat   CompatConfig   `yaml:"compat" json:"compat"`
+	Debug    DebugConfig    `yaml:"debug" json:"debug"`
 }
 
-// StatsConfig 输入统计配置
-// 使用 *bool 指针类型避免 yaml.v3 反序列化时将未设置的字段归零
-type StatsConfig struct {
-	Enabled      *bool `yaml:"enabled,omitempty" json:"enabled"`             // 是否启用统计（nil=默认 true）
-	RetainDays   int   `yaml:"retain_days" json:"retain_days"`               // 数据保留天数（0=永久，默认 0）
-	TrackEnglish *bool `yaml:"track_english,omitempty" json:"track_english"` // 是否统计英文模式（nil=默认 true）
-}
-
-func boolPtr(v bool) *bool { return &v }
-
-// IsEnabled 返回统计是否启用
-func (c *StatsConfig) IsEnabled() bool {
-	if c.Enabled == nil {
-		return true
-	}
-	return *c.Enabled
-}
-
-// IsTrackEnglish 返回是否统计英文
-func (c *StatsConfig) IsTrackEnglish() bool {
-	if c.TrackEnglish == nil {
-		return true
-	}
-	return *c.TrackEnglish
+// GeneralConfig 启动与默认状态（原 StartupConfig）
+type GeneralConfig struct {
+	RememberLastState   bool `yaml:"remember_last_state" json:"remember_last_state"`
+	DefaultChineseMode  bool `yaml:"default_chinese_mode" json:"default_chinese_mode"`
+	DefaultFullWidth    bool `yaml:"default_full_width" json:"default_full_width"`
+	DefaultChinesePunct bool `yaml:"default_chinese_punct" json:"default_chinese_punct"`
 }
 
 // SchemaConfig 输入方案配置
@@ -56,44 +44,11 @@ type SchemaConfig struct {
 	// PrimaryCodetable 主码表方案 ID。
 	// 用于：拼音类方案的"反查/编码提示"统一从此方案的码表派生。
 	// 留空时按 Available 顺序选第一个 codetable 方案；都没有则不显示编码提示。
-	PrimaryCodetable string `yaml:"primary_codetable,omitempty" json:"primaryCodetable,omitempty"`
+	PrimaryCodetable string `yaml:"primary_codetable" json:"primary_codetable"`
 	// PrimaryPinyin 主拼音方案 ID。
 	// 用于：码表方案的"临时拼音/快捷输入"统一指向此方案。
 	// 留空时按 Available 顺序选第一个 pinyin 方案；都没有则禁用临时拼音。
-	PrimaryPinyin string `yaml:"primary_pinyin,omitempty" json:"primaryPinyin,omitempty"`
-}
-
-// StartupConfig 启动/默认状态配置
-type StartupConfig struct {
-	RememberLastState   bool `yaml:"remember_last_state" json:"remember_last_state"`
-	DefaultChineseMode  bool `yaml:"default_chinese_mode" json:"default_chinese_mode"`
-	DefaultFullWidth    bool `yaml:"default_full_width" json:"default_full_width"`
-	DefaultChinesePunct bool `yaml:"default_chinese_punct" json:"default_chinese_punct"`
-}
-
-// PinyinConfig 拼音引擎配置
-type PinyinConfig struct {
-	ShowCodeHint    bool              `yaml:"show_code_hint" json:"show_code_hint"`
-	UseSmartCompose bool              `yaml:"use_smart_compose" json:"use_smart_compose"`
-	CandidateOrder  string            `yaml:"candidate_order" json:"candidate_order"` // 候选排序：char_first/phrase_first/smart
-	Fuzzy           FuzzyPinyinConfig `yaml:"fuzzy" json:"fuzzy"`
-	SkipAbbrev      bool              `yaml:"skip_abbrev" json:"skip_abbrev"` // 跳过简拼匹配（混输模式专用）
-}
-
-// FuzzyPinyinConfig 模糊拼音配置
-type FuzzyPinyinConfig struct {
-	Enabled bool `yaml:"enabled" json:"enabled"`   // 总开关
-	ZhZ     bool `yaml:"zh_z" json:"zh_z"`         // zh ↔ z
-	ChC     bool `yaml:"ch_c" json:"ch_c"`         // ch ↔ c
-	ShS     bool `yaml:"sh_s" json:"sh_s"`         // sh ↔ s
-	NL      bool `yaml:"n_l" json:"n_l"`           // n ↔ l
-	FH      bool `yaml:"f_h" json:"f_h"`           // f ↔ h
-	RL      bool `yaml:"r_l" json:"r_l"`           // r ↔ l
-	AnAng   bool `yaml:"an_ang" json:"an_ang"`     // an ↔ ang
-	EnEng   bool `yaml:"en_eng" json:"en_eng"`     // en ↔ eng
-	InIng   bool `yaml:"in_ing" json:"in_ing"`     // in ↔ ing
-	IanIang bool `yaml:"ian_iang" json:"ian_iang"` // ian ↔ iang
-	UanUang bool `yaml:"uan_uang" json:"uan_uang"` // uan ↔ uang
+	PrimaryPinyin string `yaml:"primary_pinyin" json:"primary_pinyin"`
 }
 
 // HotkeyConfig contains hotkey settings
@@ -113,185 +68,7 @@ type HotkeyConfig struct {
 	GlobalHotkeys   []string `yaml:"global_hotkeys" json:"global_hotkeys"`     // 注册为全局热键的快捷键名称列表
 }
 
-// S2TConfig 简入繁出（简体->繁体）配置
-type S2TConfig struct {
-	Enabled bool       `yaml:"enabled" json:"enabled"` // 总开关
-	Variant S2TVariant `yaml:"variant" json:"variant"` // 变体: s2t / s2tw / s2twp / s2hk
-}
-
-// TooltipConfig 候选悬停增强提示配置
-type TooltipConfig struct {
-	Code   TooltipCodeConfig   `yaml:"code" json:"code"`     // 编码显示
-	Pinyin TooltipPinyinConfig `yaml:"pinyin" json:"pinyin"` // 拼音提示
-	Chaizi TooltipChaiziConfig `yaml:"chaizi" json:"chaizi"` // 拆字提示
-	Debug  TooltipDebugConfig  `yaml:"debug" json:"debug"`   // 调试信息
-}
-
-// TooltipCodeConfig 编码显示配置
-type TooltipCodeConfig struct {
-	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"` // nil=默认 true（向后兼容）
-}
-
-// IsEnabled 返回是否显示编码（nil 视作 true）
-func (c *TooltipCodeConfig) IsEnabled() bool {
-	if c.Enabled == nil {
-		return true
-	}
-	return *c.Enabled
-}
-
-// TooltipPinyinConfig 拼音提示配置
-type TooltipPinyinConfig struct {
-	Enabled     bool `yaml:"enabled" json:"enabled"`           // 是否显示拼音
-	Heteronyms  bool `yaml:"heteronyms" json:"heteronyms"`     // 是否显示多音字所有读音
-	MaxReadings int  `yaml:"max_readings" json:"max_readings"` // 每字最多显示读音数，0 表示不限
-}
-
-// TooltipChaiziConfig 拆字提示配置
-type TooltipChaiziConfig struct {
-	Enabled bool `yaml:"enabled" json:"enabled"` // 是否显示拆字（默认 false）
-}
-
-// TooltipDebugConfig 调试信息配置
-type TooltipDebugConfig struct {
-	Enabled bool `yaml:"enabled" json:"enabled"` // 是否显示调试信息（默认 false）
-}
-
-// StatusIndicatorConfig 状态提示配置
-type StatusIndicatorConfig struct {
-	Enabled         bool    `yaml:"enabled" json:"enabled"`
-	Duration        int     `yaml:"duration" json:"duration"`
-	DisplayMode     string  `yaml:"display_mode" json:"display_mode"`
-	SchemaNameStyle string  `yaml:"schema_name_style" json:"schema_name_style"`
-	ShowMode        bool    `yaml:"show_mode" json:"show_mode"`
-	ShowPunct       bool    `yaml:"show_punct" json:"show_punct"`
-	ShowFullWidth   bool    `yaml:"show_full_width" json:"show_full_width"`
-	PositionMode    string  `yaml:"position_mode" json:"position_mode"`
-	OffsetX         int     `yaml:"offset_x" json:"offset_x"`
-	OffsetY         int     `yaml:"offset_y" json:"offset_y"`
-	CustomX         int     `yaml:"custom_x" json:"custom_x"`
-	CustomY         int     `yaml:"custom_y" json:"custom_y"`
-	FontSize        float64 `yaml:"font_size" json:"font_size"`
-	Opacity         float64 `yaml:"opacity" json:"opacity"`
-	BackgroundColor string  `yaml:"background_color" json:"background_color"`
-	TextColor       string  `yaml:"text_color" json:"text_color"`
-	BorderRadius    float64 `yaml:"border_radius" json:"border_radius"`
-}
-
-// UIConfig contains UI settings
-type UIConfig struct {
-	FontSize float64 `yaml:"font_size" json:"font_size"`
-	// FontSizeFollowTheme=true 时候选字号跟随主题 behavior.font_size，忽略 FontSize；
-	// false=用 FontSize 自定义。默认 true（新装跟随主题）。
-	// 注意：**不可加 omitempty**——默认值为 true 时，omitempty 会把"显式 false"与"未设置"
-	// 在 YAML 中混为一谈，破坏 diff-save/merge-on-default 的闭环（false 写不出、回读成默认 true）。
-	// 走通用「缺失=继承默认」机制，无特例探针。见 renderer.recomputeBaseFont。
-	FontSizeFollowTheme bool `yaml:"font_size_follow_theme" json:"font_size_follow_theme"`
-
-	// 主题 behavior 用户覆盖层（哲学Y，见 docs/design/theme-schema-v3.md「behavior」）：
-	// 每个 behavior 字段 = FollowTheme ? 主题 behavior 推荐默认 : 用户自定义值。
-	// 与 FontSize/FontSizeFollowTheme 同模式；*FollowTheme 默认 true（新装跟随主题）。
-	// 注意：FollowTheme 类 bool **不可加 omitempty**——默认 true 时 omitempty 会把"显式 false"
-	// 与"未设置"在 YAML 中混为一谈，破坏 diff-save/merge-on-default 闭环（见 FontSizeFollowTheme 注释）。
-	AlwaysShowPager             bool `yaml:"always_show_pager" json:"always_show_pager"`                             // 单页时也显示翻页区（FollowTheme=false 时生效）
-	AlwaysShowPagerFollowTheme  bool `yaml:"always_show_pager_follow_theme" json:"always_show_pager_follow_theme"`   // true=跟随主题 behavior.always_show_pager
-	ShowPageNumber              bool `yaml:"show_page_number" json:"show_page_number"`                               // 显示页码文字 "1/3"（FollowTheme=false 时生效）
-	ShowPageNumberFollowTheme   bool `yaml:"show_page_number_follow_theme" json:"show_page_number_follow_theme"`     // true=跟随主题 behavior.show_page_number
-	VerticalMaxWidth            int  `yaml:"vertical_max_width" json:"vertical_max_width"`                           // 竖排候选最大宽度（逻辑像素，FollowTheme=false 时生效）
-	VerticalMaxWidthFollowTheme bool `yaml:"vertical_max_width_follow_theme" json:"vertical_max_width_follow_theme"` // true=跟随主题 behavior.vertical_max_width
-
-	CandidatesPerPage int `yaml:"candidates_per_page" json:"candidates_per_page"`
-	// CandidatesPerPageExtended 扩展档每页候选数。在临时拼音/快捷输入/短语等场景下生效，
-	// 让这些场景显示更多候选；普通码表输入仍用 CandidatesPerPage（基础档）。
-	// <=0 表示禁用扩展档（始终用基础档，向后兼容）；正值有效，上界 clamp 到 10
-	// （候选用数字键 1-9、0 选择，每页最多 10 个可选，超出无对应数字键且标签会重复）。
-	// 判定"是否启用扩展档"统一由 >0 决定，故无需下界 clamp。
-	CandidatesPerPageExtended int               `yaml:"candidates_per_page_extended,omitempty" json:"candidates_per_page_extended,omitempty"`
-	FontFamily                string            `yaml:"font_family" json:"font_family"`
-	FontPath                  string            `yaml:"font_path" json:"font_path"`
-	InlinePreedit             bool              `yaml:"inline_preedit" json:"inline_preedit"`
-	HideCandidateWindow       bool              `yaml:"hide_candidate_window" json:"hide_candidate_window"`
-	CandidateLayout           CandidateLayout   `yaml:"candidate_layout" json:"candidate_layout"`                   // 候选布局：horizontal 或 vertical
-	StatusIndicatorDuration   int               `yaml:"status_indicator_duration" json:"status_indicator_duration"` // 状态提示显示时长（毫秒）
-	StatusIndicatorOffsetX    int               `yaml:"status_indicator_offset_x" json:"status_indicator_offset_x"` // 状态提示 X 偏移量
-	StatusIndicatorOffsetY    int               `yaml:"status_indicator_offset_y" json:"status_indicator_offset_y"` // 状态提示 Y 偏移量
-	Theme                     string            `yaml:"theme" json:"theme"`                                         // 主题名称：default, msime 或自定义主题名
-	ThemeStyle                ThemeStyle        `yaml:"theme_style" json:"theme_style"`                             // 主题风格：system(跟随系统), light(亮色), dark(暗色)
-	PagerBarDisplay           PagerBarDisplay   `yaml:"pager_bar_display" json:"pager_bar_display"`                 // 翻页栏显示方式：空=主题配置, always=总是显示, auto=多页时显示, hide=隐藏
-	PageNumberDisplay         PageNumberDisplay `yaml:"page_number_display" json:"page_number_display"`             // 页码显示方式：空=主题配置, show=显示, hide=隐藏
-	TooltipDelay              int               `yaml:"tooltip_delay" json:"tooltip_delay"`                         // 编码提示延迟显示时间（毫秒），0 表示立即显示
-
-	PreeditMode PreeditMode `yaml:"preedit_mode" json:"preedit_mode"` // 编码显示模式："top"（默认，编码在上方独立行）, "embedded"（嵌入候选行前）；仅 InlinePreedit=false 时生效
-
-	// FlipLayoutWhenAbove 候选窗在光标上方时反转 bands 排列顺序，使预编辑栏保持最靠近光标。
-	// true（默认，由 data/config.yaml 设置）：上方模式下 preedit 在底部，首候选紧贴光标；
-	// false：保持旧行为（preedit 在顶部）。
-	FlipLayoutWhenAbove bool `yaml:"flip_layout_when_above" json:"flip_layout_when_above"`
-
-	Tooltip TooltipConfig `yaml:"tooltip" json:"tooltip"` // 候选悬停提示配置
-
-	// 文本渲染设置
-	TextRenderMode FontEngine `yaml:"text_render_mode,omitempty" json:"text_render_mode,omitempty"` // 文本渲染引擎："directwrite"（默认，DirectWrite渲染）、"gdi"（Windows原生GDI渲染）或 "freetype"（FreeType渲染）
-	GDIFontWeight  int        `yaml:"gdi_font_weight,omitempty" json:"gdi_font_weight,omitempty"`   // 候选框GDI字体粗细：100~900，默认500(Medium)
-	GDIFontScale   float64    `yaml:"gdi_font_scale,omitempty" json:"gdi_font_scale,omitempty"`     // GDI字体缩放：0.5~2.0，默认1.0，值越大文字越大
-	MenuFontWeight int        `yaml:"menu_font_weight,omitempty" json:"menu_font_weight,omitempty"` // 菜单GDI字体粗细：100~900，默认600(SemiBold)
-	MenuFontSize   float64    `yaml:"menu_font_size,omitempty" json:"menu_font_size,omitempty"`     // 菜单字体大小：默认12.0（DPI缩放前基础值）
-
-	StatusIndicator StatusIndicatorConfig `yaml:"status_indicator" json:"status_indicator"` // 状态提示配置
-
-	// 特殊模式内发光边框开关：nil=开启（默认），false=关闭
-	ModeAccentBorder *bool `yaml:"mode_accent_border,omitempty" json:"mode_accent_border,omitempty"`
-	// 特殊模式内发光边框颜色（十六进制，如 "#3C78AFD2"），空=使用内置默认色
-	TempPinyinAccentColor string `yaml:"temp_pinyin_accent_color,omitempty" json:"temp_pinyin_accent_color,omitempty"`
-	QuickInputAccentColor string `yaml:"quick_input_accent_color,omitempty" json:"quick_input_accent_color,omitempty"`
-
-	// MaxCandidateChars 候选文本最大显示 rune 数，超出后截断并追加"…"。
-	// 合法范围 8-64，0 或越界时回退到默认值 16。
-	MaxCandidateChars int `yaml:"max_candidate_chars,omitempty" json:"max_candidate_chars,omitempty"`
-
-	// CmdbarCandidatePrefix 副作用命令直通车候选 (Actions 含 ActionEffect) 在候选框
-	// 渲染时的前缀符号, 让用户一眼分辨"会跑副作用的命令"和普通文本候选。
-	// 仅 type(...) 上屏的命令视觉上与普通候选无差, 不会加前缀。
-	// 用 *string 区分三态:
-	//   - nil           未设置, 使用默认 "⚡"
-	//   - 指向空字符串  完全不显示
-	//   - 指向非空字符串 使用该符号 (如 "▶")
-	CmdbarCandidatePrefix *string `yaml:"cmdbar_candidate_prefix,omitempty" json:"cmdbar_candidate_prefix,omitempty"`
-
-	// CandidateIndexLabels 用户全局序号标签覆盖（10 槽位字符或 /-分隔模板，如 "①②③④⑤⑥⑦⑧⑨⑩" 或 "1./2./…"）。
-	// 非空时覆盖主题 views.index.labels；空=用主题。优先级低于运行时 per-候选 IndexLabel。
-	CandidateIndexLabels string `yaml:"candidate_index_labels,omitempty" json:"candidate_index_labels,omitempty"`
-
-	// ThemeEditorAutoStart 打开设置界面时自动开启 Web 编辑器连接服务。
-	ThemeEditorAutoStart bool `yaml:"theme_editor_auto_start,omitempty" json:"theme_editor_auto_start,omitempty"`
-}
-
-// GetCmdbarCandidatePrefix 返回 cmdbar 副作用候选的渲染前缀。
-// 未设置 (nil) 时返回默认 "⚡"; 显式设为空串时返回空串 (调用方据此关闭前缀)。
-func (u *UIConfig) GetCmdbarCandidatePrefix() string {
-	if u.CmdbarCandidatePrefix == nil {
-		return "⚡"
-	}
-	return *u.CmdbarCandidatePrefix
-}
-
-// ToolbarConfig contains toolbar settings
-type ToolbarConfig struct {
-	Visible bool `yaml:"visible" json:"visible"`
-	// HideInFullscreen 控制：当前台应用处于全屏状态时是否自动隐藏工具栏。
-	// 使用 *bool 区分"未设置"和"显式 false"，未设置时按默认 true 处理。
-	HideInFullscreen *bool `yaml:"hide_in_fullscreen,omitempty" json:"hide_in_fullscreen,omitempty"`
-}
-
-// IsHideInFullscreen 返回是否启用「全屏时隐藏工具栏」。未设置时默认 true。
-func (c *ToolbarConfig) IsHideInFullscreen() bool {
-	if c.HideInFullscreen == nil {
-		return true
-	}
-	return *c.HideInFullscreen
-}
-
-// InputConfig contains input behavior settings
+// InputConfig 按键流水线行为配置
 type InputConfig struct {
 	PunctFollowMode      bool                   `yaml:"punct_follow_mode" json:"punct_follow_mode"`
 	FilterMode           FilterMode             `yaml:"filter_mode" json:"filter_mode"` // 候选过滤模式: "smart"(智能), "general"(仅常用字), "gb18030"(不限制)
@@ -306,27 +83,24 @@ type InputConfig struct {
 	NumpadBehavior       string                 `yaml:"numpad_behavior" json:"numpad_behavior"`                 // 数字小键盘功能: "direct"(直接输入数字,默认) | "follow_main"(同主键盘区数字)
 	PinyinSeparator      PinyinSeparatorMode    `yaml:"pinyin_separator" json:"pinyin_separator"`               // 拼音分隔符: "auto", "quote", "backtick", "none"
 	ShiftTempEnglish     ShiftTempEnglishConfig `yaml:"shift_temp_english" json:"shift_temp_english"`
-	CapsLockBehavior     CapsLockBehaviorConfig `yaml:"capslock_behavior" json:"capslock_behavior"`
+	CapsLock             CapsLockConfig         `yaml:"capslock" json:"capslock"`
 	TempPinyin           TempPinyinConfig       `yaml:"temp_pinyin" json:"temp_pinyin"`
 	AutoPair             AutoPairConfig         `yaml:"auto_pair" json:"auto_pair"`
 	PunctCustom          PunctCustomConfig      `yaml:"punct_custom" json:"punct_custom"`
-	QuickInput           QuickInputConfig       `yaml:"quick_input" json:"quick_input"`
-	OverflowBehavior     OverflowBehaviorConfig `yaml:"overflow_behavior" json:"overflow_behavior"` // 候选按键无效时的处理策略
-	Phrase               PhraseConfig           `yaml:"phrase" json:"phrase"`                       // 短语相关行为
-	SpecialModes         []SpecialModeConfig    `yaml:"special_modes,omitempty" json:"special_modes,omitempty"`
+	Overflow             OverflowConfig         `yaml:"overflow" json:"overflow"` // 候选按键无效时的处理策略
+	Phrase               PhraseConfig           `yaml:"phrase" json:"phrase"`     // 短语相关行为
 }
 
 // PhraseConfig 短语相关行为配置（暂无 UI，文件配置）
 type PhraseConfig struct {
-	// MinPrefixLength 短语前缀匹配触发的最小输入长度（默认 2）。
+	// MinPrefixLength 短语前缀匹配触发的最小输入长度（默认 2，下界 clamp 到 1）。
 	// 当输入码长 < MinPrefixLength 且 < 短语自身码长时，该短语不参与前缀展开；
 	// 等价规则: 短语条目仅在 len(input) >= MinPrefixLength || len(input) >= len(code) 时出现。
-	// 例如默认 2 时, 单字符 "z" 不会前缀展开 zzbd / zzaa, 但用户配置的码长为 1 的短语 (input="z" code="z") 仍按精确匹配走 SearchCommand。
-	MinPrefixLength int `yaml:"min_prefix_length,omitempty" json:"min_prefix_length,omitempty"`
+	MinPrefixLength int `yaml:"min_prefix_length" json:"min_prefix_length"`
 }
 
-// OverflowBehaviorConfig 候选按键无效时的处理策略
-type OverflowBehaviorConfig struct {
+// OverflowConfig 候选按键无效时的处理策略（原 OverflowBehaviorConfig）
+type OverflowConfig struct {
 	// 数字键无效时: "ignore"(不起作用) | "commit"(顶字上屏) | "commit_and_input"(顶字上屏并输入数字)
 	NumberKey OverflowBehavior `yaml:"number_key" json:"number_key"`
 	// 二三候选键无效时: "ignore"(不起作用) | "commit"(顶字上屏) | "commit_and_input"(顶字上屏并输入编码)
@@ -349,14 +123,14 @@ type SpecialModeConfig struct {
 	TriggerKeys   []string `yaml:"trigger_keys" json:"trigger_keys"` // 引导键
 	Table         string   `yaml:"table" json:"table"`               // 码表文件，相对 schemas 目录
 	AutoCommit    string   `yaml:"auto_commit" json:"auto_commit"`   // prefix_free|fixed_length|manual
-	FixedLength   int      `yaml:"fixed_length,omitempty" json:"fixed_length,omitempty"`
-	ForceVertical bool     `yaml:"force_vertical,omitempty" json:"force_vertical,omitempty"`
-	AccentColor   string   `yaml:"accent_color,omitempty" json:"accent_color,omitempty"`
+	FixedLength   int      `yaml:"fixed_length" json:"fixed_length"`
+	ForceVertical bool     `yaml:"force_vertical" json:"force_vertical"`
+	AccentColor   string   `yaml:"accent_color" json:"accent_color"`
 	// ShowAllOnEntry 刚进入模式（编码为空）时是否立即列出整张码表的全部候选。
 	// false(默认)=只显示模式徽标提示，打字后才按前缀出候选；true=进入即列全部（大表慎用）。
-	ShowAllOnEntry bool `yaml:"show_all_on_entry,omitempty" json:"show_all_on_entry,omitempty"`
+	ShowAllOnEntry bool `yaml:"show_all_on_entry" json:"show_all_on_entry"`
 	// —— 预留字段，MVP 不实现 ——
-	CodeCharset string   `yaml:"code_charset,omitempty" json:"code_charset,omitempty"`
+	CodeCharset string   `yaml:"code_charset" json:"code_charset"`
 	Schemes     []string `yaml:"schemes,omitempty" json:"schemes,omitempty"`
 	Engines     []string `yaml:"engines,omitempty" json:"engines,omitempty"`
 }
@@ -389,9 +163,7 @@ type QuickInputConfig struct {
 	TriggerKeys   []string `yaml:"trigger_keys" json:"trigger_keys"`     // 触发键列表（空列表=关闭），如 ["semicolon"]
 	ForceVertical bool     `yaml:"force_vertical" json:"force_vertical"` // 强制竖排显示候选（默认 true）
 	DecimalPlaces int      `yaml:"decimal_places" json:"decimal_places"` // 计算结果小数保留位数（默认 6，0 表示取整）
-	// 兼容旧配置字段（加载后迁移到 TriggerKeys）
-	Enabled    *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty"`         // deprecated
-	TriggerKey string `yaml:"trigger_key,omitempty" json:"trigger_key,omitempty"` // deprecated
+	AccentColor   string   `yaml:"accent_color" json:"accent_color"`     // 模式内发光边框颜色（十六进制），空=内置默认色
 }
 
 // PunctCustomConfig 自定义标点映射配置
@@ -405,15 +177,9 @@ type TempPinyinConfig struct {
 	TriggerKeys []string `yaml:"trigger_keys" json:"trigger_keys"` // 触发键: "backtick", "semicolon", "z"
 	// ZIncludeOnCommit 控制 z 触发临时拼音后，按 Enter 上屏编码时是否包含触发键 z 本身。
 	// 默认 true（保留 z），仅对 z 触发键生效，不影响符号触发键。暂不暴露 UI，作为内部预留开关。
-	ZIncludeOnCommit *bool `yaml:"z_include_on_commit,omitempty" json:"z_include_on_commit,omitempty"`
-}
-
-// ZIncludeOnCommitEnabled 返回 z 触发临时拼音按 Enter 上屏时是否包含 z（默认 true）
-func (t TempPinyinConfig) ZIncludeOnCommitEnabled() bool {
-	if t.ZIncludeOnCommit == nil {
-		return true
-	}
-	return *t.ZIncludeOnCommit
+	ZIncludeOnCommit bool `yaml:"z_include_on_commit" json:"z_include_on_commit"`
+	// AccentColor 模式内发光边框颜色（十六进制，如 "#3C78AFD2"），空=内置默认色
+	AccentColor string `yaml:"accent_color" json:"accent_color"`
 }
 
 // AutoPairConfig 自动标点配对配置
@@ -454,36 +220,200 @@ type ShiftTempEnglishConfig struct {
 	SpaceAsInput bool `yaml:"space_as_input" json:"space_as_input"`
 }
 
-// CapsLockBehaviorConfig CapsLock 行为配置
-type CapsLockBehaviorConfig struct {
+// CapsLockConfig CapsLock 行为配置（原 CapsLockBehaviorConfig）
+type CapsLockConfig struct {
 	CancelOnModeSwitch bool `yaml:"cancel_on_mode_switch" json:"cancel_on_mode_switch"`
 }
 
-// AdvancedConfig 高级配置
-type AdvancedConfig struct {
+// ── UI ──────────────────────────────────────────────────────────────────────
+
+// UIConfig 界面配置（纯容器，顶层不留散字段）
+type UIConfig struct {
+	Candidate       UICandidateConfig     `yaml:"candidate" json:"candidate"`
+	Font            UIFontConfig          `yaml:"font" json:"font"`
+	Theme           UIThemeConfig         `yaml:"theme" json:"theme"`
+	StatusIndicator StatusIndicatorConfig `yaml:"status_indicator" json:"status_indicator"`
+	Tooltip         TooltipConfig         `yaml:"tooltip" json:"tooltip"`
+	Toolbar         ToolbarConfig         `yaml:"toolbar" json:"toolbar"`
+}
+
+// UICandidateConfig 候选窗布局与行为
+type UICandidateConfig struct {
+	FontSize float64 `yaml:"font_size" json:"font_size"`
+	// FontSizeFollowTheme=true 时候选字号跟随主题 behavior.font_size，忽略 FontSize；
+	// false=用 FontSize 自定义。默认 true（新装跟随主题），缺键=继承默认。
+	FontSizeFollowTheme bool `yaml:"font_size_follow_theme" json:"font_size_follow_theme"`
+
+	PerPage int `yaml:"per_page" json:"per_page"` // 每页候选数（基础档）
+	// PerPageExtended 扩展档每页候选数。在临时拼音/快捷输入/短语等场景下生效，
+	// 让这些场景显示更多候选；普通码表输入仍用 PerPage（基础档）。
+	// 0=禁用扩展档（合法语义值）；正值有效，上界 clamp 到 10。
+	PerPageExtended int `yaml:"per_page_extended" json:"per_page_extended"`
+	// MaxChars 候选文本最大显示 rune 数，超出后截断并追加"…"。默认 16，合法范围 8-64（越界 clamp 回 16）。
+	MaxChars int `yaml:"max_chars" json:"max_chars"`
+
+	Layout        CandidateLayout `yaml:"layout" json:"layout"`                 // 候选布局：horizontal 或 vertical
+	InlinePreedit bool            `yaml:"inline_preedit" json:"inline_preedit"` // 内嵌预编辑
+	PreeditMode   PreeditMode     `yaml:"preedit_mode" json:"preedit_mode"`     // 编码显示模式："top"(独立行)/"embedded"(嵌入候选行前)；仅 InlinePreedit=false 时生效
+	// FlipWhenAbove 候选窗在光标上方时反转 bands 排列顺序，使预编辑栏保持最靠近光标。
+	FlipWhenAbove bool `yaml:"flip_when_above" json:"flip_when_above"`
+	HideWindow    bool `yaml:"hide_window" json:"hide_window"` // 隐藏候选窗
+
+	// IndexLabels 用户全局序号标签覆盖（10 槽位字符或 /-分隔模板，如 "①②③④⑤⑥⑦⑧⑨⑩"）。
+	// 非空时覆盖主题 views.index.labels；空=用主题。优先级低于运行时 per-候选 IndexLabel。
+	IndexLabels string `yaml:"index_labels" json:"index_labels"`
+	// ModeAccentBorder 特殊模式内发光边框总开关（默认 false——v0 时代 struct 注释
+	// 声称 nil=开启，但消费方 modeAccentColor 实现为 nil=关闭，以实际行为为准）
+	ModeAccentBorder bool `yaml:"mode_accent_border" json:"mode_accent_border"`
+
+	// —— 主题 behavior 用户覆盖层（哲学Y）：值字段 + bool follow 配对，
+	// follow=true 跟随主题 behavior 推荐默认，false 用值字段自定义 ——
+	AlwaysShowPager             bool `yaml:"always_show_pager" json:"always_show_pager"`
+	AlwaysShowPagerFollowTheme  bool `yaml:"always_show_pager_follow_theme" json:"always_show_pager_follow_theme"`
+	ShowPageNumber              bool `yaml:"show_page_number" json:"show_page_number"`
+	ShowPageNumberFollowTheme   bool `yaml:"show_page_number_follow_theme" json:"show_page_number_follow_theme"`
+	VerticalMaxWidth            int  `yaml:"vertical_max_width" json:"vertical_max_width"`
+	VerticalMaxWidthFollowTheme bool `yaml:"vertical_max_width_follow_theme" json:"vertical_max_width_follow_theme"`
+
+	// 强制覆盖枚举（空=不覆盖主题/行为层，在 follow 层之后应用）
+	PagerBarDisplay   PagerBarDisplay   `yaml:"pager_bar_display" json:"pager_bar_display"`       // 空=主题配置, always, auto, hide
+	PageNumberDisplay PageNumberDisplay `yaml:"page_number_display" json:"page_number_display"`   // 空=主题配置, show, hide
+}
+
+// UIFontConfig 字体与文本渲染
+type UIFontConfig struct {
+	Family     string     `yaml:"family" json:"family"`
+	Path       string     `yaml:"path" json:"path"`
+	RenderMode FontEngine `yaml:"render_mode" json:"render_mode"` // "directwrite"(默认)/"gdi"/"freetype"
+	GDIWeight  int        `yaml:"gdi_weight" json:"gdi_weight"`   // 候选框 GDI 字体粗细：100~900，默认 500
+	GDIScale   float64    `yaml:"gdi_scale" json:"gdi_scale"`     // GDI 字体缩放：0.5~2.0，默认 1.0
+	MenuWeight int        `yaml:"menu_weight" json:"menu_weight"` // 菜单 GDI 字体粗细：100~900，默认 500
+	MenuSize   float64    `yaml:"menu_size" json:"menu_size"`     // 菜单字体大小：默认 12.0（DPI 缩放前基础值）
+}
+
+// UIThemeConfig 主题
+type UIThemeConfig struct {
+	Name            string     `yaml:"name" json:"name"`                           // 主题名称：default, msime 或自定义主题名
+	Style           ThemeStyle `yaml:"style" json:"style"`                         // 主题风格：system(跟随系统), light, dark
+	EditorAutoStart bool       `yaml:"editor_auto_start" json:"editor_auto_start"` // 打开设置界面时自动开启 Web 编辑器连接服务
+}
+
+// StatusIndicatorConfig 状态提示配置
+type StatusIndicatorConfig struct {
+	Enabled         bool    `yaml:"enabled" json:"enabled"`
+	Duration        int     `yaml:"duration" json:"duration"`
+	DisplayMode     string  `yaml:"display_mode" json:"display_mode"`
+	SchemaNameStyle string  `yaml:"schema_name_style" json:"schema_name_style"`
+	ShowMode        bool    `yaml:"show_mode" json:"show_mode"`
+	ShowPunct       bool    `yaml:"show_punct" json:"show_punct"`
+	ShowFullWidth   bool    `yaml:"show_full_width" json:"show_full_width"`
+	PositionMode    string  `yaml:"position_mode" json:"position_mode"`
+	OffsetX         int     `yaml:"offset_x" json:"offset_x"`
+	OffsetY         int     `yaml:"offset_y" json:"offset_y"`
+	CustomX         int     `yaml:"custom_x" json:"custom_x"`
+	CustomY         int     `yaml:"custom_y" json:"custom_y"`
+	FontSize        float64 `yaml:"font_size" json:"font_size"`
+	Opacity         float64 `yaml:"opacity" json:"opacity"`
+	BackgroundColor string  `yaml:"background_color" json:"background_color"`
+	TextColor       string  `yaml:"text_color" json:"text_color"`
+	BorderRadius    float64 `yaml:"border_radius" json:"border_radius"`
+}
+
+// TooltipConfig 候选悬停增强提示配置
+type TooltipConfig struct {
+	Delay  int                 `yaml:"delay" json:"delay"`   // 提示延迟显示时间（毫秒），0=立即显示
+	Code   TooltipCodeConfig   `yaml:"code" json:"code"`     // 编码显示
+	Pinyin TooltipPinyinConfig `yaml:"pinyin" json:"pinyin"` // 拼音提示
+	Chaizi TooltipChaiziConfig `yaml:"chaizi" json:"chaizi"` // 拆字提示
+	Debug  TooltipDebugConfig  `yaml:"debug" json:"debug"`   // 调试信息
+}
+
+// TooltipCodeConfig 编码显示配置
+type TooltipCodeConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"` // 是否显示编码（默认 true）
+}
+
+// TooltipPinyinConfig 拼音提示配置
+type TooltipPinyinConfig struct {
+	Enabled     bool `yaml:"enabled" json:"enabled"`           // 是否显示拼音
+	Heteronyms  bool `yaml:"heteronyms" json:"heteronyms"`     // 是否显示多音字所有读音
+	MaxReadings int  `yaml:"max_readings" json:"max_readings"` // 每字最多显示读音数，0 表示不限
+}
+
+// TooltipChaiziConfig 拆字提示配置
+type TooltipChaiziConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"` // 是否显示拆字（默认 false）
+}
+
+// TooltipDebugConfig 调试信息配置
+type TooltipDebugConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"` // 是否显示调试信息（默认 false）
+}
+
+// ToolbarConfig 工具栏配置
+type ToolbarConfig struct {
+	Visible bool `yaml:"visible" json:"visible"`
+	// HideInFullscreen 前台应用全屏时自动隐藏工具栏（默认 true）
+	HideInFullscreen bool `yaml:"hide_in_fullscreen" json:"hide_in_fullscreen"`
+}
+
+// ── Features ────────────────────────────────────────────────────────────────
+
+// FeaturesConfig 自包含可选功能（可整体拔掉而不影响基础打字）
+type FeaturesConfig struct {
+	Stats        StatsConfig         `yaml:"stats" json:"stats"`
+	S2T          S2TConfig           `yaml:"s2t" json:"s2t"`
+	QuickInput   QuickInputConfig    `yaml:"quick_input" json:"quick_input"`
+	SpecialModes []SpecialModeConfig `yaml:"special_modes,omitempty" json:"special_modes,omitempty"`
+	Cmdbar       CmdbarConfig        `yaml:"cmdbar" json:"cmdbar"`
+}
+
+// StatsConfig 输入统计配置
+type StatsConfig struct {
+	Enabled      bool `yaml:"enabled" json:"enabled"`             // 是否启用统计（默认 true）
+	RetainDays   int  `yaml:"retain_days" json:"retain_days"`     // 数据保留天数（0=永久，默认 0）
+	TrackEnglish bool `yaml:"track_english" json:"track_english"` // 是否统计英文模式（默认 true）
+}
+
+// S2TConfig 简入繁出（简体->繁体）配置
+type S2TConfig struct {
+	Enabled bool       `yaml:"enabled" json:"enabled"` // 总开关
+	Variant S2TVariant `yaml:"variant" json:"variant"` // 变体: s2t / s2tw / s2twp / s2hk
+}
+
+// CmdbarConfig 命令直通车配置
+type CmdbarConfig struct {
+	// CandidatePrefix 副作用命令候选 (Actions 含 ActionEffect) 在候选框渲染时的
+	// 前缀符号，让用户一眼分辨"会跑副作用的命令"和普通文本候选。
+	// 默认 "⚡"；显式空串=完全不显示；仅 type(...) 上屏的命令不加前缀。
+	CandidatePrefix string `yaml:"candidate_prefix" json:"candidate_prefix"`
+}
+
+// ── Compat / Debug ──────────────────────────────────────────────────────────
+
+// CompatConfig 进程级兼容（与 compat.toml 概念对齐）
+type CompatConfig struct {
+	// HostRenderProcesses 启用宿主进程代理渲染的进程白名单（进程名，不区分大小写）。
+	// 在这些进程中，候选窗口将通过 DLL 内 CreateWindowInBand 创建，以解决 z-order 问题。
+	HostRenderProcesses []string `yaml:"host_render_processes,omitempty" json:"host_render_processes,omitempty"`
+}
+
+// DebugConfig 诊断配置（原 AdvancedConfig）
+type DebugConfig struct {
 	LogLevel string `yaml:"log_level" json:"log_level"`
 	// PerfSampling 启用按键链路性能采样（默认关闭）。
 	// 开启后会记录每次按键的输入编码、引擎耗时等数据到内存环形缓冲区，
 	// 可通过设置页导出 JSONL 文件用于性能分析。
 	// 注意：采样数据包含用户输入内容，仅建议在排障或性能调优时临时开启。
-	PerfSampling *bool `yaml:"perf_sampling,omitempty" json:"perf_sampling"`
-	// HostRenderProcesses 启用宿主进程代理渲染的进程白名单（进程名，不区分大小写）
-	// 在这些进程中，候选窗口将通过 DLL 内 CreateWindowInBand 创建，以解决 z-order 问题
-	HostRenderProcesses []string `yaml:"host_render_processes,omitempty" json:"host_render_processes,omitempty"`
+	PerfSampling bool `yaml:"perf_sampling" json:"perf_sampling"`
 }
 
-// IsPerfSampling 返回性能采样是否启用（nil 指针视为 false）
-func (c *AdvancedConfig) IsPerfSampling() bool {
-	if c.PerfSampling == nil {
-		return false
-	}
-	return *c.PerfSampling
-}
-
-// DefaultConfig returns the default configuration
+// DefaultConfig returns the default configuration (Layer 1 代码兜底值)。
+// 注意：本层与 data/config.toml（Layer 2 预置层）的取值分叉是分层设计的
+// 正常形态（Layer 2 为覆盖 Layer 1 而存在），勿照预置文件"修正"本层。
 func DefaultConfig() *Config {
 	return &Config{
-		Startup: StartupConfig{
+		General: GeneralConfig{
 			RememberLastState:   false,
 			DefaultChineseMode:  true,
 			DefaultFullWidth:    false,
@@ -508,59 +438,6 @@ func DefaultConfig() *Config {
 			TakeScreenshot:  "ctrl+shift+f11",
 			GlobalHotkeys:   []string{},
 		},
-		UI: UIConfig{
-			FontSize:            18,
-			FontSizeFollowTheme: true, // 新装默认跟随主题字号；走通用「缺失=继承默认」机制（探针迁移已移除）
-			// 主题 behavior 用户覆盖默认跟随主题（哲学Y）；值字段为自定义模式兜底初值。
-			AlwaysShowPager:             false,
-			AlwaysShowPagerFollowTheme:  true,
-			ShowPageNumber:              true,
-			ShowPageNumberFollowTheme:   true,
-			VerticalMaxWidth:            600,
-			VerticalMaxWidthFollowTheme: true,
-			CandidatesPerPage:           7,
-			CandidatesPerPageExtended:   0, // 默认禁用扩展档，老用户行为不变；用户主动配置后才分档
-			MaxCandidateChars:           16,
-			FontFamily:                  "",
-			FontPath:                    "",
-			InlinePreedit:               true,
-			PreeditMode:                 PreeditTop,
-			CandidateLayout:             LayoutHorizontal,
-			StatusIndicatorDuration:     800,
-			StatusIndicatorOffsetX:      0,
-			StatusIndicatorOffsetY:      0,
-			TooltipDelay:                100,
-			Theme:                       "default",
-			ThemeStyle:                  ThemeStyleSystem,
-			TextRenderMode:              FontEngineDirectWrite,
-			GDIFontWeight:               500,
-			GDIFontScale:                1.0,
-			MenuFontWeight:              500,
-			MenuFontSize:                12.0,
-			Tooltip: TooltipConfig{
-				Pinyin: TooltipPinyinConfig{Enabled: true, Heteronyms: true, MaxReadings: 0},
-				Chaizi: TooltipChaiziConfig{Enabled: false},
-				Debug:  TooltipDebugConfig{Enabled: false},
-			},
-			StatusIndicator: StatusIndicatorConfig{
-				Enabled:         true,
-				Duration:        800,
-				DisplayMode:     "temp",
-				SchemaNameStyle: "full",
-				ShowMode:        true,
-				ShowPunct:       true,
-				ShowFullWidth:   false,
-				PositionMode:    "follow_caret",
-				OffsetX:         0,
-				OffsetY:         0,
-				FontSize:        18,
-				Opacity:         0.9,
-				BorderRadius:    6,
-			},
-		},
-		Toolbar: ToolbarConfig{
-			Visible: true,
-		},
 		Input: InputConfig{
 			SmartPunctAfterDigit: true,
 			SmartPunctList:       ".,:",
@@ -581,11 +458,13 @@ func DefaultConfig() *Config {
 				AllowSymbols:          false,
 				SpaceAsInput:          false,
 			},
-			CapsLockBehavior: CapsLockBehaviorConfig{
+			CapsLock: CapsLockConfig{
 				CancelOnModeSwitch: false,
 			},
 			TempPinyin: TempPinyinConfig{
-				TriggerKeys: []string{"backtick"},
+				TriggerKeys:      []string{"backtick"},
+				ZIncludeOnCommit: true,
+				AccentColor:      "",
 			},
 			AutoPair: AutoPairConfig{
 				Chinese:      false,
@@ -594,12 +473,7 @@ func DefaultConfig() *Config {
 				ChinesePairs: []string{"（）", "【】", "｛｝", "《》", "〈〉"},
 				EnglishPairs: []string{"()", "[]", "{}", "<>"},
 			},
-			QuickInput: QuickInputConfig{
-				TriggerKeys:   []string{"semicolon"},
-				ForceVertical: true,
-				DecimalPlaces: 6,
-			},
-			OverflowBehavior: OverflowBehaviorConfig{
+			Overflow: OverflowConfig{
 				NumberKey:     OverflowIgnore,
 				SelectKey:     OverflowIgnore,
 				SelectCharKey: OverflowIgnore,
@@ -608,18 +482,95 @@ func DefaultConfig() *Config {
 				MinPrefixLength: 2,
 			},
 		},
-		Advanced: AdvancedConfig{
-			LogLevel:            "info",
+		UI: UIConfig{
+			Candidate: UICandidateConfig{
+				FontSize:            18,
+				FontSizeFollowTheme: true, // 新装默认跟随主题字号；缺键=继承默认
+				PerPage:             7,
+				PerPageExtended:     0, // 默认禁用扩展档
+				MaxChars:            16,
+				Layout:              LayoutHorizontal,
+				InlinePreedit:       true,
+				PreeditMode:         PreeditTop,
+				FlipWhenAbove:       false,
+				HideWindow:          false,
+				IndexLabels:         "",
+				ModeAccentBorder:    false,
+				// behavior 覆盖层默认跟随主题（哲学Y）；值字段为自定义模式兜底初值
+				AlwaysShowPager:             false,
+				AlwaysShowPagerFollowTheme:  true,
+				ShowPageNumber:              true,
+				ShowPageNumberFollowTheme:   true,
+				VerticalMaxWidth:            600,
+				VerticalMaxWidthFollowTheme: true,
+			},
+			Font: UIFontConfig{
+				Family:     "",
+				Path:       "",
+				RenderMode: FontEngineDirectWrite,
+				GDIWeight:  500,
+				GDIScale:   1.0,
+				MenuWeight: 500,
+				MenuSize:   12.0,
+			},
+			Theme: UIThemeConfig{
+				Name:            "default",
+				Style:           ThemeStyleSystem,
+				EditorAutoStart: false,
+			},
+			StatusIndicator: StatusIndicatorConfig{
+				Enabled:         true,
+				Duration:        800,
+				DisplayMode:     "temp",
+				SchemaNameStyle: "full",
+				ShowMode:        true,
+				ShowPunct:       true,
+				ShowFullWidth:   false,
+				PositionMode:    "follow_caret",
+				OffsetX:         0,
+				OffsetY:         0,
+				FontSize:        18,
+				Opacity:         0.9,
+				BorderRadius:    6,
+			},
+			Tooltip: TooltipConfig{
+				Delay:  100,
+				Code:   TooltipCodeConfig{Enabled: true},
+				Pinyin: TooltipPinyinConfig{Enabled: true, Heteronyms: true, MaxReadings: 0},
+				Chaizi: TooltipChaiziConfig{Enabled: false},
+				Debug:  TooltipDebugConfig{Enabled: false},
+			},
+			Toolbar: ToolbarConfig{
+				Visible:          true,
+				HideInFullscreen: true,
+			},
+		},
+		Features: FeaturesConfig{
+			Stats: StatsConfig{
+				Enabled:      true,
+				RetainDays:   0,
+				TrackEnglish: true,
+			},
+			S2T: S2TConfig{
+				Enabled: false,
+				Variant: S2TStandard,
+			},
+			QuickInput: QuickInputConfig{
+				TriggerKeys:   []string{"semicolon"},
+				ForceVertical: true,
+				DecimalPlaces: 6,
+				AccentColor:   "",
+			},
+			Cmdbar: CmdbarConfig{
+				CandidatePrefix: "⚡",
+			},
+		},
+		Compat: CompatConfig{
 			HostRenderProcesses: []string{"SearchHost.exe"},
 		},
-		Stats: StatsConfig{
-			Enabled:      boolPtr(true),
-			RetainDays:   0,
-			TrackEnglish: boolPtr(true),
-		},
-		S2T: S2TConfig{
-			Enabled: false,
-			Variant: S2TStandard,
+		Debug: DebugConfig{
+			LogLevel:     "info",
+			PerfSampling: false,
 		},
 	}
 }
@@ -636,8 +587,11 @@ func Load() (*Config, error) {
 // If path is empty, uses the default user config path.
 // System config (data/config.toml) is always loaded as the middle layer.
 //
-// 旧版迁移：当目标为 .toml 且不存在、同名旧版 .yaml 存在时，自动从旧文件
-// 加载，成功后写出 TOML 并把旧文件改名 *.migrated.bak（一次性迁移）。
+// 版本迁移（docs/design/config-restructure.md §4）：
+//   - 旧版 .yaml（v0）：map 层执行 migrateV0toV1（结构重排）后加载，成功后写出
+//     v1 TOML；旧 YAML 文件保留原地不改名（§4.4 网盘混版本共存兜底）。
+//   - .toml 缺 version：按 v1 处理（手编误删保护），下次保存自动补写。
+//   - version 高于当前（程序回滚）：按损坏处理，备份 .bak + 回退默认。
 func LoadFrom(path string) (*Config, error) {
 	if path == "" {
 		var err error
@@ -650,11 +604,11 @@ func LoadFrom(path string) (*Config, error) {
 	// Layer 1: 代码默认值
 	cfg := DefaultConfig()
 
-	// Layer 2: 加载系统预置配置（data/config.toml，兼容旧版 .yaml）覆盖代码默认值
+	// Layer 2: 加载系统预置配置（data/config.toml，兼容旧版 .yaml 残留）覆盖代码默认值
 	if sysPath, err := GetSystemConfigPath(); err == nil {
 		if sysData, err := os.ReadFile(sysPath); err == nil {
-			// 系统配置解析失败只打印警告，不中断
-			if err := unmarshalConfigData(sysPath, sysData, cfg); err != nil {
+			// 系统配置解析失败只打印警告，不中断；旧版 yaml 残留走 v0 迁移防御
+			if _, err := unmarshalConfigData(sysPath, sysData, cfg, !IsTOMLPath(sysPath)); err != nil {
 				fmt.Fprintf(os.Stderr, "[config] warning: failed to parse system config %s: %v\n", sysPath, err)
 			}
 		}
@@ -671,15 +625,23 @@ func LoadFrom(path string) (*Config, error) {
 		return cfg, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	if err := unmarshalConfigData(readPath, userData, cfg); err != nil {
+	// 版本边界按实际读取路径的格式判定（而非是否发生回退）：
+	// 直接以 .yaml 路径调用 LoadFrom（测试/工具场景）同样按 v0 处理。
+	structMigrated, err := unmarshalConfigData(readPath, userData, cfg, !IsTOMLPath(readPath))
+	if err != nil {
 		// 区分错误类型，尽量自愈，避免每次启动都解析失败而永久降级。
 		var typeErr *yaml.TypeError
-		if errors.As(err, &typeErr) {
+		switch {
+		case errors.As(err, &typeErr):
 			// TypeError（部分解码）：yaml.v3 已把所有可解析字段填进了 cfg，
 			// 仅出错字段维持默认值，保留 cfg 现状，不重置为 DefaultConfig。
 			// 隐私：只记录数量等元数据，typeErr.Errors 为字段路径描述，不含字段值内容。
 			fmt.Fprintf(os.Stderr, "[config] warning: 配置部分字段不兼容，已保留其余配置并对不兼容字段使用默认值 count=%d\n", len(typeErr.Errors))
-		} else {
+		case errors.Is(err, ErrFutureConfigVersion):
+			// 程序被回滚到旧版：不解读未来格式，备份后回退默认（设计 §4.1 规则 4）
+			fmt.Fprintf(os.Stderr, "[config] warning: 配置文件版本高于当前程序支持，已备份并回退默认 path=%s err=%v\n", readPath, err)
+			cfg = DefaultConfig()
+		default:
 			// 其它错误（语法损坏，含 TOML 语法错误）：无法部分解码，回退到默认配置。
 			fmt.Fprintf(os.Stderr, "[config] warning: 配置文件损坏，使用默认配置 path=%s err=%v\n", readPath, err)
 			cfg = DefaultConfig()
@@ -694,9 +656,6 @@ func LoadFrom(path string) (*Config, error) {
 		}
 		if saveErr := SaveTo(cfg, path); saveErr != nil {
 			fmt.Fprintf(os.Stderr, "[config] warning: 自愈回写配置失败 path=%s err=%v\n", path, saveErr)
-		} else if migratedFrom != "" {
-			// 自愈写出即完成迁移（损坏的旧文件已另存 .bak）
-			renameLegacyFile(migratedFrom)
 		}
 
 		return cfg, nil
@@ -705,13 +664,11 @@ func LoadFrom(path string) (*Config, error) {
 	// 兜底校验
 	ApplyConfigFallbacks(cfg)
 
-	// 旧格式一次性迁移：从旧版 YAML 成功加载后写出 TOML，旧文件改名备份。
-	// 写出失败时保留旧文件，下次启动自动重试。
-	if migratedFrom != "" {
+	// 一次性迁移写出：旧版 YAML（格式+结构）成功加载后写出 v1 TOML。
+	// 旧文件保留原地不改名（§4.4）；写出失败时下次启动自动重试。
+	if migratedFrom != "" || structMigrated {
 		if err := SaveTo(cfg, path); err != nil {
 			fmt.Fprintf(os.Stderr, "[config] warning: 配置迁移写出失败（下次启动重试） path=%s err=%v\n", path, err)
-		} else {
-			renameLegacyFile(migratedFrom)
 		}
 	}
 
@@ -719,17 +676,41 @@ func LoadFrom(path string) (*Config, error) {
 }
 
 // unmarshalConfigData 把配置文件字节解码进 cfg：先按扩展名归一化为 YAML
-// （TOML 语法错误在此阶段返回，等价于文件损坏），再走 yaml.Unmarshal 保留
-// 部分覆盖与 yaml.TypeError 部分解码语义。
-func unmarshalConfigData(path string, data []byte, cfg *Config) error {
+// （TOML 语法错误在此阶段返回，等价于文件损坏），在 map 层执行版本迁移
+// （fromLegacyYAML 标记来源是否为旧版 .yaml 回退文件），再走 yaml.Unmarshal
+// 保留部分覆盖与 yaml.TypeError 部分解码语义。
+// 返回 migrated=true 表示发生了结构迁移（调用方应触发写出持久化）。
+func unmarshalConfigData(path string, data []byte, cfg *Config, fromLegacyYAML bool) (migrated bool, err error) {
 	yamlData, err := normalizeToYAML(path, data)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return yaml.Unmarshal(yamlData, cfg)
+	if len(yamlData) == 0 {
+		return false, nil
+	}
+
+	var m map[string]any
+	if err := yaml.Unmarshal(yamlData, &m); err != nil {
+		return false, err
+	}
+	if m == nil {
+		return false, nil
+	}
+
+	migrated, err = migrateConfigMap(m, fromLegacyYAML)
+	if err != nil {
+		return false, err // ErrFutureConfigVersion 等，调用方按损坏分支处理
+	}
+
+	remarshaled, err := yaml.Marshal(m)
+	if err != nil {
+		return migrated, err
+	}
+	return migrated, yaml.Unmarshal(remarshaled, cfg)
 }
 
-// ApplyConfigFallbacks 对关键字段进行兜底处理
+// ApplyConfigFallbacks 对关键字段进行兜底处理（仅值域 clamp 类；
+// 结构性迁移已全部熔入 migrateV0toV1，见 migration_v1.go）
 func ApplyConfigFallbacks(cfg *Config) {
 	// 如果 available 为空，使用默认值
 	if len(cfg.Schema.Available) == 0 {
@@ -740,78 +721,30 @@ func ApplyConfigFallbacks(cfg *Config) {
 		cfg.Schema.Active = cfg.Schema.Available[0]
 	}
 
-	// MaxCandidateChars 兜底：0 或越界时回退到 16，合法范围 8-64
-	if cfg.UI.MaxCandidateChars < 8 || cfg.UI.MaxCandidateChars > 64 {
-		cfg.UI.MaxCandidateChars = 16
+	// MaxChars 兜底：越界时回退到 16，合法范围 8-64
+	if cfg.UI.Candidate.MaxChars < 8 || cfg.UI.Candidate.MaxChars > 64 {
+		cfg.UI.Candidate.MaxChars = 16
 	}
 
-	// CandidatesPerPageExtended 兜底：<=0 表示禁用扩展档（保持），上界 clamp 到 10
+	// PerPageExtended 兜底：0=禁用扩展档（合法值），上界 clamp 到 10
 	// （受数字键 1-9、0 限制，每页最多 10 个可选）
-	if cfg.UI.CandidatesPerPageExtended > 10 {
-		cfg.UI.CandidatesPerPageExtended = 10
+	if cfg.UI.Candidate.PerPageExtended > 10 {
+		cfg.UI.Candidate.PerPageExtended = 10
 	}
 
-	// Phrase.MinPrefixLength 兜底：未配置 (0) 或负值时回退到 2
+	// Phrase.MinPrefixLength 兜底：下界 clamp 到 1（0/负值回退默认 2）
 	if cfg.Input.Phrase.MinPrefixLength <= 0 {
 		cfg.Input.Phrase.MinPrefixLength = 2
 	}
 
-	// 迁移旧的 theme:"dark" 配置到新格式
-	if cfg.UI.Theme == string(ThemeStyleDark) {
-		cfg.UI.Theme = "default"
-		cfg.UI.ThemeStyle = ThemeStyleDark
-	}
-
 	// ThemeStyle 兜底
-	if cfg.UI.ThemeStyle == "" {
-		cfg.UI.ThemeStyle = ThemeStyleSystem
+	if cfg.UI.Theme.Style == "" {
+		cfg.UI.Theme.Style = ThemeStyleSystem
 	}
-
-	// 迁移旧的快捷输入配置（enabled+trigger_key → trigger_keys）
-	migrateQuickInputConfig(cfg)
 
 	// S2T variant 兜底
-	if !cfg.S2T.Variant.Valid() {
-		cfg.S2T.Variant = S2TStandard
-	}
-
-	// 迁移旧的状态提示字段到新的 StatusIndicator 结构
-	migrateStatusIndicatorConfig(cfg)
-}
-
-// migrateQuickInputConfig 将旧的 enabled+trigger_key 迁移到 trigger_keys
-func migrateQuickInputConfig(cfg *Config) {
-	qi := &cfg.Input.QuickInput
-	if qi.TriggerKey != "" && len(qi.TriggerKeys) == 0 {
-		// 旧格式：有 trigger_key 但没有 trigger_keys
-		if qi.Enabled == nil || *qi.Enabled {
-			// 启用状态（默认或显式启用）：迁移触发键到列表
-			qi.TriggerKeys = []string{qi.TriggerKey}
-		}
-		// 禁用状态：trigger_keys 保持为空（=关闭）
-		qi.TriggerKey = ""
-		qi.Enabled = nil
-	}
-	if qi.Enabled != nil {
-		// 清理旧字段
-		if !*qi.Enabled {
-			qi.TriggerKeys = nil
-		}
-		qi.Enabled = nil
-	}
-}
-
-// migrateStatusIndicatorConfig 将旧的状态提示字段迁移到新的 StatusIndicatorConfig 结构
-func migrateStatusIndicatorConfig(cfg *Config) {
-	si := &cfg.UI.StatusIndicator
-	if si.Duration == 0 && cfg.UI.StatusIndicatorDuration > 0 {
-		si.Duration = cfg.UI.StatusIndicatorDuration
-	}
-	if si.OffsetX == 0 && cfg.UI.StatusIndicatorOffsetX != 0 {
-		si.OffsetX = cfg.UI.StatusIndicatorOffsetX
-	}
-	if si.OffsetY == 0 && cfg.UI.StatusIndicatorOffsetY != 0 {
-		si.OffsetY = cfg.UI.StatusIndicatorOffsetY
+	if !cfg.Features.S2T.Variant.Valid() {
+		cfg.Features.S2T.Variant = S2TStandard
 	}
 }
 
@@ -879,7 +812,7 @@ func SystemDefaultConfig() *Config {
 
 	if sysPath, err := GetSystemConfigPath(); err == nil {
 		if sysData, err := os.ReadFile(sysPath); err == nil {
-			if err := unmarshalConfigData(sysPath, sysData, cfg); err != nil {
+			if _, err := unmarshalConfigData(sysPath, sysData, cfg, !IsTOMLPath(sysPath)); err != nil {
 				fmt.Fprintf(os.Stderr, "[config] warning: failed to parse system config %s: %v\n", sysPath, err)
 			}
 		}

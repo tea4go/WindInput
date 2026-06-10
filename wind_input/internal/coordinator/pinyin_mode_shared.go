@@ -95,7 +95,7 @@ func (c *Coordinator) handlePinyinModeKey(ops *pinyinModeOps, key string, data *
 			commitText := *ops.buffer
 			// z 触发的临时拼音：buffer 不含触发键 z，按配置决定 Enter 上屏时是否带回 z 前缀
 			if c.tempPinyinMode && c.tempPinyinTriggerKey == "z" &&
-				c.config != nil && c.config.Input.TempPinyin.ZIncludeOnCommitEnabled() {
+				c.config != nil && c.config.Input.TempPinyin.ZIncludeOnCommit {
 				commitText = "z" + commitText
 			}
 			return ops.exitMode(true, commitText)
@@ -437,8 +437,8 @@ func (c *Coordinator) recordPinyinModeHistory(ops *pinyinModeOps, text string) {
 //   - "commit_and_input": 上屏当前高亮候选并附加触发键（即原拼音模式行为）
 func (c *Coordinator) handlePinyinModeOverflowSelectKey(ops *pinyinModeOps, key string) *bridge.KeyEventResult {
 	behavior := config.OverflowIgnore
-	if c.config != nil && c.config.Input.OverflowBehavior.SelectKey != "" {
-		behavior = c.config.Input.OverflowBehavior.SelectKey
+	if c.config != nil && c.config.Input.Overflow.SelectKey != "" {
+		behavior = c.config.Input.Overflow.SelectKey
 	}
 
 	pageStart := (c.currentPage - 1) * c.candidatesPerPage
@@ -546,7 +546,7 @@ func (c *Coordinator) showPinyinModeUI(ops *pinyinModeOps) {
 	caretX := c.caretX
 	caretY := c.caretY
 	caretHeight := c.caretHeight
-	if c.config != nil && c.config.UI.InlinePreedit && c.compositionStartValid {
+	if c.config != nil && c.config.UI.Candidate.InlinePreedit && c.compositionStartValid {
 		caretX = c.compositionStartX
 		caretY = c.compositionStartY
 	}

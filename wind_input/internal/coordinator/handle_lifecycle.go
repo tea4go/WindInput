@@ -833,8 +833,8 @@ func (c *Coordinator) HandleFocusGained(processID uint32, inputScopeMask uint64)
 		shouldPush = true
 		autoPairEnabled = c.config.Input.AutoPair.English
 		autoPairs = c.config.Input.AutoPair.EnglishPairs
-		statsEnabled = c.config.Stats.IsEnabled()
-		statsTrackEng = c.config.Stats.IsTrackEnglish()
+		statsEnabled = c.config.Features.Stats.Enabled
+		statsTrackEng = c.config.Features.Stats.TrackEnglish
 	}
 	c.mu.Unlock()
 
@@ -874,10 +874,10 @@ func (c *Coordinator) HandleIMEActivated(processID uint32) *bridge.StatusUpdateD
 	}
 	// 未开启「记忆上次状态」时，切换回本输入法应回到配置的默认状态，
 	// 而不是延续上次切走前的状态。
-	if c.config != nil && !c.config.Startup.RememberLastState {
-		c.chineseMode = c.config.Startup.DefaultChineseMode
-		c.fullWidth = c.config.Startup.DefaultFullWidth
-		c.chinesePunctuation = c.config.Startup.DefaultChinesePunct
+	if c.config != nil && !c.config.General.RememberLastState {
+		c.chineseMode = c.config.General.DefaultChineseMode
+		c.fullWidth = c.config.General.DefaultFullWidth
+		c.chinesePunctuation = c.config.General.DefaultChinesePunct
 		c.punctConverter.Reset()
 		c.logger.Debug("Applied default mode on IME activation (remember_last_state=false)",
 			"chineseMode", c.chineseMode, "fullWidth", c.fullWidth, "chinesePunct", c.chinesePunctuation)
@@ -930,8 +930,8 @@ func (c *Coordinator) HandleIMEActivated(processID uint32) *bridge.StatusUpdateD
 		shouldPush = true
 		autoPairEnabled = c.config.Input.AutoPair.English
 		autoPairs = c.config.Input.AutoPair.EnglishPairs
-		statsEnabled = c.config.Stats.IsEnabled()
-		statsTrackEng = c.config.Stats.IsTrackEnglish()
+		statsEnabled = c.config.Features.Stats.Enabled
+		statsTrackEng = c.config.Features.Stats.TrackEnglish
 	}
 	c.mu.Unlock()
 

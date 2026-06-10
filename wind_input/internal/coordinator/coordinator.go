@@ -582,12 +582,12 @@ func (c *Coordinator) syncToolbarStateNoLock() {
 // NewCoordinator creates a new Coordinator
 func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *config.Config, appCompat *config.AppCompat, logger *slog.Logger) *Coordinator {
 	candidatesPerPageBase := 9
-	if cfg != nil && cfg.UI.CandidatesPerPage > 0 {
-		candidatesPerPageBase = cfg.UI.CandidatesPerPage
+	if cfg != nil && cfg.UI.Candidate.PerPage > 0 {
+		candidatesPerPageBase = cfg.UI.Candidate.PerPage
 	}
 	candidatesPerPageExtended := 0
 	if cfg != nil {
-		candidatesPerPageExtended = cfg.UI.CandidatesPerPageExtended
+		candidatesPerPageExtended = cfg.UI.Candidate.PerPageExtended
 	}
 
 	// 确定初始状态
@@ -624,19 +624,19 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 	}
 
 	if cfg != nil {
-		if cfg.Startup.RememberLastState && runtimeStateErr == nil {
+		if cfg.General.RememberLastState && runtimeStateErr == nil {
 			startInChineseMode = runtimeState.ChineseMode
 			fullWidth = runtimeState.FullWidth
 			chinesePunctuation = runtimeState.ChinesePunct
 		} else {
 			// 使用默认配置
-			startInChineseMode = cfg.Startup.DefaultChineseMode
-			fullWidth = cfg.Startup.DefaultFullWidth
-			chinesePunctuation = cfg.Startup.DefaultChinesePunct
+			startInChineseMode = cfg.General.DefaultChineseMode
+			fullWidth = cfg.General.DefaultFullWidth
+			chinesePunctuation = cfg.General.DefaultChinesePunct
 		}
 
 		punctFollowMode = cfg.Input.PunctFollowMode
-		toolbarVisible = cfg.Toolbar.Visible
+		toolbarVisible = cfg.UI.Toolbar.Visible
 	}
 
 	c := &Coordinator{
@@ -681,7 +681,7 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 	c.punctConverter.SetCustomMappings(cfg.Input.PunctCustom.Enabled, cfg.Input.PunctCustom.Mappings)
 
 	// 初始化简入繁出（按需加载，未启用时不读盘）
-	c.reconfigureS2T(cfg.S2T)
+	c.reconfigureS2T(cfg.Features.S2T)
 
 	// Set up toolbar callbacks
 	c.setupToolbarCallbacks()
@@ -697,38 +697,38 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 
 	// Initialize UI config (including debug options)
 	if c.uiManager != nil && cfg != nil {
-		fontSpec := cfg.UI.FontFamily
+		fontSpec := cfg.UI.Font.Family
 		if fontSpec == "" {
-			fontSpec = cfg.UI.FontPath
+			fontSpec = cfg.UI.Font.Path
 		}
-		c.uiManager.UpdateConfig(cfg.UI.FontSize, cfg.UI.FontSizeFollowTheme, fontSpec, cfg.UI.HideCandidateWindow)
+		c.uiManager.UpdateConfig(cfg.UI.Candidate.FontSize, cfg.UI.Candidate.FontSizeFollowTheme, fontSpec, cfg.UI.Candidate.HideWindow)
 		// 主题 behavior 用户覆盖层（哲学Y；与 UpdateUIConfig 热更新对称，否则启动后失效直到下次热更新）
 		c.uiManager.SetBehaviorOverrides(
-			cfg.UI.AlwaysShowPager, cfg.UI.AlwaysShowPagerFollowTheme,
-			cfg.UI.ShowPageNumber, cfg.UI.ShowPageNumberFollowTheme,
-			cfg.UI.VerticalMaxWidth, cfg.UI.VerticalMaxWidthFollowTheme,
+			cfg.UI.Candidate.AlwaysShowPager, cfg.UI.Candidate.AlwaysShowPagerFollowTheme,
+			cfg.UI.Candidate.ShowPageNumber, cfg.UI.Candidate.ShowPageNumberFollowTheme,
+			cfg.UI.Candidate.VerticalMaxWidth, cfg.UI.Candidate.VerticalMaxWidthFollowTheme,
 		)
 		// Set candidate layout (horizontal/vertical)
-		if cfg.UI.CandidateLayout != "" {
-			c.uiManager.SetCandidateLayout(cfg.UI.CandidateLayout)
+		if cfg.UI.Candidate.Layout != "" {
+			c.uiManager.SetCandidateLayout(cfg.UI.Candidate.Layout)
 		}
 		// Set hide preedit when inline preedit is enabled
-		c.uiManager.SetHidePreedit(cfg.UI.InlinePreedit)
+		c.uiManager.SetHidePreedit(cfg.UI.Candidate.InlinePreedit)
 		// 用户全局序号标签覆盖
-		c.uiManager.SetCandidateIndexLabels(cfg.UI.CandidateIndexLabels)
+		c.uiManager.SetCandidateIndexLabels(cfg.UI.Candidate.IndexLabels)
 		// Set preedit display mode
-		c.uiManager.SetPreeditMode(cfg.UI.PreeditMode)
+		c.uiManager.SetPreeditMode(cfg.UI.Candidate.PreeditMode)
 		// 候选窗在光标上方时反转 bands（与 UpdateUIConfig 热更新对称；启动时遗漏则需热更新才能生效）
-		c.uiManager.SetFlipLayoutWhenAbove(cfg.UI.FlipLayoutWhenAbove)
+		c.uiManager.SetFlipLayoutWhenAbove(cfg.UI.Candidate.FlipWhenAbove)
 		// 翻页器显示方式覆盖（与 UpdateUIConfig 热更新对称；此处遗漏会导致用户的
 		// never/always 设置在启动后失效，直到下一次配置热更新才生效）
-		c.uiManager.SetPagerBarDisplay(cfg.UI.PagerBarDisplay)
-		c.uiManager.SetPageNumberDisplay(cfg.UI.PageNumberDisplay)
+		c.uiManager.SetPagerBarDisplay(cfg.UI.Candidate.PagerBarDisplay)
+		c.uiManager.SetPageNumberDisplay(cfg.UI.Candidate.PageNumberDisplay)
 		// Set status indicator config (旧字段兼容)
 		c.uiManager.UpdateStatusIndicatorConfig(
-			cfg.UI.StatusIndicatorDuration,
-			cfg.UI.StatusIndicatorOffsetX,
-			cfg.UI.StatusIndicatorOffsetY,
+			cfg.UI.StatusIndicator.Duration,
+			cfg.UI.StatusIndicator.OffsetX,
+			cfg.UI.StatusIndicator.OffsetY,
 		)
 		// 初始化完整状态提示配置
 		siCfg := cfg.UI.StatusIndicator
@@ -752,27 +752,27 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 			BorderRadius:    siCfg.BorderRadius,
 		})
 		// 设置编码提示延迟
-		c.uiManager.SetTooltipDelay(cfg.UI.TooltipDelay)
+		c.uiManager.SetTooltipDelay(cfg.UI.Tooltip.Delay)
 		// 设置文本渲染模式
-		if cfg.UI.TextRenderMode != "" {
-			c.uiManager.SetTextRenderMode(cfg.UI.TextRenderMode)
+		if cfg.UI.Font.RenderMode != "" {
+			c.uiManager.SetTextRenderMode(cfg.UI.Font.RenderMode)
 		}
 		// 设置候选框GDI字体参数
-		if cfg.UI.GDIFontWeight > 0 || cfg.UI.GDIFontScale > 0 {
-			c.uiManager.SetGDIFontParams(cfg.UI.GDIFontWeight, cfg.UI.GDIFontScale)
+		if cfg.UI.Font.GDIWeight > 0 || cfg.UI.Font.GDIScale > 0 {
+			c.uiManager.SetGDIFontParams(cfg.UI.Font.GDIWeight, cfg.UI.Font.GDIScale)
 		}
 		// 设置菜单GDI字体参数（独立于候选框）
-		if cfg.UI.MenuFontWeight > 0 {
-			c.uiManager.SetMenuFontParams(cfg.UI.MenuFontWeight, cfg.UI.GDIFontScale)
+		if cfg.UI.Font.MenuWeight > 0 {
+			c.uiManager.SetMenuFontParams(cfg.UI.Font.MenuWeight, cfg.UI.Font.GDIScale)
 		}
 		// 设置菜单字体大小
-		if cfg.UI.MenuFontSize > 0 {
-			c.uiManager.SetMenuFontSize(cfg.UI.MenuFontSize)
+		if cfg.UI.Font.MenuSize > 0 {
+			c.uiManager.SetMenuFontSize(cfg.UI.Font.MenuSize)
 		}
 		// 设置候选文本最大显示字符数
-		c.uiManager.SetMaxCandidateChars(cfg.UI.MaxCandidateChars)
+		c.uiManager.SetMaxCandidateChars(cfg.UI.Candidate.MaxChars)
 		// 设置副作用 cmdbar 候选的渲染前缀
-		c.uiManager.SetCmdbarCandidatePrefix(cfg.UI.GetCmdbarCandidatePrefix())
+		c.uiManager.SetCmdbarCandidatePrefix(cfg.Features.Cmdbar.CandidatePrefix)
 		// 初始化主题暗色模式并加载主题
 		c.initThemeMode(cfg)
 	}
@@ -796,7 +796,7 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 	c.toolbarReducer = newToolbarReducer(c)
 
 	// 特殊模式注册表（引导键自定义码表）
-	c.specialModeReg = newSpecialModeRegistry(c.config.Input.SpecialModes, c.schemasDirs(), c.logger)
+	c.specialModeReg = newSpecialModeRegistry(c.config.Features.SpecialModes, c.schemasDirs(), c.logger)
 
 	return c
 }
@@ -894,7 +894,7 @@ func (c *Coordinator) initThemeMode(cfg *config.Config) {
 		return
 	}
 
-	themeStyle := cfg.UI.ThemeStyle
+	themeStyle := cfg.UI.Theme.Style
 	if themeStyle == "" {
 		themeStyle = config.ThemeStyleSystem
 	}
@@ -914,7 +914,7 @@ func (c *Coordinator) initThemeMode(cfg *config.Config) {
 	c.uiManager.SetDarkMode(isDark)
 
 	// Load the theme
-	themeName := cfg.UI.Theme
+	themeName := cfg.UI.Theme.Name
 	if themeName == "" {
 		themeName = "default"
 	}
@@ -983,7 +983,7 @@ func (c *Coordinator) getPendingBufferText() string {
 		text = c.tempEnglishBuffer
 	case len(c.tempPinyinBuffer) > 0:
 		text = c.tempPinyinBuffer
-		if c.tempPinyinTriggerKey == "z" && c.config != nil && c.config.Input.TempPinyin.ZIncludeOnCommitEnabled() {
+		if c.tempPinyinTriggerKey == "z" && c.config != nil && c.config.Input.TempPinyin.ZIncludeOnCommit {
 			text = "z" + text
 		}
 	case c.quickInputMode && len(c.quickInputPinyinBuffer) > 0:
@@ -1090,7 +1090,7 @@ func (c *Coordinator) clearState() {
 // modeName: "temp_pinyin" | "quick_input"
 // 默认关闭；需在配置中将 mode_accent_border 设为 true 才启用。
 func (c *Coordinator) modeAccentColor(modeName string) color.Color {
-	if c.config == nil || c.config.UI.ModeAccentBorder == nil || !*c.config.UI.ModeAccentBorder {
+	if c.config == nil || !c.config.UI.Candidate.ModeAccentBorder {
 		return nil
 	}
 	var hexStr string
@@ -1098,12 +1098,12 @@ func (c *Coordinator) modeAccentColor(modeName string) color.Color {
 	switch modeName {
 	case "temp_pinyin":
 		if c.config != nil {
-			hexStr = c.config.UI.TempPinyinAccentColor
+			hexStr = c.config.Input.TempPinyin.AccentColor
 		}
 		def = color.RGBA{66, 165, 245, 255}
 	case "quick_input":
 		if c.config != nil {
-			hexStr = c.config.UI.QuickInputAccentColor
+			hexStr = c.config.Features.QuickInput.AccentColor
 		}
 		def = color.RGBA{102, 187, 106, 255}
 	default:

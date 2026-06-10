@@ -86,7 +86,7 @@ func (c *Coordinator) runTooltipQuery(
 	// 查询所有 provider
 	var sections []tooltip.Section
 	c.mu.Lock()
-	codeEnabled := c.config != nil && c.config.UI.Tooltip.Code.IsEnabled()
+	codeEnabled := c.config != nil && c.config.UI.Tooltip.Code.Enabled
 	engineMgr := c.engineMgr
 	c.mu.Unlock()
 	if codeEnabled && engineMgr != nil {

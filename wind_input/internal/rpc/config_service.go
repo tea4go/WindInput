@@ -132,7 +132,7 @@ func (s *ConfigService) SetAll(args *rpcapi.ConfigSetAllArgs, reply *rpcapi.Conf
 	// 并不包含 stats 字段。反序列化时缺失的 *bool 会被当作 null，从而把服务端已有的
 	// track_english/enabled 覆盖为 nil（IsTrackEnglish() 又回退到默认 true），导致用户
 	// 在统计页关闭的设置被全局保存冲掉。这里强制保留服务端现有 stats，使其只受专用接口影响。
-	newCfg.Stats = s.cfg.Stats
+	newCfg.Features.Stats = s.cfg.Features.Stats
 
 	config.ApplyConfigFallbacks(newCfg)
 
@@ -268,24 +268,22 @@ func resolveKeyPath(key string) (section string, path []string, err error) {
 func getSectionMap(cfg *config.Config, section string) (map[string]any, error) {
 	var sectionVal any
 	switch rpcapi.ConfigSection(section) {
-	case rpcapi.ConfigSectionStartup:
-		sectionVal = cfg.Startup
+	case rpcapi.ConfigSectionGeneral:
+		sectionVal = cfg.General
 	case rpcapi.ConfigSectionSchema:
 		sectionVal = cfg.Schema
 	case rpcapi.ConfigSectionHotkeys:
 		sectionVal = cfg.Hotkeys
-	case rpcapi.ConfigSectionUI:
-		sectionVal = cfg.UI
-	case rpcapi.ConfigSectionToolbar:
-		sectionVal = cfg.Toolbar
 	case rpcapi.ConfigSectionInput:
 		sectionVal = cfg.Input
-	case rpcapi.ConfigSectionAdvanced:
-		sectionVal = cfg.Advanced
-	case rpcapi.ConfigSectionStats:
-		sectionVal = cfg.Stats
-	case rpcapi.ConfigSectionS2T:
-		sectionVal = cfg.S2T
+	case rpcapi.ConfigSectionUI:
+		sectionVal = cfg.UI
+	case rpcapi.ConfigSectionFeatures:
+		sectionVal = cfg.Features
+	case rpcapi.ConfigSectionCompat:
+		sectionVal = cfg.Compat
+	case rpcapi.ConfigSectionDebug:
+		sectionVal = cfg.Debug
 	default:
 		return nil, fmt.Errorf("unknown config section %q", section)
 	}
@@ -308,24 +306,22 @@ func setSectionFromMap(cfg *config.Config, section string, m map[string]any) err
 		return fmt.Errorf("marshal section map %q: %w", section, err)
 	}
 	switch rpcapi.ConfigSection(section) {
-	case rpcapi.ConfigSectionStartup:
-		return json.Unmarshal(data, &cfg.Startup)
+	case rpcapi.ConfigSectionGeneral:
+		return json.Unmarshal(data, &cfg.General)
 	case rpcapi.ConfigSectionSchema:
 		return json.Unmarshal(data, &cfg.Schema)
 	case rpcapi.ConfigSectionHotkeys:
 		return json.Unmarshal(data, &cfg.Hotkeys)
-	case rpcapi.ConfigSectionUI:
-		return json.Unmarshal(data, &cfg.UI)
-	case rpcapi.ConfigSectionToolbar:
-		return json.Unmarshal(data, &cfg.Toolbar)
 	case rpcapi.ConfigSectionInput:
 		return json.Unmarshal(data, &cfg.Input)
-	case rpcapi.ConfigSectionAdvanced:
-		return json.Unmarshal(data, &cfg.Advanced)
-	case rpcapi.ConfigSectionStats:
-		return json.Unmarshal(data, &cfg.Stats)
-	case rpcapi.ConfigSectionS2T:
-		return json.Unmarshal(data, &cfg.S2T)
+	case rpcapi.ConfigSectionUI:
+		return json.Unmarshal(data, &cfg.UI)
+	case rpcapi.ConfigSectionFeatures:
+		return json.Unmarshal(data, &cfg.Features)
+	case rpcapi.ConfigSectionCompat:
+		return json.Unmarshal(data, &cfg.Compat)
+	case rpcapi.ConfigSectionDebug:
+		return json.Unmarshal(data, &cfg.Debug)
 	default:
 		return fmt.Errorf("unknown config section %q", section)
 	}
@@ -369,7 +365,7 @@ func setNestedKey(m map[string]any, path []string, value any) error {
 	return nil
 }
 
-// deepCopyConfig 通过 JSON roundtrip 深拷贝，保证指针字段（*bool）安全
+// deepCopyConfig 通过 JSON roundtrip 深拷贝
 func deepCopyConfig(cfg *config.Config) *config.Config {
 	data, _ := json.Marshal(cfg)
 	newCfg := &config.Config{}
@@ -386,15 +382,14 @@ func diffSections(oldCfg, newCfg *config.Config) map[string]bool {
 		new  any
 	}
 	pairs := []sectionPair{
-		{string(rpcapi.ConfigSectionStartup), oldCfg.Startup, newCfg.Startup},
+		{string(rpcapi.ConfigSectionGeneral), oldCfg.General, newCfg.General},
 		{string(rpcapi.ConfigSectionSchema), oldCfg.Schema, newCfg.Schema},
 		{string(rpcapi.ConfigSectionHotkeys), oldCfg.Hotkeys, newCfg.Hotkeys},
-		{string(rpcapi.ConfigSectionUI), oldCfg.UI, newCfg.UI},
-		{string(rpcapi.ConfigSectionToolbar), oldCfg.Toolbar, newCfg.Toolbar},
 		{string(rpcapi.ConfigSectionInput), oldCfg.Input, newCfg.Input},
-		{string(rpcapi.ConfigSectionAdvanced), oldCfg.Advanced, newCfg.Advanced},
-		{string(rpcapi.ConfigSectionStats), oldCfg.Stats, newCfg.Stats},
-		{string(rpcapi.ConfigSectionS2T), oldCfg.S2T, newCfg.S2T},
+		{string(rpcapi.ConfigSectionUI), oldCfg.UI, newCfg.UI},
+		{string(rpcapi.ConfigSectionFeatures), oldCfg.Features, newCfg.Features},
+		{string(rpcapi.ConfigSectionCompat), oldCfg.Compat, newCfg.Compat},
+		{string(rpcapi.ConfigSectionDebug), oldCfg.Debug, newCfg.Debug},
 	}
 	for _, p := range pairs {
 		oldData, _ := json.Marshal(p.old)

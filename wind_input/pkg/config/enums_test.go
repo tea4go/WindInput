@@ -152,19 +152,20 @@ func TestDefaultConfigYAMLRoundTrip(t *testing.T) {
 	if reload.Input.FilterMode != cfg.Input.FilterMode {
 		t.Errorf("FilterMode drift: %q vs %q", reload.Input.FilterMode, cfg.Input.FilterMode)
 	}
-	if reload.UI.ThemeStyle != cfg.UI.ThemeStyle {
-		t.Errorf("ThemeStyle drift: %q vs %q", reload.UI.ThemeStyle, cfg.UI.ThemeStyle)
+	if reload.UI.Theme.Style != cfg.UI.Theme.Style {
+		t.Errorf("ThemeStyle drift: %q vs %q", reload.UI.Theme.Style, cfg.UI.Theme.Style)
 	}
-	if reload.UI.CandidateLayout != cfg.UI.CandidateLayout {
-		t.Errorf("CandidateLayout drift: %q vs %q", reload.UI.CandidateLayout, cfg.UI.CandidateLayout)
+	if reload.UI.Candidate.Layout != cfg.UI.Candidate.Layout {
+		t.Errorf("Layout drift: %q vs %q", reload.UI.Candidate.Layout, cfg.UI.Candidate.Layout)
 	}
-	if reload.UI.PreeditMode != cfg.UI.PreeditMode {
-		t.Errorf("PreeditMode drift: %q vs %q", reload.UI.PreeditMode, cfg.UI.PreeditMode)
+	if reload.UI.Candidate.PreeditMode != cfg.UI.Candidate.PreeditMode {
+		t.Errorf("PreeditMode drift: %q vs %q", reload.UI.Candidate.PreeditMode, cfg.UI.Candidate.PreeditMode)
 	}
 }
 
-// TestLegacyYAMLLoading 模拟用户原有的 wind_input.yaml（裸字符串值）加载到新 Config 结构。
-// 这些字符串字面量是历史上散落各处的 case 值，必须保证 unmarshal 后落到正确的具名常量。
+// TestLegacyYAMLLoading 验证裸字符串枚举值 unmarshal 后落到正确的具名常量
+// （这些字符串字面量是历史上散落各处的 case 值；样本为 v1 结构，v0 旧结构
+// 的加载走 migrateV0toV1，由 migration_v1_test.go 覆盖）。
 func TestLegacyYAMLLoading(t *testing.T) {
 	legacy := []byte(`
 input:
@@ -172,10 +173,13 @@ input:
   space_on_empty_behavior: clear
   filter_mode: gb18030
 ui:
-  theme_style: dark
-  candidate_layout: vertical
-  preedit_mode: embedded
-  text_render_mode: freetype
+  theme:
+    style: dark
+  candidate:
+    layout: vertical
+    preedit_mode: embedded
+  font:
+    render_mode: freetype
 `)
 
 	var cfg Config
@@ -192,10 +196,10 @@ ui:
 		{"enter_behavior", cfg.Input.EnterBehavior, EnterCommitAndInput, func() bool { return cfg.Input.EnterBehavior.Valid() }},
 		{"space_on_empty_behavior", cfg.Input.SpaceOnEmptyBehavior, SpaceOnEmptyClear, func() bool { return cfg.Input.SpaceOnEmptyBehavior.Valid() }},
 		{"filter_mode", cfg.Input.FilterMode, FilterGB18030, func() bool { return cfg.Input.FilterMode.Valid() }},
-		{"theme_style", cfg.UI.ThemeStyle, ThemeStyleDark, func() bool { return cfg.UI.ThemeStyle.Valid() }},
-		{"candidate_layout", cfg.UI.CandidateLayout, LayoutVertical, func() bool { return cfg.UI.CandidateLayout.Valid() }},
-		{"preedit_mode", cfg.UI.PreeditMode, PreeditEmbedded, func() bool { return cfg.UI.PreeditMode.Valid() }},
-		{"text_render_mode", cfg.UI.TextRenderMode, FontEngineFreetype, func() bool { return cfg.UI.TextRenderMode.Valid() }},
+		{"theme_style", cfg.UI.Theme.Style, ThemeStyleDark, func() bool { return cfg.UI.Theme.Style.Valid() }},
+		{"layout", cfg.UI.Candidate.Layout, LayoutVertical, func() bool { return cfg.UI.Candidate.Layout.Valid() }},
+		{"preedit_mode", cfg.UI.Candidate.PreeditMode, PreeditEmbedded, func() bool { return cfg.UI.Candidate.PreeditMode.Valid() }},
+		{"render_mode", cfg.UI.Font.RenderMode, FontEngineFreetype, func() bool { return cfg.UI.Font.RenderMode.Valid() }},
 	}
 
 	for _, c := range checks {

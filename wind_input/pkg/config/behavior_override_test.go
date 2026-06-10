@@ -12,7 +12,7 @@ import (
 
 // TestBehaviorOverride_Defaults 验证三对覆盖字段的默认值（新装跟随主题）。
 func TestBehaviorOverride_Defaults(t *testing.T) {
-	d := DefaultConfig().UI
+	d := DefaultConfig().UI.Candidate
 	if !d.AlwaysShowPagerFollowTheme {
 		t.Error("DefaultConfig 应默认 AlwaysShowPagerFollowTheme=true（新装跟随主题）")
 	}
@@ -43,9 +43,9 @@ func TestBehaviorOverride_AbsentInheritsDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
-	if !cfg.UI.AlwaysShowPagerFollowTheme || !cfg.UI.ShowPageNumberFollowTheme || !cfg.UI.VerticalMaxWidthFollowTheme {
+	if !cfg.UI.Candidate.AlwaysShowPagerFollowTheme || !cfg.UI.Candidate.ShowPageNumberFollowTheme || !cfg.UI.Candidate.VerticalMaxWidthFollowTheme {
 		t.Errorf("缺失字段应继承默认 FollowTheme=true, got pager=%v pageNum=%v vmax=%v",
-			cfg.UI.AlwaysShowPagerFollowTheme, cfg.UI.ShowPageNumberFollowTheme, cfg.UI.VerticalMaxWidthFollowTheme)
+			cfg.UI.Candidate.AlwaysShowPagerFollowTheme, cfg.UI.Candidate.ShowPageNumberFollowTheme, cfg.UI.Candidate.VerticalMaxWidthFollowTheme)
 	}
 }
 
@@ -57,13 +57,13 @@ func TestBehaviorOverride_RoundTrip(t *testing.T) {
 
 	for _, follow := range []bool{true, false} {
 		cfg := DefaultConfig()
-		cfg.UI.AlwaysShowPagerFollowTheme = follow
-		cfg.UI.ShowPageNumberFollowTheme = follow
-		cfg.UI.VerticalMaxWidthFollowTheme = follow
+		cfg.UI.Candidate.AlwaysShowPagerFollowTheme = follow
+		cfg.UI.Candidate.ShowPageNumberFollowTheme = follow
+		cfg.UI.Candidate.VerticalMaxWidthFollowTheme = follow
 		// 自定义模式下的用户值
-		cfg.UI.AlwaysShowPager = true
-		cfg.UI.ShowPageNumber = false
-		cfg.UI.VerticalMaxWidth = 480
+		cfg.UI.Candidate.AlwaysShowPager = true
+		cfg.UI.Candidate.ShowPageNumber = false
+		cfg.UI.Candidate.VerticalMaxWidth = 480
 
 		path := filepath.Join(dir, "rt.yaml")
 		if err := SaveTo(cfg, path); err != nil {
@@ -73,23 +73,23 @@ func TestBehaviorOverride_RoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadFrom(follow=%v): %v", follow, err)
 		}
-		if got.UI.AlwaysShowPagerFollowTheme != follow {
-			t.Errorf("round-trip AlwaysShowPagerFollowTheme: 存 %v 回读 %v", follow, got.UI.AlwaysShowPagerFollowTheme)
+		if got.UI.Candidate.AlwaysShowPagerFollowTheme != follow {
+			t.Errorf("round-trip AlwaysShowPagerFollowTheme: 存 %v 回读 %v", follow, got.UI.Candidate.AlwaysShowPagerFollowTheme)
 		}
-		if got.UI.ShowPageNumberFollowTheme != follow {
-			t.Errorf("round-trip ShowPageNumberFollowTheme: 存 %v 回读 %v", follow, got.UI.ShowPageNumberFollowTheme)
+		if got.UI.Candidate.ShowPageNumberFollowTheme != follow {
+			t.Errorf("round-trip ShowPageNumberFollowTheme: 存 %v 回读 %v", follow, got.UI.Candidate.ShowPageNumberFollowTheme)
 		}
-		if got.UI.VerticalMaxWidthFollowTheme != follow {
-			t.Errorf("round-trip VerticalMaxWidthFollowTheme: 存 %v 回读 %v", follow, got.UI.VerticalMaxWidthFollowTheme)
+		if got.UI.Candidate.VerticalMaxWidthFollowTheme != follow {
+			t.Errorf("round-trip VerticalMaxWidthFollowTheme: 存 %v 回读 %v", follow, got.UI.Candidate.VerticalMaxWidthFollowTheme)
 		}
-		if got.UI.AlwaysShowPager != true {
-			t.Errorf("round-trip AlwaysShowPager(follow=%v): 存 true 回读 %v", follow, got.UI.AlwaysShowPager)
+		if got.UI.Candidate.AlwaysShowPager != true {
+			t.Errorf("round-trip AlwaysShowPager(follow=%v): 存 true 回读 %v", follow, got.UI.Candidate.AlwaysShowPager)
 		}
-		if got.UI.ShowPageNumber != false {
-			t.Errorf("round-trip ShowPageNumber(follow=%v): 存 false 回读 %v", follow, got.UI.ShowPageNumber)
+		if got.UI.Candidate.ShowPageNumber != false {
+			t.Errorf("round-trip ShowPageNumber(follow=%v): 存 false 回读 %v", follow, got.UI.Candidate.ShowPageNumber)
 		}
-		if got.UI.VerticalMaxWidth != 480 {
-			t.Errorf("round-trip VerticalMaxWidth(follow=%v): 存 480 回读 %d", follow, got.UI.VerticalMaxWidth)
+		if got.UI.Candidate.VerticalMaxWidth != 480 {
+			t.Errorf("round-trip VerticalMaxWidth(follow=%v): 存 480 回读 %d", follow, got.UI.Candidate.VerticalMaxWidth)
 		}
 	}
 }

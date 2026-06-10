@@ -579,7 +579,7 @@ func (c *Coordinator) showUI() {
 
 	// When InlinePreedit is enabled and there are no candidates,
 	// hide the candidate window (only show the inline preedit in the application)
-	if c.config != nil && c.config.UI.InlinePreedit && len(c.candidates) == 0 {
+	if c.config != nil && c.config.UI.Candidate.InlinePreedit && len(c.candidates) == 0 {
 		c.hideUI()
 		return
 	}
@@ -610,7 +610,7 @@ func (c *Coordinator) showUI() {
 	caretX := c.caretX
 	caretY := c.caretY
 	caretHeight := c.caretHeight
-	if c.config != nil && c.config.UI.InlinePreedit && c.compositionStartValid {
+	if c.config != nil && c.config.UI.Candidate.InlinePreedit && c.compositionStartValid {
 		caretX = c.compositionStartX
 		caretY = c.compositionStartY
 	}
@@ -826,7 +826,7 @@ func (c *Coordinator) isInlinePreedit() bool {
 	if c.config == nil {
 		return true
 	}
-	return c.config.UI.InlinePreedit
+	return c.config.UI.Candidate.InlinePreedit
 }
 
 // compositionUpdateResult 构建主输入流程的 UpdateComposition 响应。

@@ -28,17 +28,19 @@ var configMigrations = map[int]configMigration{
 
 // migrateConfigMap 把 map 层配置就地迁移到 currentConfigVersion。
 //
-// fromLegacyYAML=true 表示来源是旧版 .yaml 回退文件（恒为 v0）；否则按 map 中
-// version 键判定，键缺失时按当前版本处理——v0 只可能是 YAML，TOML 缺 version
-// 必然是用户手编误删，不执行任何迁移，下次 diff-save 自动补写（设计 §4.1 规则 2）。
+// 版本判定（设计 §4.1，显式 version 最高优先）：
+//  1. map 含显式 version 键 → 按其值（含 SaveTo 写出的带 version 的 YAML 文件）；
+//  2. 键缺失且来源为 .yaml（fromLegacyYAML=true）→ v0（旧版结构）；
+//  3. 键缺失且来源为 .toml → 按当前版本处理——v0 只可能是 YAML，TOML 缺 version
+//     必然是用户手编误删，不执行任何迁移，下次 diff-save 自动补写。
 //
 // 返回 migrated=true 表示至少执行了一步迁移（调用方应触发写出持久化）。
 func migrateConfigMap(m map[string]any, fromLegacyYAML bool) (migrated bool, err error) {
 	v := currentConfigVersion
-	if fromLegacyYAML {
-		v = 0
-	} else if n, ok := safeGetInt(m, "version"); ok {
+	if n, ok := safeGetInt(m, "version"); ok {
 		v = n
+	} else if fromLegacyYAML {
+		v = 0
 	}
 	if v > currentConfigVersion {
 		return false, fmt.Errorf("%w: file=%d supported=%d", ErrFutureConfigVersion, v, currentConfigVersion)

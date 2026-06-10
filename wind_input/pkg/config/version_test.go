@@ -68,7 +68,7 @@ func TestSaveTo_VersionIsFirstKey(t *testing.T) {
 	path := filepath.Join(dir, "config.toml")
 
 	cfg := SystemDefaultConfig()
-	cfg.UI.FontSize = 33
+	cfg.UI.Candidate.FontSize = 33
 	if err := SaveTo(cfg, path); err != nil {
 		t.Fatalf("SaveTo 失败: %v", err)
 	}

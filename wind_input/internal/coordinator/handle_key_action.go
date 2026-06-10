@@ -224,7 +224,7 @@ func (c *Coordinator) handleAlphaKey(key string) *bridge.KeyEventResult {
 // result 可为 nil（无引擎或空输入），此时仍记录 total/update/show 与 inputLen 用于趋势观察。
 // 仅当配置中 perf_sampling=true 时才实际记录（默认关闭，因采样数据含用户输入内容）。
 func (c *Coordinator) recordPerfSample(firstKey bool, result *engine.ConvertResult, total, update, show time.Duration) {
-	if c.config == nil || !c.config.Advanced.IsPerfSampling() {
+	if c.config == nil || !c.config.Debug.PerfSampling {
 		return
 	}
 	sample := perf.Sample{
@@ -381,7 +381,7 @@ func (c *Coordinator) handleCursorLeft() *bridge.KeyEventResult {
 	if c.inputCursorPos > 0 {
 		c.inputCursorPos--
 		c.logger.Debug("Cursor left", "cursor", c.inputCursorPos)
-		if c.config != nil && c.config.UI.InlinePreedit {
+		if c.config != nil && c.config.UI.Candidate.InlinePreedit {
 			return &bridge.KeyEventResult{
 				Type:     bridge.ResponseTypeUpdateComposition,
 				Text:     c.compositionText(),
@@ -404,7 +404,7 @@ func (c *Coordinator) handleCursorRight() *bridge.KeyEventResult {
 	if c.inputCursorPos < len(c.inputBuffer) {
 		c.inputCursorPos++
 		c.logger.Debug("Cursor right", "cursor", c.inputCursorPos)
-		if c.config != nil && c.config.UI.InlinePreedit {
+		if c.config != nil && c.config.UI.Candidate.InlinePreedit {
 			return &bridge.KeyEventResult{
 				Type:     bridge.ResponseTypeUpdateComposition,
 				Text:     c.compositionText(),
@@ -426,7 +426,7 @@ func (c *Coordinator) handleCursorHome() *bridge.KeyEventResult {
 	}
 	c.inputCursorPos = 0
 	c.logger.Debug("Cursor home", "cursor", c.inputCursorPos)
-	if c.config != nil && c.config.UI.InlinePreedit {
+	if c.config != nil && c.config.UI.Candidate.InlinePreedit {
 		return &bridge.KeyEventResult{
 			Type:     bridge.ResponseTypeUpdateComposition,
 			Text:     c.compositionText(),
@@ -447,7 +447,7 @@ func (c *Coordinator) handleCursorEnd() *bridge.KeyEventResult {
 	}
 	c.inputCursorPos = len(c.inputBuffer)
 	c.logger.Debug("Cursor end", "cursor", c.inputCursorPos)
-	if c.config != nil && c.config.UI.InlinePreedit {
+	if c.config != nil && c.config.UI.Candidate.InlinePreedit {
 		return &bridge.KeyEventResult{
 			Type:     bridge.ResponseTypeUpdateComposition,
 			Text:     c.compositionText(),
@@ -731,8 +731,8 @@ func (c *Coordinator) handleOverflowNumberKey(num int) *bridge.KeyEventResult {
 	}
 
 	behavior := config.OverflowIgnore
-	if c.config != nil && c.config.Input.OverflowBehavior.NumberKey != "" {
-		behavior = c.config.Input.OverflowBehavior.NumberKey
+	if c.config != nil && c.config.Input.Overflow.NumberKey != "" {
+		behavior = c.config.Input.Overflow.NumberKey
 	}
 
 	highlightedIndex := (c.currentPage-1)*c.candidatesPerPage + c.selectedIndex
@@ -820,8 +820,8 @@ func (c *Coordinator) handleOverflowSelectKey(triggerKey string) *bridge.KeyEven
 	}
 
 	behavior := config.OverflowIgnore
-	if c.config != nil && c.config.Input.OverflowBehavior.SelectKey != "" {
-		behavior = c.config.Input.OverflowBehavior.SelectKey
+	if c.config != nil && c.config.Input.Overflow.SelectKey != "" {
+		behavior = c.config.Input.Overflow.SelectKey
 	}
 
 	// 无候选时（空码）
@@ -883,8 +883,8 @@ func (c *Coordinator) handleOverflowSelectKey(triggerKey string) *bridge.KeyEven
 
 // overflowSelectCharBehavior 返回以词定字键无效时的策略
 func (c *Coordinator) overflowSelectCharBehavior() config.OverflowBehavior {
-	if c.config != nil && c.config.Input.OverflowBehavior.SelectCharKey != "" {
-		return c.config.Input.OverflowBehavior.SelectCharKey
+	if c.config != nil && c.config.Input.Overflow.SelectCharKey != "" {
+		return c.config.Input.Overflow.SelectCharKey
 	}
 	return config.OverflowIgnore
 }

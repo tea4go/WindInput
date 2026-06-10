@@ -19,7 +19,7 @@ func newS2TManager(logger *slog.Logger) *s2t.Manager {
 	return s2t.NewManager(dir)
 }
 
-// reconfigureS2T 根据 cfg.S2T 重新设置启用状态/变体，并在加载失败时回退为关闭。
+// reconfigureS2T 根据 cfg.Features.S2T 重新设置启用状态/变体，并在加载失败时回退为关闭。
 // 注意：调用方应确保已持锁；此函数不动其他状态。
 func (c *Coordinator) reconfigureS2T(s2tCfg config.S2TConfig) {
 	if c.s2tManager == nil {
@@ -33,7 +33,7 @@ func (c *Coordinator) reconfigureS2T(s2tCfg config.S2TConfig) {
 		// 加载失败：强制回退为关闭，避免反复尝试
 		_ = c.s2tManager.SetEnabled(false)
 		if c.config != nil {
-			c.config.S2T.Enabled = false
+			c.config.Features.S2T.Enabled = false
 		}
 		return
 	}
@@ -67,9 +67,9 @@ func (c *Coordinator) handleToggleS2T() *bridge.KeyEventResult {
 		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
 	}
 
-	target := !c.config.S2T.Enabled
-	c.config.S2T.Enabled = target
-	c.reconfigureS2T(c.config.S2T)
+	target := !c.config.Features.S2T.Enabled
+	c.config.Features.S2T.Enabled = target
+	c.reconfigureS2T(c.config.Features.S2T)
 
 	if c.hasPendingInput() {
 		c.updateCandidates()
@@ -86,17 +86,17 @@ func (c *Coordinator) handleSetS2TVariant(v config.S2TVariant) {
 	if c.config == nil || c.s2tManager == nil || !v.Valid() {
 		return
 	}
-	if c.config.S2T.Variant == v {
+	if c.config.Features.S2T.Variant == v {
 		return
 	}
-	c.config.S2T.Variant = v
-	c.reconfigureS2T(c.config.S2T)
+	c.config.Features.S2T.Variant = v
+	c.reconfigureS2T(c.config.Features.S2T)
 
 	if c.hasPendingInput() && c.s2tManager.IsEnabled() {
 		c.updateCandidates()
 		c.showUI()
 	}
-	c.showS2TIndicator(c.config.S2T.Enabled)
+	c.showS2TIndicator(c.config.Features.S2T.Enabled)
 
 	c.persistS2TConfigAsync()
 }
@@ -124,7 +124,7 @@ func (c *Coordinator) showS2TIndicator(enabled bool) {
 	if c.uiManager == nil || !c.uiManager.IsReady() {
 		return
 	}
-	label := s2tStatusLabel(enabled, c.config.S2T.Variant)
+	label := s2tStatusLabel(enabled, c.config.Features.S2T.Variant)
 	x, y := c.getIndicatorPosition()
 	c.uiManager.ShowModeIndicator(label, x, y)
 }

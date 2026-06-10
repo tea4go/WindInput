@@ -49,8 +49,8 @@ func TestLoadFrom_EmptyTOML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("空文件不应报错: %v", err)
 	}
-	if cfg.UI.CandidatesPerPage != 7 {
-		t.Fatalf("空文件应返回默认配置, candidates_per_page=%d", cfg.UI.CandidatesPerPage)
+	if cfg.UI.Candidate.PerPage != 7 {
+		t.Fatalf("空文件应返回默认配置, per_page=%d", cfg.UI.Candidate.PerPage)
 	}
 }
 
@@ -59,7 +59,9 @@ func TestLoadFrom_TOMLUserOverlay(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `
-[ui]
+version = 1
+
+[ui.candidate]
 font_size = 22.5
 
 [input.temp_pinyin]
@@ -73,8 +75,8 @@ trigger_keys = ["semicolon"]
 	if err != nil {
 		t.Fatalf("LoadFrom 失败: %v", err)
 	}
-	if cfg.UI.FontSize != 22.5 {
-		t.Errorf("font_size = %v, want 22.5", cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != 22.5 {
+		t.Errorf("font_size = %v, want 22.5", cfg.UI.Candidate.FontSize)
 	}
 	if len(cfg.Input.TempPinyin.TriggerKeys) != 1 || cfg.Input.TempPinyin.TriggerKeys[0] != "semicolon" {
 		t.Errorf("temp_pinyin.trigger_keys = %v, want [semicolon]", cfg.Input.TempPinyin.TriggerKeys)
@@ -83,37 +85,38 @@ trigger_keys = ["semicolon"]
 	if !cfg.Hotkeys.CommitOnSwitch {
 		t.Error("未覆盖字段 commit_on_switch 应保持默认 true")
 	}
-	if cfg.UI.CandidatesPerPage != 7 {
-		t.Errorf("未覆盖字段 candidates_per_page = %d, want 7", cfg.UI.CandidatesPerPage)
+	if cfg.UI.Candidate.PerPage != 7 {
+		t.Errorf("未覆盖字段 per_page = %d, want 7", cfg.UI.Candidate.PerPage)
 	}
 }
 
-// 三态字段：TOML 中键缺失 = 未设置（取默认），显式 false = 用户关闭。
-func TestLoadFrom_TOMLTriStateBool(t *testing.T) {
+// 默认 true 的值 bool：TOML 中键缺失 = 继承默认 true，显式 false = 用户关闭
+// （三态规范 R2：值类型 + 禁 omitempty，见设计 §2.3）。
+func TestLoadFrom_DefaultTrueBool(t *testing.T) {
 	dir := t.TempDir()
 
-	// 键缺失 → nil → 默认 true
+	// 键缺失 → 继承默认 true
 	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte("[toolbar]\nvisible = true\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[ui.toolbar]\nvisible = true\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := LoadFrom(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Toolbar.IsHideInFullscreen() {
+	if !cfg.UI.Toolbar.HideInFullscreen {
 		t.Error("hide_in_fullscreen 缺失时应默认 true")
 	}
 
 	// 显式 false → 用户关闭
-	if err := os.WriteFile(path, []byte("[toolbar]\nhide_in_fullscreen = false\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[ui.toolbar]\nhide_in_fullscreen = false\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = LoadFrom(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Toolbar.IsHideInFullscreen() {
+	if cfg.UI.Toolbar.HideInFullscreen {
 		t.Error("hide_in_fullscreen 显式 false 应生效")
 	}
 }
@@ -127,7 +130,7 @@ func TestSaveTo_TOMLDiffOnly(t *testing.T) {
 	path := filepath.Join(dir, "config.toml")
 
 	cfg := SystemDefaultConfig()
-	cfg.UI.FontSize = 30
+	cfg.UI.Candidate.FontSize = 30
 
 	if err := SaveTo(cfg, path); err != nil {
 		t.Fatalf("SaveTo 失败: %v", err)
@@ -141,8 +144,8 @@ func TestSaveTo_TOMLDiffOnly(t *testing.T) {
 	if !strings.Contains(content, "font_size") {
 		t.Errorf("diff 文件应包含 font_size, 实际:\n%s", content)
 	}
-	if strings.Contains(content, "candidates_per_page") {
-		t.Errorf("diff 文件不应包含未修改的 candidates_per_page, 实际:\n%s", content)
+	if strings.Contains(content, "per_page") {
+		t.Errorf("diff 文件不应包含未修改的 per_page, 实际:\n%s", content)
 	}
 
 	// 回读验证
@@ -150,8 +153,8 @@ func TestSaveTo_TOMLDiffOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.UI.FontSize != 30 {
-		t.Errorf("回读 font_size = %v, want 30", loaded.UI.FontSize)
+	if loaded.UI.Candidate.FontSize != 30 {
+		t.Errorf("回读 font_size = %v, want 30", loaded.UI.Candidate.FontSize)
 	}
 }
 
@@ -179,7 +182,8 @@ func TestSaveTo_TOMLEmptyDiff(t *testing.T) {
 
 // ---- 旧版 YAML 迁移 ----
 
-// 目标 .toml 不存在而旧版 .yaml 存在时：从旧文件加载、写出 TOML、旧文件改名备份。
+// 目标 .toml 不存在而旧版 .yaml 存在时：从旧文件加载（v0→v1 结构迁移）、
+// 写出 TOML、旧文件保留原地（§4.4）。
 func TestLoadFrom_MigratesLegacyYAML(t *testing.T) {
 	setTestConfigDir(t)
 	dir := t.TempDir()
@@ -195,8 +199,8 @@ func TestLoadFrom_MigratesLegacyYAML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom 失败: %v", err)
 	}
-	if cfg.UI.FontSize != 25 {
-		t.Errorf("迁移加载 font_size = %v, want 25", cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != 25 {
+		t.Errorf("迁移加载 font_size = %v, want 25", cfg.UI.Candidate.FontSize)
 	}
 	if cfg.Schema.Active != "pinyin" {
 		t.Errorf("迁移加载 schema.active = %q, want pinyin", cfg.Schema.Active)
@@ -206,12 +210,9 @@ func TestLoadFrom_MigratesLegacyYAML(t *testing.T) {
 	if _, err := os.Stat(tomlPath); err != nil {
 		t.Errorf("迁移后 config.toml 应存在: %v", err)
 	}
-	// 旧文件已改名备份
-	if _, err := os.Stat(yamlPath); !os.IsNotExist(err) {
-		t.Error("迁移后 config.yaml 应已改名")
-	}
-	if _, err := os.Stat(yamlPath + MigratedBackupSuffix); err != nil {
-		t.Errorf("迁移备份 config.yaml.migrated.bak 应存在: %v", err)
+	// 旧文件保留原地不改名（设计 §4.4 网盘混版本共存兜底）
+	if _, err := os.Stat(yamlPath); err != nil {
+		t.Errorf("迁移后 config.yaml 应保留原地: %v", err)
 	}
 
 	// 二次加载直读 TOML，结果一致
@@ -219,8 +220,8 @@ func TestLoadFrom_MigratesLegacyYAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg2.UI.FontSize != 25 || cfg2.Schema.Active != "pinyin" {
-		t.Errorf("二次加载结果不一致: font_size=%v active=%q", cfg2.UI.FontSize, cfg2.Schema.Active)
+	if cfg2.UI.Candidate.FontSize != 25 || cfg2.Schema.Active != "pinyin" {
+		t.Errorf("二次加载结果不一致: font_size=%v active=%q", cfg2.UI.Candidate.FontSize, cfg2.Schema.Active)
 	}
 }
 
@@ -239,8 +240,8 @@ func TestLoadFrom_CorruptedTOML_SelfHeal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("损坏文件应自愈而非报错: %v", err)
 	}
-	if cfg.UI.CandidatesPerPage != 7 {
-		t.Errorf("损坏后应回退默认, candidates_per_page=%d", cfg.UI.CandidatesPerPage)
+	if cfg.UI.Candidate.PerPage != 7 {
+		t.Errorf("损坏后应回退默认, per_page=%d", cfg.UI.Candidate.PerPage)
 	}
 	if _, err := os.Stat(path + ".bak"); err != nil {
 		t.Errorf("损坏原文件应备份为 .bak: %v", err)
@@ -257,9 +258,9 @@ func TestLoadFrom_TOMLTypeError_PartialDecode(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `
-[ui]
+[ui.candidate]
 font_size = "not-a-number"
-candidates_per_page = 9
+per_page = 9
 `
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -269,11 +270,11 @@ candidates_per_page = 9
 	if err != nil {
 		t.Fatalf("类型错误应自愈而非报错: %v", err)
 	}
-	if cfg.UI.CandidatesPerPage != 9 {
-		t.Errorf("类型错误时其余字段应保留, candidates_per_page=%d want 9", cfg.UI.CandidatesPerPage)
+	if cfg.UI.Candidate.PerPage != 9 {
+		t.Errorf("类型错误时其余字段应保留, per_page=%d want 9", cfg.UI.Candidate.PerPage)
 	}
-	if cfg.UI.FontSize != 18 {
-		t.Errorf("出错字段应维持默认, font_size=%v want 18", cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != 18 {
+		t.Errorf("出错字段应维持默认, font_size=%v want 18", cfg.UI.Candidate.FontSize)
 	}
 }
 
@@ -340,8 +341,9 @@ func TestRuntimeState_MigratesLegacyYAML(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(configDir, StateFileName)); err != nil {
 		t.Errorf("迁移后 state.toml 应存在: %v", err)
 	}
-	if _, err := os.Stat(yamlPath); !os.IsNotExist(err) {
-		t.Error("迁移后 state.yaml 应已改名")
+	// 旧 state.yaml 保留原地不改名（设计 §4.4）
+	if _, err := os.Stat(yamlPath); err != nil {
+		t.Errorf("迁移后 state.yaml 应保留原地: %v", err)
 	}
 }
 

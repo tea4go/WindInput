@@ -15,7 +15,7 @@ func (c *Coordinator) saveToolbarConfig() {
 
 	go func() {
 		c.cfgMu.Lock()
-		c.config.Toolbar.Visible = visible
+		c.config.UI.Toolbar.Visible = visible
 		cfgCopy := c.config.Clone()
 		c.cfgMu.Unlock()
 
@@ -35,7 +35,7 @@ func (c *Coordinator) saveThemeConfig(themeName string) {
 	notifier := c.eventNotifier
 	go func() {
 		c.cfgMu.Lock()
-		c.config.UI.Theme = themeName
+		c.config.UI.Theme.Name = themeName
 		cfgCopy := c.config.Clone()
 		c.cfgMu.Unlock()
 
@@ -55,7 +55,7 @@ func (c *Coordinator) saveThemeStyleConfig(themeStyle config.ThemeStyle) {
 	notifier := c.eventNotifier
 	go func() {
 		c.cfgMu.Lock()
-		c.config.UI.ThemeStyle = themeStyle
+		c.config.UI.Theme.Style = themeStyle
 		cfgCopy := c.config.Clone()
 		c.cfgMu.Unlock()
 
@@ -265,7 +265,7 @@ func (c *Coordinator) buildRuntimeStateNoLock() *config.RuntimeState {
 // 同时写入工具栏位置，防止与 saveToolbarPositions 并发保存时互相覆盖。
 // 调用者必须持有 c.mu 锁
 func (c *Coordinator) saveRuntimeState() {
-	if c.config == nil || !c.config.Startup.RememberLastState {
+	if c.config == nil || !c.config.General.RememberLastState {
 		return
 	}
 

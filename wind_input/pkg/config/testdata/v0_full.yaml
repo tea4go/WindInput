@@ -1,0 +1,128 @@
+# v0（旧版结构）全量样本：覆盖 docs/design/config-restructure.md §6 映射表全部条目。
+# 所有值刻意取非默认值，迁移后逐字段断言保真（migration_v1_test.go）。
+startup:
+  remember_last_state: true
+  default_chinese_mode: false
+  default_full_width: true
+  default_chinese_punct: false
+schema:
+  active: pinyin
+  available: [pinyin, wubi86]
+  primary_codetable: wubi86
+  primary_pinyin: pinyin
+hotkeys:
+  toggle_mode_keys: [lctrl]
+  commit_on_switch: false
+  switch_engine: ctrl+shift+x
+  delete_candidate: ctrl+number
+  pin_candidate: ctrl+shift+number
+  toggle_s2t: none
+  take_screenshot: none
+input:
+  punct_follow_mode: true
+  filter_mode: gb18030
+  smart_punct_after_digit: false
+  smart_punct_list: ".:"
+  enter_behavior: clear
+  space_on_empty_behavior: clear
+  numpad_behavior: follow_main
+  pinyin_separator: quote
+  capslock_behavior:
+    cancel_on_mode_switch: true
+  overflow_behavior:
+    number_key: commit
+    select_key: commit_and_input
+    select_char_key: commit
+  temp_pinyin:
+    trigger_keys: [semicolon]
+    z_include_on_commit: false
+  shift_temp_english:
+    enabled: false
+    shift_behavior: direct_commit
+  auto_pair:
+    chinese: true
+    english: true
+    blacklist: [bad.exe]
+  punct_custom:
+    enabled: true
+  phrase:
+    min_prefix_length: 3
+  quick_input:
+    trigger_key: quote
+    force_vertical: false
+    decimal_places: 2
+  special_modes:
+    - id: sym
+      name: 符号
+      trigger_keys: [slash]
+      table: sym.txt
+      auto_commit: manual
+      force_vertical: true
+      accent_color: "#778899"
+      show_all_on_entry: true
+      code_charset: abc
+stats:
+  enabled: false
+  retain_days: 30
+  track_english: false
+s2t:
+  enabled: true
+  variant: s2tw
+toolbar:
+  visible: false
+  hide_in_fullscreen: false
+advanced:
+  log_level: debug
+  perf_sampling: true
+  host_render_processes: [Foo.exe]
+ui:
+  font_size: 22
+  font_size_follow_theme: false
+  candidates_per_page: 9
+  candidates_per_page_extended: 10
+  max_candidate_chars: 24
+  candidate_layout: vertical
+  inline_preedit: false
+  preedit_mode: embedded
+  flip_layout_when_above: true
+  hide_candidate_window: true
+  candidate_index_labels: "①②③④⑤⑥⑦⑧⑨⑩"
+  mode_accent_border: false
+  always_show_pager: true
+  always_show_pager_follow_theme: false
+  show_page_number: false
+  show_page_number_follow_theme: false
+  vertical_max_width: 480
+  vertical_max_width_follow_theme: false
+  pager_bar_display: always
+  page_number_display: hide
+  font_family: "Microsoft YaHei"
+  font_path: "C:/f.ttf"
+  text_render_mode: gdi
+  gdi_font_weight: 700
+  gdi_font_scale: 1.5
+  menu_font_weight: 600
+  menu_font_size: 14
+  theme: dark
+  theme_editor_auto_start: true
+  tooltip_delay: 300
+  tooltip:
+    code:
+      enabled: false
+    pinyin:
+      enabled: false
+      heteronyms: false
+      max_readings: 2
+    chaizi:
+      enabled: true
+    debug:
+      enabled: true
+  status_indicator_duration: 1200
+  status_indicator_offset_x: 5
+  status_indicator_offset_y: -3
+  status_indicator:
+    enabled: false
+    display_mode: always
+  temp_pinyin_accent_color: "#112233"
+  quick_input_accent_color: "#445566"
+  cmdbar_candidate_prefix: "▶"

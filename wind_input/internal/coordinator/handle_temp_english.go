@@ -757,7 +757,7 @@ func (c *Coordinator) showTempEnglishUI() {
 	caretX := c.caretX
 	caretY := c.caretY
 	caretHeight := c.caretHeight
-	if c.config != nil && c.config.UI.InlinePreedit && c.compositionStartValid {
+	if c.config != nil && c.config.UI.Candidate.InlinePreedit && c.compositionStartValid {
 		caretX = c.compositionStartX
 		caretY = c.compositionStartY
 	}

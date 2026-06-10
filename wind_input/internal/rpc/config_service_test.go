@@ -42,9 +42,9 @@ func TestResolveKeyPath_Valid(t *testing.T) {
 		section string
 		path    []string
 	}{
-		{"ui.font_size", "ui", []string{"font_size"}},
+		{"ui.candidate.font_size", "ui", []string{"candidate", "font_size"}},
 		{"input.auto_pair.chinese", "input", []string{"auto_pair", "chinese"}},
-		{"advanced.log_level", "advanced", []string{"log_level"}},
+		{"debug.log_level", "debug", []string{"log_level"}},
 	}
 	for _, tc := range cases {
 		sec, path, err := resolveKeyPath(tc.key)
@@ -81,7 +81,7 @@ func TestResolveKeyPath_Invalid(t *testing.T) {
 
 func TestGetSectionMap_AllSections(t *testing.T) {
 	cfg := config.SystemDefaultConfig()
-	sections := []string{"startup", "schema", "hotkeys", "ui", "toolbar", "input", "advanced", "stats"}
+	sections := []string{"general", "schema", "hotkeys", "input", "ui", "features", "compat", "debug"}
 	for _, sec := range sections {
 		m, err := getSectionMap(cfg, sec)
 		if err != nil {
@@ -105,12 +105,14 @@ func TestGetSectionMap_Unknown(t *testing.T) {
 func TestSetSectionRoundTrip(t *testing.T) {
 	cfg := config.SystemDefaultConfig()
 	m, _ := getSectionMap(cfg, "ui")
-	m["font_size"] = float64(18)
+	if err := setNestedKey(m, []string{"candidate", "font_size"}, float64(18)); err != nil {
+		t.Fatalf("setNestedKey: %v", err)
+	}
 	if err := setSectionFromMap(cfg, "ui", m); err != nil {
 		t.Fatalf("setSectionFromMap: %v", err)
 	}
-	if cfg.UI.FontSize != 18 {
-		t.Errorf("expected font_size=18, got %v", cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != 18 {
+		t.Errorf("expected font_size=18, got %v", cfg.UI.Candidate.FontSize)
 	}
 }
 
@@ -180,7 +182,7 @@ func TestDiffSections_NoChange(t *testing.T) {
 func TestDiffSections_UIChanged(t *testing.T) {
 	cfg := config.SystemDefaultConfig()
 	cfg2 := config.SystemDefaultConfig()
-	cfg2.UI.FontSize = cfg.UI.FontSize + 4
+	cfg2.UI.Candidate.FontSize = cfg.UI.Candidate.FontSize + 4
 	diff := diffSections(cfg, cfg2)
 	if !diff["ui"] {
 		t.Error("expected ui section to be in diff")
@@ -193,7 +195,7 @@ func TestDiffSections_UIChanged(t *testing.T) {
 func TestDiffSections_MultipleSections(t *testing.T) {
 	cfg := config.SystemDefaultConfig()
 	cfg2 := config.SystemDefaultConfig()
-	cfg2.UI.FontSize++
+	cfg2.UI.Candidate.FontSize++
 	cfg2.Input.FilterMode = "none"
 	diff := diffSections(cfg, cfg2)
 	if !diff["ui"] || !diff["input"] {
@@ -225,14 +227,14 @@ func TestConfigGetAll(t *testing.T) {
 
 func TestConfigGet_ValidKey(t *testing.T) {
 	cfg := config.SystemDefaultConfig()
-	cfg.UI.FontSize = 16
+	cfg.UI.Candidate.FontSize = 16
 	svc := newTestConfigService(cfg)
 
 	var reply rpcapi.ConfigGetReply
-	if err := svc.Get(&rpcapi.ConfigGetArgs{Keys: []string{"ui.font_size"}}, &reply); err != nil {
+	if err := svc.Get(&rpcapi.ConfigGetArgs{Keys: []string{"ui.candidate.font_size"}}, &reply); err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	v, ok := reply.Values["ui.font_size"]
+	v, ok := reply.Values["ui.candidate.font_size"]
 	if !ok {
 		t.Fatal("key ui.font_size not in reply")
 	}
@@ -280,21 +282,21 @@ func TestConfigGetDefaults(t *testing.T) {
 
 func TestConfigSet_SingleKey(t *testing.T) {
 	cfg := config.SystemDefaultConfig()
-	cfg.UI.FontSize = 12
+	cfg.UI.Candidate.FontSize = 12
 	svc := newTestConfigService(cfg)
 
 	var reply rpcapi.ConfigSetReply
 	err := svc.Set(&rpcapi.ConfigSetArgs{
-		Items: []rpcapi.ConfigSetItem{{Key: "ui.font_size", Value: float64(20)}},
+		Items: []rpcapi.ConfigSetItem{{Key: "ui.candidate.font_size", Value: float64(20)}},
 	}, &reply)
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if len(reply.Applied) != 1 || reply.Applied[0] != "ui.font_size" {
+	if len(reply.Applied) != 1 || reply.Applied[0] != "ui.candidate.font_size" {
 		t.Errorf("unexpected Applied: %v", reply.Applied)
 	}
-	if cfg.UI.FontSize != 20 {
-		t.Errorf("expected font_size=20 in live config, got %v", cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != 20 {
+		t.Errorf("expected font_size=20 in live config, got %v", cfg.UI.Candidate.FontSize)
 	}
 }
 
@@ -305,8 +307,8 @@ func TestConfigSet_MultipleKeys(t *testing.T) {
 	var reply rpcapi.ConfigSetReply
 	err := svc.Set(&rpcapi.ConfigSetArgs{
 		Items: []rpcapi.ConfigSetItem{
-			{Key: "ui.font_size", Value: float64(14)},
-			{Key: "toolbar.visible", Value: true},
+			{Key: "ui.candidate.font_size", Value: float64(14)},
+			{Key: "ui.toolbar.visible", Value: true},
 		},
 	}, &reply)
 	if err != nil {
@@ -335,33 +337,31 @@ func TestConfigSetAll(t *testing.T) {
 	svc := newTestConfigService(cfg)
 
 	newCfg := config.SystemDefaultConfig()
-	newCfg.UI.FontSize = 22
+	newCfg.UI.Candidate.FontSize = 22
 	data, _ := json.Marshal(newCfg)
 
 	var reply rpcapi.ConfigSetAllReply
 	if err := svc.SetAll(&rpcapi.ConfigSetAllArgs{Config: data}, &reply); err != nil {
 		t.Fatalf("SetAll: %v", err)
 	}
-	if cfg.UI.FontSize != 22 {
-		t.Errorf("expected font_size=22 after SetAll, got %v", cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != 22 {
+		t.Errorf("expected font_size=22 after SetAll, got %v", cfg.UI.Candidate.FontSize)
 	}
 }
 
-// TestConfigSetAll_PreservesStats 防回归：全局保存（SetAll）提交的 formData 不含 stats 字段，
-// 反序列化后 stats 的 *bool 为 nil（JSON null）。SetAll 必须保留服务端现有 stats，
+// TestConfigSetAll_PreservesStats 防回归：全局保存（SetAll）提交的 formData 不含 stats 字段
+// （前端表单零值序列化），SetAll 必须保留服务端现有 stats，
 // 否则会把用户在统计页关闭的 track_english=false 冲回默认 true。
 func TestConfigSetAll_PreservesStats(t *testing.T) {
 	cfg := config.SystemDefaultConfig()
-	enabled := true
-	track := false
-	cfg.Stats.Enabled = &enabled
-	cfg.Stats.TrackEnglish = &track // 用户在统计页关闭了英文统计
+	cfg.Features.Stats.Enabled = true
+	cfg.Features.Stats.TrackEnglish = false // 用户在统计页关闭了英文统计
 	svc := newTestConfigService(cfg)
 
-	// 模拟前端全局保存：formData 不含 stats，序列化到 config.Config 时 Stats 的 *bool 为 nil
+	// 模拟前端全局保存：formData 的 stats 为零值（enabled=false 等并非用户意图）
 	frontendCfg := config.SystemDefaultConfig()
-	frontendCfg.Stats = config.StatsConfig{} // Enabled/TrackEnglish = nil → JSON null
-	frontendCfg.UI.FontSize = 22             // 同时修改一个全局表单字段
+	frontendCfg.Features.Stats = config.StatsConfig{}
+	frontendCfg.UI.Candidate.FontSize = 22 // 同时修改一个全局表单字段
 	data, _ := json.Marshal(frontendCfg)
 
 	var reply rpcapi.ConfigSetAllReply
@@ -369,14 +369,14 @@ func TestConfigSetAll_PreservesStats(t *testing.T) {
 		t.Fatalf("SetAll: %v", err)
 	}
 
-	if cfg.UI.FontSize != 22 {
-		t.Errorf("全局表单字段未生效：font_size want 22, got %v", cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != 22 {
+		t.Errorf("全局表单字段未生效：font_size want 22, got %v", cfg.UI.Candidate.FontSize)
 	}
-	if cfg.Stats.IsTrackEnglish() != false {
-		t.Errorf("track_english 被全局保存覆盖：want false, got %v", cfg.Stats.IsTrackEnglish())
+	if cfg.Features.Stats.TrackEnglish != false {
+		t.Errorf("track_english 被全局保存覆盖：want false, got %v", cfg.Features.Stats.TrackEnglish)
 	}
-	if cfg.Stats.IsEnabled() != true {
-		t.Errorf("stats.enabled 被全局保存覆盖：want true, got %v", cfg.Stats.IsEnabled())
+	if cfg.Features.Stats.Enabled != true {
+		t.Errorf("stats.enabled 被全局保存覆盖：want true, got %v", cfg.Features.Stats.Enabled)
 	}
 }
 
@@ -391,9 +391,9 @@ func TestConfigSetAll_TypeMismatchTolerant(t *testing.T) {
 		return nil
 	}
 
-	// 合法 JSON，但 ui.font_size 被写成字符串（应是数字）→ *json.UnmarshalTypeError，
-	// 同时 ui.theme 等其余字段仍可被部分填充。
-	data := []byte(`{"ui":{"font_size":"not-a-number","theme":"custom-theme"}}`)
+	// 合法 JSON，但 ui.candidate.font_size 被写成字符串（应是数字）→ *json.UnmarshalTypeError，
+	// 同时 ui.theme.name 等其余字段仍可被部分填充。
+	data := []byte(`{"ui":{"candidate":{"font_size":"not-a-number"},"theme":{"name":"custom-theme"}}}`)
 
 	var reply rpcapi.ConfigSetAllReply
 	if err := svc.SetAll(&rpcapi.ConfigSetAllArgs{Config: data}, &reply); err != nil {
@@ -402,23 +402,23 @@ func TestConfigSetAll_TypeMismatchTolerant(t *testing.T) {
 	if !saved {
 		t.Error("saveFn 未被调用：类型不匹配时仍应保存部分填充的配置")
 	}
-	if cfg.UI.Theme != "custom-theme" {
-		t.Errorf("类型不匹配字段之外的字段应被部分填充：theme want %q got %q", "custom-theme", cfg.UI.Theme)
+	if cfg.UI.Theme.Name != "custom-theme" {
+		t.Errorf("类型不匹配字段之外的字段应被部分填充：theme want %q got %q", "custom-theme", cfg.UI.Theme.Name)
 	}
 }
 
 func TestConfigReset_ToDefault(t *testing.T) {
 	def := config.SystemDefaultConfig()
 	cfg := config.SystemDefaultConfig()
-	cfg.UI.FontSize = 99
+	cfg.UI.Candidate.FontSize = 99
 	svc := newTestConfigService(cfg)
 
 	var reply rpcapi.ConfigResetReply
-	if err := svc.Reset(&rpcapi.ConfigResetArgs{Keys: []string{"ui.font_size"}}, &reply); err != nil {
+	if err := svc.Reset(&rpcapi.ConfigResetArgs{Keys: []string{"ui.candidate.font_size"}}, &reply); err != nil {
 		t.Fatalf("Reset: %v", err)
 	}
-	if cfg.UI.FontSize != def.UI.FontSize {
-		t.Errorf("expected font_size reset to %v, got %v", def.UI.FontSize, cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != def.UI.Candidate.FontSize {
+		t.Errorf("expected font_size reset to %v, got %v", def.UI.Candidate.FontSize, cfg.UI.Candidate.FontSize)
 	}
 }
 
@@ -437,24 +437,24 @@ func TestConfigSetActiveSchema(t *testing.T) {
 	}
 }
 
-// TestConfigSet_StatsTrackEnglish 验证 stats 配置改走通用 Config.Set（按 key）后，
-// *bool 字段经 setNestedKey/setSectionFromMap 往返正确：设 false 得 false，
-// 且未改的其它 stats 字段（enabled）保留默认。这是 stats 并入全局保存的核心保证。
+// TestConfigSet_StatsTrackEnglish 验证 stats 配置走通用 Config.Set（按 key）：
+// bool 字段经 setNestedKey/setSectionFromMap 往返正确：设 false 得 false，
+// 且未改的其它 stats 字段（enabled）保留默认。
 func TestConfigSet_StatsTrackEnglish(t *testing.T) {
-	cfg := config.SystemDefaultConfig() // 默认 track_english/enabled 均为 nil→true 语义
+	cfg := config.SystemDefaultConfig() // 默认 track_english/enabled 均为 true
 	svc := newTestConfigService(cfg)
 
 	var reply rpcapi.ConfigSetReply
 	if err := svc.Set(&rpcapi.ConfigSetArgs{
-		Items: []rpcapi.ConfigSetItem{{Key: "stats.track_english", Value: false}},
+		Items: []rpcapi.ConfigSetItem{{Key: "features.stats.track_english", Value: false}},
 	}, &reply); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 
-	if cfg.Stats.IsTrackEnglish() != false {
-		t.Errorf("track_english 应为 false，got %v", cfg.Stats.IsTrackEnglish())
+	if cfg.Features.Stats.TrackEnglish != false {
+		t.Errorf("track_english 应为 false，got %v", cfg.Features.Stats.TrackEnglish)
 	}
-	if cfg.Stats.IsEnabled() != true {
-		t.Errorf("未改的 enabled 应保留默认 true，got %v", cfg.Stats.IsEnabled())
+	if cfg.Features.Stats.Enabled != true {
+		t.Errorf("未改的 enabled 应保留默认 true，got %v", cfg.Features.Stats.Enabled)
 	}
 }

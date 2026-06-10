@@ -402,11 +402,11 @@ func TestSpecialMode_HotReloadRebuildsRegistry(t *testing.T) {
 		t.Fatal("no special mode expected before reload")
 	}
 
-	newInput := tc.config.Input
-	newInput.SpecialModes = []config.SpecialModeConfig{
+	newFeatures := tc.config.Features
+	newFeatures.SpecialModes = []config.SpecialModeConfig{
 		{ID: "sym", Name: "快符", TriggerKeys: []string{"grave"}, Table: "x.dict.yaml", AutoCommit: "prefix_free"},
 	}
-	tc.UpdateInputConfig(&newInput)
+	tc.UpdateFeaturesConfig(&newFeatures)
 
 	if tc.specialModeReg == nil {
 		t.Fatal("specialModeReg should be rebuilt after hot reload")

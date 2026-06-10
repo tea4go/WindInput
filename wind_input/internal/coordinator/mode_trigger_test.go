@@ -36,7 +36,7 @@ func TestMatchTriggerKeyInList(t *testing.T) {
 
 func TestMatchQuickInputTrigger(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Input.QuickInput.TriggerKeys = []string{"`"}
+	cfg.Features.QuickInput.TriggerKeys = []string{"`"}
 	h := newTestCoordinator(t, withConfig(cfg))
 
 	// enabled 且键匹配

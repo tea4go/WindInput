@@ -17,7 +17,7 @@ func (c *Coordinator) isQuickInputTriggerKey(key string, keyCode int) bool {
 		return false
 	}
 	parsedKey, _ := keys.ParseKey(key)
-	for _, tk := range c.config.Input.QuickInput.TriggerKeys {
+	for _, tk := range c.config.Features.QuickInput.TriggerKeys {
 		tkKey, _ := keys.ParseKey(tk)
 		switch tkKey {
 		case keys.KeySemicolon:
@@ -63,7 +63,7 @@ func (c *Coordinator) isQuickInputTriggerKey(key string, keyCode int) bool {
 
 // getQuickInputTriggerKey 检查按键是否应触发快捷输入模式，返回匹配的触发键类型，空串表示不触发
 func (c *Coordinator) getQuickInputTriggerKey(key string, keyCode int) string {
-	if c.config == nil || len(c.config.Input.QuickInput.TriggerKeys) == 0 {
+	if c.config == nil || len(c.config.Features.QuickInput.TriggerKeys) == 0 {
 		return ""
 	}
 	// 仅输入缓冲区为空且无候选时触发
@@ -71,7 +71,7 @@ func (c *Coordinator) getQuickInputTriggerKey(key string, keyCode int) string {
 		return ""
 	}
 	parsedKey, _ := keys.ParseKey(key)
-	for _, tk := range c.config.Input.QuickInput.TriggerKeys {
+	for _, tk := range c.config.Features.QuickInput.TriggerKeys {
 		tkKey, _ := keys.ParseKey(tk)
 		switch tkKey {
 		case keys.KeySemicolon:
@@ -118,10 +118,10 @@ func (c *Coordinator) getQuickInputTriggerKey(key string, keyCode int) string {
 // matchQuickInputTrigger 纯触发键匹配 + enabled 门禁，不含 buffer/candidates 状态门禁。
 // 状态优先级由 decideBufferedTrigger 统一裁决。
 func (c *Coordinator) matchQuickInputTrigger(key string, keyCode int) string {
-	if c.config == nil || len(c.config.Input.QuickInput.TriggerKeys) == 0 {
+	if c.config == nil || len(c.config.Features.QuickInput.TriggerKeys) == 0 {
 		return ""
 	}
-	return matchTriggerKeyInList(c.config.Input.QuickInput.TriggerKeys, key, keyCode)
+	return matchTriggerKeyInList(c.config.Features.QuickInput.TriggerKeys, key, keyCode)
 }
 
 // triggerKeyToChar 将触发键名映射到其对应的字符（供多种模式复用）。
@@ -161,8 +161,8 @@ func (c *Coordinator) setupQuickInputMode(triggerKey string) (string, bool) {
 	c.quickInputBuffer = ""
 
 	// 强制竖排：保存当前布局并切换
-	if c.config != nil && c.config.Input.QuickInput.ForceVertical {
-		c.savedLayout = c.config.UI.CandidateLayout
+	if c.config != nil && c.config.Features.QuickInput.ForceVertical {
+		c.savedLayout = c.config.UI.Candidate.Layout
 		if c.uiManager != nil {
 			c.uiManager.SetCandidateLayout(config.LayoutVertical)
 		}
@@ -417,7 +417,7 @@ func (c *Coordinator) updateQuickInputCandidates() {
 	if isCalcExpression(buf) {
 		decimalPlaces := 6
 		if c.config != nil {
-			decimalPlaces = c.config.Input.QuickInput.DecimalPlaces
+			decimalPlaces = c.config.Features.QuickInput.DecimalPlaces
 		}
 		if calcs := generateCalcCandidates(buf, decimalPlaces); len(calcs) > 0 {
 			allTexts = append(allTexts, calcs...)
@@ -538,7 +538,7 @@ func (c *Coordinator) showQuickInputUI() {
 	caretX := c.caretX
 	caretY := c.caretY
 	caretHeight := c.caretHeight
-	if c.config != nil && c.config.UI.InlinePreedit && c.compositionStartValid {
+	if c.config != nil && c.config.UI.Candidate.InlinePreedit && c.compositionStartValid {
 		caretX = c.compositionStartX
 		caretY = c.compositionStartY
 	}

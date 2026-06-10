@@ -110,7 +110,7 @@ func withQuickInputTriggers(keysList ...string) testOption {
 		if c.config == nil {
 			c.config = &config.Config{}
 		}
-		c.config.Input.QuickInput.TriggerKeys = keysList
+		c.config.Features.QuickInput.TriggerKeys = keysList
 	}
 }
 

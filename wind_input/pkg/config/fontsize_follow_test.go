@@ -9,7 +9,7 @@ import (
 // TestFontSizeFollowTheme_DefaultAndLoad 验证字号跟随主题的默认值与读取：
 // 走通用「缺失=继承默认」机制（无特例探针）——默认 true，缺失字段继承默认 true，显式值按写读。
 func TestFontSizeFollowTheme_DefaultAndLoad(t *testing.T) {
-	if !DefaultConfig().UI.FontSizeFollowTheme {
+	if !DefaultConfig().UI.Candidate.FontSizeFollowTheme {
 		t.Error("DefaultConfig 应默认 FontSizeFollowTheme=true（新装跟随主题）")
 	}
 
@@ -25,11 +25,11 @@ func TestFontSizeFollowTheme_DefaultAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom absent: %v", err)
 	}
-	if !cfg.UI.FontSizeFollowTheme {
+	if !cfg.UI.Candidate.FontSizeFollowTheme {
 		t.Error("缺失字段应继承默认 true（通用 merge-on-default）")
 	}
-	if cfg.UI.FontSize != 20 {
-		t.Errorf("font_size 应保留 20, got %v", cfg.UI.FontSize)
+	if cfg.UI.Candidate.FontSize != 20 {
+		t.Errorf("font_size 应保留 20, got %v", cfg.UI.Candidate.FontSize)
 	}
 
 	// 显式 false → 读到 false。
@@ -41,7 +41,7 @@ func TestFontSizeFollowTheme_DefaultAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom false: %v", err)
 	}
-	if cfgF.UI.FontSizeFollowTheme {
+	if cfgF.UI.Candidate.FontSizeFollowTheme {
 		t.Error("显式 font_size_follow_theme: false 应读到 false")
 	}
 }
@@ -54,7 +54,7 @@ func TestFontSizeFollowTheme_SaveLoadRoundTrip(t *testing.T) {
 
 	for _, want := range []bool{true, false} {
 		cfg := DefaultConfig()
-		cfg.UI.FontSizeFollowTheme = want
+		cfg.UI.Candidate.FontSizeFollowTheme = want
 		path := filepath.Join(dir, "rt.yaml")
 		if err := SaveTo(cfg, path); err != nil {
 			t.Fatalf("SaveTo(%v): %v", want, err)
@@ -63,8 +63,8 @@ func TestFontSizeFollowTheme_SaveLoadRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadFrom(%v): %v", want, err)
 		}
-		if got.UI.FontSizeFollowTheme != want {
-			t.Errorf("round-trip FontSizeFollowTheme: 存 %v 回读 %v（持久化未闭环）", want, got.UI.FontSizeFollowTheme)
+		if got.UI.Candidate.FontSizeFollowTheme != want {
+			t.Errorf("round-trip FontSizeFollowTheme: 存 %v 回读 %v（持久化未闭环）", want, got.UI.Candidate.FontSizeFollowTheme)
 		}
 	}
 }

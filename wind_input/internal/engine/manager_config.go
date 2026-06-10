@@ -133,7 +133,7 @@ func updateCodetableConfig(codetableEngine *codetable.Engine, spec *schema.CodeT
 }
 
 // updatePinyinConfig 更新拼音引擎配置（内部辅助函数）
-func updatePinyinConfig(pinyinEngine *pinyin.Engine, pinyinCfg *config.PinyinConfig) {
+func updatePinyinConfig(pinyinEngine *pinyin.Engine, pinyinCfg *PinyinOptions) {
 	showCodeHint := pinyinCfg.ShowCodeHint
 	if cfg := pinyinEngine.GetConfig(); cfg != nil {
 		oldShowCodeHint := cfg.ShowCodeHint
@@ -169,7 +169,7 @@ func updatePinyinConfig(pinyinEngine *pinyin.Engine, pinyinCfg *config.PinyinCon
 }
 
 // UpdatePinyinOptions 更新拼音引擎的选项（热更新）
-func (m *Manager) UpdatePinyinOptions(pinyinCfg *config.PinyinConfig) {
+func (m *Manager) UpdatePinyinOptions(pinyinCfg *PinyinOptions) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

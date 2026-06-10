@@ -102,7 +102,7 @@ func (m *Manager) UpdateStatusIndicatorFullConfig(cfg StatusWindowConfig) {
 	}))
 }
 
-// SetCandidateIndexLabels 设置用户全局序号标签覆盖（config.UI.CandidateIndexLabels）。
+// SetCandidateIndexLabels 设置用户全局序号标签覆盖（config.UI.Candidate.IndexLabels）。
 func (m *Manager) SetCandidateIndexLabels(labels string) {
 	if m.renderer != nil {
 		m.renderer.SetGlobalIndexLabels(labels)

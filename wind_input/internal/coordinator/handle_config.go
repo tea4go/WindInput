@@ -19,10 +19,10 @@ func (c *Coordinator) UpdateUIConfig(uiConfig *config.UIConfig) {
 	}
 
 	// 更新每页候选数（基础档 + 扩展档），再物化生效值并重算分页
-	if uiConfig.CandidatesPerPage > 0 {
-		c.candidatesPerPageBase = uiConfig.CandidatesPerPage
+	if uiConfig.Candidate.PerPage > 0 {
+		c.candidatesPerPageBase = uiConfig.Candidate.PerPage
 	}
-	c.candidatesPerPageExtended = uiConfig.CandidatesPerPageExtended
+	c.candidatesPerPageExtended = uiConfig.Candidate.PerPageExtended
 	c.refreshEffectivePerPage()
 	// 重新计算总页数
 	if len(c.candidates) > 0 {
@@ -39,40 +39,35 @@ func (c *Coordinator) UpdateUIConfig(uiConfig *config.UIConfig) {
 
 	// 通知 UI Manager 更新字体等设置
 	if c.uiManager != nil {
-		fontSpec := uiConfig.FontFamily
+		cand := &uiConfig.Candidate
+		fontSpec := uiConfig.Font.Family
 		if fontSpec == "" {
-			fontSpec = uiConfig.FontPath
+			fontSpec = uiConfig.Font.Path
 		}
-		c.uiManager.UpdateConfig(uiConfig.FontSize, uiConfig.FontSizeFollowTheme, fontSpec, uiConfig.HideCandidateWindow)
+		c.uiManager.UpdateConfig(cand.FontSize, cand.FontSizeFollowTheme, fontSpec, cand.HideWindow)
 		// 主题 behavior 用户覆盖层（哲学Y）：always_show_pager / show_page_number / vertical_max_width
 		// 各自的「跟随主题」开关 + 用户值。最终值 = FollowTheme ? 主题 behavior : 用户值。
 		c.uiManager.SetBehaviorOverrides(
-			uiConfig.AlwaysShowPager, uiConfig.AlwaysShowPagerFollowTheme,
-			uiConfig.ShowPageNumber, uiConfig.ShowPageNumberFollowTheme,
-			uiConfig.VerticalMaxWidth, uiConfig.VerticalMaxWidthFollowTheme,
+			cand.AlwaysShowPager, cand.AlwaysShowPagerFollowTheme,
+			cand.ShowPageNumber, cand.ShowPageNumberFollowTheme,
+			cand.VerticalMaxWidth, cand.VerticalMaxWidthFollowTheme,
 		)
 		// Update candidate layout
-		if uiConfig.CandidateLayout != "" {
-			c.uiManager.SetCandidateLayout(uiConfig.CandidateLayout)
+		if cand.Layout != "" {
+			c.uiManager.SetCandidateLayout(cand.Layout)
 		}
 		// Update hide preedit setting
-		c.uiManager.SetHidePreedit(uiConfig.InlinePreedit)
+		c.uiManager.SetHidePreedit(cand.InlinePreedit)
 		// 用户全局序号标签覆盖
-		c.uiManager.SetCandidateIndexLabels(uiConfig.CandidateIndexLabels)
+		c.uiManager.SetCandidateIndexLabels(cand.IndexLabels)
 		// Update preedit display mode
-		c.uiManager.SetPreeditMode(uiConfig.PreeditMode)
-		// 候选窗在光标上方时反转 bands 排列（由 data/config.toml 默认设为 true）
-		c.uiManager.SetFlipLayoutWhenAbove(uiConfig.FlipLayoutWhenAbove)
+		c.uiManager.SetPreeditMode(cand.PreeditMode)
+		// 候选窗在光标上方时反转 bands 排列
+		c.uiManager.SetFlipLayoutWhenAbove(cand.FlipWhenAbove)
 		// Update pager display mode override
-		c.uiManager.SetPagerBarDisplay(uiConfig.PagerBarDisplay)
-		c.uiManager.SetPageNumberDisplay(uiConfig.PageNumberDisplay)
-		// Update status indicator config (旧字段兼容)
-		c.uiManager.UpdateStatusIndicatorConfig(
-			uiConfig.StatusIndicatorDuration,
-			uiConfig.StatusIndicatorOffsetX,
-			uiConfig.StatusIndicatorOffsetY,
-		)
-		// 更新完整状态提示配置
+		c.uiManager.SetPagerBarDisplay(cand.PagerBarDisplay)
+		c.uiManager.SetPageNumberDisplay(cand.PageNumberDisplay)
+		// 更新完整状态提示配置（v1：旧顶层三字段已删除，迁移由 migrateV0toV1 完成）
 		siCfg := uiConfig.StatusIndicator
 		c.uiManager.UpdateStatusIndicatorFullConfig(ui.StatusWindowConfig{
 			Enabled:         siCfg.Enabled,
@@ -94,27 +89,25 @@ func (c *Coordinator) UpdateUIConfig(uiConfig *config.UIConfig) {
 			BorderRadius:    siCfg.BorderRadius,
 		})
 		// 设置编码提示延迟
-		c.uiManager.SetTooltipDelay(uiConfig.TooltipDelay)
+		c.uiManager.SetTooltipDelay(uiConfig.Tooltip.Delay)
 		// 设置文本渲染模式
-		if uiConfig.TextRenderMode != "" {
-			c.uiManager.SetTextRenderMode(uiConfig.TextRenderMode)
+		if uiConfig.Font.RenderMode != "" {
+			c.uiManager.SetTextRenderMode(uiConfig.Font.RenderMode)
 		}
 		// 设置候选框GDI字体参数
-		if uiConfig.GDIFontWeight > 0 || uiConfig.GDIFontScale > 0 {
-			c.uiManager.SetGDIFontParams(uiConfig.GDIFontWeight, uiConfig.GDIFontScale)
+		if uiConfig.Font.GDIWeight > 0 || uiConfig.Font.GDIScale > 0 {
+			c.uiManager.SetGDIFontParams(uiConfig.Font.GDIWeight, uiConfig.Font.GDIScale)
 		}
 		// 设置菜单GDI字体参数
-		if uiConfig.MenuFontWeight > 0 {
-			c.uiManager.SetMenuFontParams(uiConfig.MenuFontWeight, uiConfig.GDIFontScale)
+		if uiConfig.Font.MenuWeight > 0 {
+			c.uiManager.SetMenuFontParams(uiConfig.Font.MenuWeight, uiConfig.Font.GDIScale)
 		}
 		// 设置菜单字体大小
-		if uiConfig.MenuFontSize > 0 {
-			c.uiManager.SetMenuFontSize(uiConfig.MenuFontSize)
+		if uiConfig.Font.MenuSize > 0 {
+			c.uiManager.SetMenuFontSize(uiConfig.Font.MenuSize)
 		}
 		// 设置候选文本最大显示字符数
-		c.uiManager.SetMaxCandidateChars(uiConfig.MaxCandidateChars)
-		// 更新副作用 cmdbar 候选的渲染前缀
-		c.uiManager.SetCmdbarCandidatePrefix(uiConfig.GetCmdbarCandidatePrefix())
+		c.uiManager.SetMaxCandidateChars(cand.MaxChars)
 		// 更新主题风格和主题
 		c.updateThemeStyle(uiConfig)
 	}
@@ -134,10 +127,10 @@ func (c *Coordinator) UpdateToolbarConfig(toolbarConfig *config.ToolbarConfig) {
 	c.mu.Lock()
 	c.toolbarVisible = toolbarConfig.Visible
 	if c.config != nil {
-		c.config.Toolbar = *toolbarConfig
+		c.config.UI.Toolbar = *toolbarConfig
 	}
 	visible := c.toolbarVisible
-	hideInFS := toolbarConfig.IsHideInFullscreen()
+	hideInFS := toolbarConfig.HideInFullscreen
 	reducer := c.toolbarReducer
 	c.mu.Unlock()
 
@@ -165,11 +158,9 @@ func (c *Coordinator) UpdateInputConfig(inputConfig *config.InputConfig) {
 	// 只更新配置项，不更新运行时状态（fullWidth, chinesePunctuation）
 	c.punctFollowMode = inputConfig.PunctFollowMode
 
-	// 更新配置引用
+	// 更新配置引用（special_modes 已属 features 节，registry 重建见 UpdateFeaturesConfig）
 	if c.config != nil {
 		c.config.Input = *inputConfig
-		// 重建特殊模式注册表，使 special_modes 配置变更热生效（码表懒加载，仅首次激活时加载）。
-		c.specialModeReg = newSpecialModeRegistry(c.config.Input.SpecialModes, c.schemasDirs(), c.logger)
 	}
 
 	// 更新自动配对配置
@@ -203,12 +194,12 @@ func (c *Coordinator) UpdateStatsConfig(statsConfig *config.StatsConfig) {
 		return
 	}
 
-	enabled := statsConfig.IsEnabled()
-	trackEnglish := statsConfig.IsTrackEnglish()
+	enabled := statsConfig.Enabled
+	trackEnglish := statsConfig.TrackEnglish
 
 	c.mu.Lock()
 	if c.config != nil {
-		c.config.Stats = *statsConfig
+		c.config.Features.Stats = *statsConfig
 	}
 	c.mu.Unlock()
 
@@ -228,7 +219,7 @@ func (c *Coordinator) UpdateS2TConfig(s2tConfig *config.S2TConfig) {
 	defer c.mu.Unlock()
 
 	if c.config != nil {
-		c.config.S2T = *s2tConfig
+		c.config.Features.S2T = *s2tConfig
 	}
 	c.reconfigureS2T(*s2tConfig)
 	if c.hasPendingInput() {
@@ -269,7 +260,7 @@ func (c *Coordinator) UpdateHotkeyConfig(hotkeyConfig *config.HotkeyConfig) {
 }
 
 // UpdateStartupConfig 更新启动配置
-func (c *Coordinator) UpdateStartupConfig(startupConfig *config.StartupConfig) {
+func (c *Coordinator) UpdateStartupConfig(startupConfig *config.GeneralConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -279,15 +270,53 @@ func (c *Coordinator) UpdateStartupConfig(startupConfig *config.StartupConfig) {
 
 	// 更新配置引用
 	if c.config != nil {
-		c.config.Startup = *startupConfig
+		c.config.General = *startupConfig
 	}
 
 	c.logger.Debug("Startup config updated", "rememberLastState", startupConfig.RememberLastState)
 }
 
+// UpdateFeaturesConfig 更新 features 节（热更新统一入口）：stats 推送、s2t 重配、
+// 特殊模式注册表重建、cmdbar 前缀、quick_input（accent 等由消费方即时读 config）。
+// 子方法各自持锁，本方法不嵌套加锁。
+func (c *Coordinator) UpdateFeaturesConfig(featuresConfig *config.FeaturesConfig) {
+	if featuresConfig == nil {
+		return
+	}
+	c.UpdateStatsConfig(&featuresConfig.Stats)
+	c.UpdateS2TConfig(&featuresConfig.S2T)
+	c.UpdateCmdbarConfig(&featuresConfig.Cmdbar)
+
+	c.mu.Lock()
+	if c.config != nil {
+		c.config.Features = *featuresConfig
+		// 重建特殊模式注册表，使 special_modes 配置变更热生效（码表懒加载，仅首次激活时加载）。
+		c.specialModeReg = newSpecialModeRegistry(c.config.Features.SpecialModes, c.schemasDirs(), c.logger)
+	}
+	c.mu.Unlock()
+
+	c.logger.Debug("Features config updated", "specialModes", len(featuresConfig.SpecialModes))
+}
+
+// UpdateCmdbarConfig 更新命令直通车配置（热更新；v1 起 cmdbar 前缀属 features 节）。
+func (c *Coordinator) UpdateCmdbarConfig(cmdbarConfig *config.CmdbarConfig) {
+	if cmdbarConfig == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.config != nil {
+		c.config.Features.Cmdbar = *cmdbarConfig
+	}
+	if c.uiManager != nil {
+		c.uiManager.SetCmdbarCandidatePrefix(cmdbarConfig.CandidatePrefix)
+	}
+	c.logger.Debug("Cmdbar config updated")
+}
+
 // updateThemeStyle handles theme style and theme name changes
 func (c *Coordinator) updateThemeStyle(uiConfig *config.UIConfig) {
-	themeStyle := uiConfig.ThemeStyle
+	themeStyle := uiConfig.Theme.Style
 	if themeStyle == "" {
 		themeStyle = config.ThemeStyleSystem
 	}
@@ -307,8 +336,8 @@ func (c *Coordinator) updateThemeStyle(uiConfig *config.UIConfig) {
 	c.uiManager.SetDarkMode(isDark)
 
 	// Load the theme (always reload to pick up new dark mode state)
-	if uiConfig.Theme != "" {
-		c.uiManager.LoadTheme(uiConfig.Theme)
+	if uiConfig.Theme.Name != "" {
+		c.uiManager.LoadTheme(uiConfig.Theme.Name)
 		c.notifyThemeFallbackIfAny()
 	} else {
 		c.uiManager.ReapplyTheme()

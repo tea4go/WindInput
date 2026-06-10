@@ -54,118 +54,118 @@ func Section(key string) string {
 // 只覆盖通过 cmdbar 操作有实际意义的字段；复杂嵌套结构（hotkeys、special_modes 等）不暴露。
 var Fields = map[string]FieldDesc{
 	// ── UI ──────────────────────────────────────────────────────────────
-	"ui.candidate_layout": {
+	"ui.candidate.layout": {
 		Description: "候选布局 horizontal（横排）| vertical（竖排）",
 		Values:      []string{"horizontal", "vertical"},
-		Get:         func(cfg *Config) string { return string(cfg.UI.CandidateLayout) },
+		Get:         func(cfg *Config) string { return string(cfg.UI.Candidate.Layout) },
 		Set: func(cfg *Config, v string) error {
 			l := CandidateLayout(v)
 			if !l.Valid() {
-				return fmt.Errorf("invalid candidate_layout %q (horizontal|vertical)", v)
+				return fmt.Errorf("invalid layout %q (horizontal|vertical)", v)
 			}
-			cfg.UI.CandidateLayout = l
+			cfg.UI.Candidate.Layout = l
 			return nil
 		},
 	},
-	"ui.theme": {
+	"ui.theme.name": {
 		Description: "主题名称，如 default / msime 或自定义主题名",
-		Get:         func(cfg *Config) string { return cfg.UI.Theme },
+		Get:         func(cfg *Config) string { return cfg.UI.Theme.Name },
 		Set: func(cfg *Config, v string) error {
 			if v == "" {
-				return fmt.Errorf("theme cannot be empty")
+				return fmt.Errorf("theme name cannot be empty")
 			}
-			cfg.UI.Theme = v
+			cfg.UI.Theme.Name = v
 			return nil
 		},
 	},
-	"ui.theme_style": {
+	"ui.theme.style": {
 		Description: "主题风格 system（跟随系统）| light | dark",
 		Values:      []string{"system", "light", "dark"},
-		Get:         func(cfg *Config) string { return string(cfg.UI.ThemeStyle) },
+		Get:         func(cfg *Config) string { return string(cfg.UI.Theme.Style) },
 		Set: func(cfg *Config, v string) error {
 			s := ThemeStyle(v)
 			if !s.Valid() {
-				return fmt.Errorf("invalid theme_style %q (system|light|dark)", v)
+				return fmt.Errorf("invalid theme style %q (system|light|dark)", v)
 			}
-			cfg.UI.ThemeStyle = s
+			cfg.UI.Theme.Style = s
 			return nil
 		},
 	},
-	"ui.preedit_mode": {
+	"ui.candidate.preedit_mode": {
 		Description: "编码显示模式 top（独立行）| embedded（嵌入候选行前）",
 		Values:      []string{"top", "embedded"},
-		Get:         func(cfg *Config) string { return string(cfg.UI.PreeditMode) },
+		Get:         func(cfg *Config) string { return string(cfg.UI.Candidate.PreeditMode) },
 		Set: func(cfg *Config, v string) error {
 			m := PreeditMode(v)
 			if !m.Valid() {
 				return fmt.Errorf("invalid preedit_mode %q (top|embedded)", v)
 			}
-			cfg.UI.PreeditMode = m
+			cfg.UI.Candidate.PreeditMode = m
 			return nil
 		},
 	},
-	"ui.inline_preedit": {
+	"ui.candidate.inline_preedit": {
 		Description: "内嵌预编辑（true=嵌入应用输入框，false=在候选窗单独显示）",
 		IsBool:      true,
-		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.UI.InlinePreedit) },
+		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.UI.Candidate.InlinePreedit) },
 		Set: func(cfg *Config, v string) error {
 			b, err := parseBoolValue(v)
 			if err != nil {
 				return fmt.Errorf("invalid bool for inline_preedit: %w", err)
 			}
-			cfg.UI.InlinePreedit = b
+			cfg.UI.Candidate.InlinePreedit = b
 			return nil
 		},
 	},
-	"ui.hide_candidate_window": {
+	"ui.candidate.hide_window": {
 		Description: "隐藏候选窗（true=不显示候选框）",
 		IsBool:      true,
-		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.UI.HideCandidateWindow) },
+		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.UI.Candidate.HideWindow) },
 		Set: func(cfg *Config, v string) error {
 			b, err := parseBoolValue(v)
 			if err != nil {
-				return fmt.Errorf("invalid bool for hide_candidate_window: %w", err)
+				return fmt.Errorf("invalid bool for hide_window: %w", err)
 			}
-			cfg.UI.HideCandidateWindow = b
+			cfg.UI.Candidate.HideWindow = b
 			return nil
 		},
 	},
-	"ui.candidates_per_page": {
+	"ui.candidate.per_page": {
 		Description: "每页候选数（1-10）",
-		Get:         func(cfg *Config) string { return strconv.Itoa(cfg.UI.CandidatesPerPage) },
+		Get:         func(cfg *Config) string { return strconv.Itoa(cfg.UI.Candidate.PerPage) },
 		Set: func(cfg *Config, v string) error {
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 1 || n > 10 {
-				return fmt.Errorf("invalid candidates_per_page %q (1-10)", v)
+				return fmt.Errorf("invalid per_page %q (1-10)", v)
 			}
-			cfg.UI.CandidatesPerPage = n
+			cfg.UI.Candidate.PerPage = n
 			return nil
 		},
 	},
-	// ── S2T ─────────────────────────────────────────────────────────────
-	"s2t.enabled": {
+	// ── Features ─────────────────────────────────────────────────────────
+	"features.s2t.enabled": {
 		Description: "简入繁出开关",
 		IsBool:      true,
-		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.S2T.Enabled) },
+		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.Features.S2T.Enabled) },
 		Set: func(cfg *Config, v string) error {
 			b, err := parseBoolValue(v)
 			if err != nil {
 				return fmt.Errorf("invalid bool for s2t.enabled: %w", err)
 			}
-			cfg.S2T.Enabled = b
+			cfg.Features.S2T.Enabled = b
 			return nil
 		},
 	},
-	"s2t.variant": {
+	"features.s2t.variant": {
 		Description: "繁体变体 s2t（标准）| s2tw（台湾正体）| s2twp（台湾正体+词汇）| s2hk（香港繁体）",
 		Values:      []string{"s2t", "s2tw", "s2twp", "s2hk"},
-		Get:         func(cfg *Config) string { return string(cfg.S2T.Variant) },
+		Get:         func(cfg *Config) string { return string(cfg.Features.S2T.Variant) },
 		Set: func(cfg *Config, v string) error {
 			sv := S2TVariant(v)
 			if !sv.Valid() {
 				return fmt.Errorf("invalid s2t.variant %q (s2t|s2tw|s2twp|s2hk)", v)
 			}
-			cfg.S2T.Variant = sv
+			cfg.Features.S2T.Variant = sv
 			return nil
 		},
 	},
@@ -209,43 +209,43 @@ var Fields = map[string]FieldDesc{
 			return nil
 		},
 	},
-	// ── Startup ──────────────────────────────────────────────────────────
-	"startup.default_chinese_mode": {
+	// ── General ──────────────────────────────────────────────────────────
+	"general.default_chinese_mode": {
 		Description: "启动默认中文模式",
 		IsBool:      true,
-		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.Startup.DefaultChineseMode) },
+		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.General.DefaultChineseMode) },
 		Set: func(cfg *Config, v string) error {
 			b, err := parseBoolValue(v)
 			if err != nil {
 				return fmt.Errorf("invalid bool: %w", err)
 			}
-			cfg.Startup.DefaultChineseMode = b
+			cfg.General.DefaultChineseMode = b
 			return nil
 		},
 	},
-	"startup.default_full_width": {
+	"general.default_full_width": {
 		Description: "启动默认全角",
 		IsBool:      true,
-		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.Startup.DefaultFullWidth) },
+		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.General.DefaultFullWidth) },
 		Set: func(cfg *Config, v string) error {
 			b, err := parseBoolValue(v)
 			if err != nil {
 				return fmt.Errorf("invalid bool: %w", err)
 			}
-			cfg.Startup.DefaultFullWidth = b
+			cfg.General.DefaultFullWidth = b
 			return nil
 		},
 	},
-	"startup.default_chinese_punct": {
+	"general.default_chinese_punct": {
 		Description: "启动默认中文标点",
 		IsBool:      true,
-		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.Startup.DefaultChinesePunct) },
+		Get:         func(cfg *Config) string { return strconv.FormatBool(cfg.General.DefaultChinesePunct) },
 		Set: func(cfg *Config, v string) error {
 			b, err := parseBoolValue(v)
 			if err != nil {
 				return fmt.Errorf("invalid bool: %w", err)
 			}
-			cfg.Startup.DefaultChinesePunct = b
+			cfg.General.DefaultChinesePunct = b
 			return nil
 		},
 	},

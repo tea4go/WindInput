@@ -54,10 +54,10 @@ func (h *ReloadHandler) ReloadConfig() error {
 	defer h.cfgMu.Unlock()
 
 	oldCfg := *h.cfg
+	// v1 顶层节集合（与 rpcapi.ConfigSection 一致）
 	allSections := map[string]bool{
-		"startup": true, "schema": true, "hotkeys": true, "ui": true,
-		"toolbar": true, "input": true, "advanced": true, "stats": true,
-		"s2t": true,
+		"general": true, "schema": true, "hotkeys": true, "input": true,
+		"ui": true, "features": true, "compat": true, "debug": true,
 	}
 	_, err = h.ApplyConfigUpdate(&oldCfg, newCfg, allSections)
 	if err == nil {
@@ -95,19 +95,18 @@ func (h *ReloadHandler) ApplyConfigUpdate(oldCfg, newCfg *config.Config, changed
 		h.reloadActiveSchemaConfig()
 	}
 
-	// 按 section 精准热更新
+	// 按 section 精准热更新（v1 节集合）
 	if h.coord != nil {
 		if changedSections["hotkeys"] {
 			h.coord.UpdateHotkeyConfig(&newCfg.Hotkeys)
 		}
-		if changedSections["startup"] {
-			h.coord.UpdateStartupConfig(&newCfg.Startup)
+		if changedSections["general"] {
+			h.coord.UpdateStartupConfig(&newCfg.General)
 		}
 		if changedSections["ui"] {
 			h.coord.UpdateUIConfig(&newCfg.UI)
-		}
-		if changedSections["toolbar"] {
-			h.coord.UpdateToolbarConfig(&newCfg.Toolbar)
+			// toolbar 属 ui 节：可见性等变更随 ui 一并下发 reducer
+			h.coord.UpdateToolbarConfig(&newCfg.UI.Toolbar)
 		}
 		if changedSections["input"] {
 			h.coord.UpdateInputConfig(&newCfg.Input)
@@ -120,19 +119,16 @@ func (h *ReloadHandler) ApplyConfigUpdate(oldCfg, newCfg *config.Config, changed
 				}
 			}
 		}
-		if changedSections["stats"] {
-			h.coord.UpdateStatsConfig(&newCfg.Stats)
-		}
-		if changedSections["s2t"] {
-			h.coord.UpdateS2TConfig(&newCfg.S2T)
+		if changedSections["features"] {
+			h.coord.UpdateFeaturesConfig(&newCfg.Features)
 		}
 	}
 
 	// 替换活配置
 	*h.cfg = *newCfg
 
-	// advanced 变更需重启
-	return changedSections["advanced"], nil
+	// compat（host_render 白名单）/debug（日志级别）变更需重启
+	return changedSections["compat"] || changedSections["debug"], nil
 }
 
 // reloadActiveSchemaConfig 从 schema 文件重新加载引擎选项并热更新
@@ -261,14 +257,14 @@ func (h *ReloadHandler) RebuildDictCache() (int, error) {
 // 避免误改其它已缓存的拼音/双拼方案 spConverter（双拼/全拼互相覆盖 BUG）。
 // skipAbbrev：混输模式专用，true 表示关闭简拼匹配；纯拼音模式传 false。
 func (h *ReloadHandler) applyPinyinSpec(schemaID string, spec *schema.PinyinSpec, skipAbbrev bool) {
-	pinyinCfg := &config.PinyinConfig{
+	pinyinCfg := &engine.PinyinOptions{
 		ShowCodeHint:    spec.ShowCodeHint,
 		UseSmartCompose: spec.UseSmartCompose,
 		CandidateOrder:  spec.CandidateOrder,
 		SkipAbbrev:      skipAbbrev,
 	}
 	if spec.Fuzzy != nil {
-		pinyinCfg.Fuzzy = config.FuzzyPinyinConfig{
+		pinyinCfg.Fuzzy = engine.FuzzyPinyinOptions{
 			Enabled: spec.Fuzzy.Enabled,
 			ZhZ:     spec.Fuzzy.ZhZ,
 			ChC:     spec.Fuzzy.ChC,

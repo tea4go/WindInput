@@ -193,9 +193,9 @@ func (c *Coordinator) HandleMenuCommand(command string) *bridge.StatusUpdateData
 				return
 			}
 			c.UpdateHotkeyConfig(&newCfg.Hotkeys)
-			c.UpdateStartupConfig(&newCfg.Startup)
+			c.UpdateStartupConfig(&newCfg.General)
 			c.UpdateUIConfig(&newCfg.UI)
-			c.UpdateToolbarConfig(&newCfg.Toolbar)
+			c.UpdateToolbarConfig(&newCfg.UI.Toolbar)
 			c.UpdateInputConfig(&newCfg.Input)
 			c.logger.Info("Config reloaded successfully from menu")
 

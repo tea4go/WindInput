@@ -37,8 +37,8 @@ func TestLoadFrom_SelfHealsIncompatibleField(t *testing.T) {
 	}
 
 	// (b) 合法字段保留用户值
-	if cfg.UI.Theme != "robust-custom-theme" {
-		t.Errorf("合法字段未保留用户值: theme want %q got %q", "robust-custom-theme", cfg.UI.Theme)
+	if cfg.UI.Theme.Name != "robust-custom-theme" {
+		t.Errorf("合法字段未保留用户值: theme want %q got %q", "robust-custom-theme", cfg.UI.Theme.Name)
 	}
 
 	// (c) 备份文件存在
@@ -64,8 +64,8 @@ func TestLoadFrom_SelfHealsIncompatibleField(t *testing.T) {
 	if err2 != nil {
 		t.Fatalf("第二次 LoadFrom 应干净加载, got err: %v", err2)
 	}
-	if cfg2.UI.Theme != "robust-custom-theme" {
-		t.Errorf("自愈后用户值未保留: theme want %q got %q", "robust-custom-theme", cfg2.UI.Theme)
+	if cfg2.UI.Theme.Name != "robust-custom-theme" {
+		t.Errorf("自愈后用户值未保留: theme want %q got %q", "robust-custom-theme", cfg2.UI.Theme.Name)
 	}
 	if _, statErr := os.Stat(p + ".bak"); statErr == nil {
 		t.Error("文件已自愈，第二次 LoadFrom 不应再次触发降级与备份")

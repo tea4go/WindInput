@@ -159,7 +159,7 @@ func (s cmdbarIMEService) ThemeCycle(dir string) (string, error) {
 		return "", fmt.Errorf("ime.theme_cycle: no themes available")
 	}
 	s.c.cfgMu.RLock()
-	current := s.c.config.UI.Theme
+	current := s.c.config.UI.Theme.Name
 	s.c.cfgMu.RUnlock()
 
 	idx := 0
@@ -220,7 +220,7 @@ func (c *Coordinator) toggleCandidateLayoutForCmdbar() {
 			return
 		}
 		c.cfgMu.Lock()
-		c.config.UI.CandidateLayout = next
+		c.config.UI.Candidate.Layout = next
 		cfgCopy := c.config.Clone()
 		c.cfgMu.Unlock()
 		if err := config.Save(cfgCopy); err != nil {
@@ -236,9 +236,9 @@ func (c *Coordinator) toggleS2TForCmdbar() error {
 		return cmdbar.ErrServiceUnavailable
 	}
 	c.mu.Lock()
-	target := !c.config.S2T.Enabled
-	c.config.S2T.Enabled = target
-	c.reconfigureS2T(c.config.S2T)
+	target := !c.config.Features.S2T.Enabled
+	c.config.Features.S2T.Enabled = target
+	c.reconfigureS2T(c.config.Features.S2T)
 	if c.hasPendingInput() {
 		c.updateCandidates()
 		c.showUI()
@@ -255,12 +255,12 @@ func (c *Coordinator) togglePreeditModeForCmdbar() error {
 		return cmdbar.ErrServiceUnavailable
 	}
 	c.cfgMu.Lock()
-	cur := c.config.UI.PreeditMode
+	cur := c.config.UI.Candidate.PreeditMode
 	next := config.PreeditTop
 	if cur == config.PreeditTop || cur == "" {
 		next = config.PreeditEmbedded
 	}
-	c.config.UI.PreeditMode = next
+	c.config.UI.Candidate.PreeditMode = next
 	cfgCopy := c.config.Clone()
 	c.cfgMu.Unlock()
 
@@ -408,11 +408,11 @@ func (s cmdbarConfigService) applySection(key string, cfgCopy *config.Config) {
 	case "ui":
 		c.UpdateUIConfig(&cfgCopy.UI)
 	case "s2t":
-		c.UpdateS2TConfig(&cfgCopy.S2T)
+		c.UpdateS2TConfig(&cfgCopy.Features.S2T)
 	case "input":
 		c.UpdateInputConfig(&cfgCopy.Input)
 	case "startup":
-		c.UpdateStartupConfig(&cfgCopy.Startup)
+		c.UpdateStartupConfig(&cfgCopy.General)
 	}
 }
 

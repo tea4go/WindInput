@@ -43,7 +43,7 @@ type darwinForwarder struct {
 	renderer *ui.Renderer
 
 	// 候选窗主字体族: 启动时解析的本机 CJK 字体 (PingFang SC 等)。用户配置的字号/
-	// 跟随主题/序号标签会下发到 renderer, 但字体族恒用此本机解析值 —— config.UI.FontFamily
+	// 跟随主题/序号标签会下发到 renderer, 但字体族恒用此本机解析值 —— config.UI.Font.Family
 	// 可能是 Windows 字体名, 在 mac 不可解析, 套用会让汉字渲成方框。
 	fontFamily string
 
@@ -100,7 +100,7 @@ func (f *darwinForwarder) refreshThemeIfNeeded() {
 		if st, err := os.Stat(f.cfgPath); err == nil && st.ModTime().After(f.lastCfgMod) {
 			f.lastCfgMod = st.ModTime()
 			if cfg, err := config.Load(); err == nil {
-				f.cfgTheme, f.cfgStyle, f.cfgSchema = cfg.UI.Theme, cfg.UI.ThemeStyle, cfg.Schema.Active
+				f.cfgTheme, f.cfgStyle, f.cfgSchema = cfg.UI.Theme.Name, cfg.UI.Theme.Style, cfg.Schema.Active
 				f.cfgStatus = cfg.UI.StatusIndicator
 				f.applyFontFromConfig(cfg)
 			}
@@ -108,7 +108,7 @@ func (f *darwinForwarder) refreshThemeIfNeeded() {
 	}
 	if f.cfgTheme == "" {
 		if cfg, err := config.Load(); err == nil {
-			f.cfgTheme, f.cfgStyle, f.cfgSchema = cfg.UI.Theme, cfg.UI.ThemeStyle, cfg.Schema.Active
+			f.cfgTheme, f.cfgStyle, f.cfgSchema = cfg.UI.Theme.Name, cfg.UI.Theme.Style, cfg.Schema.Active
 			f.cfgStatus = cfg.UI.StatusIndicator
 			f.applyFontFromConfig(cfg)
 		}
@@ -144,12 +144,12 @@ func (f *darwinForwarder) refreshThemeIfNeeded() {
 
 // applyFontFromConfig 把用户的字号 / 字号跟随主题 / 候选序号标签覆盖应用到 renderer
 // (镜像 Win 端 ui.Manager.UpdateConfig + SetCandidateIndexLabels)。
-// 字体族恒用 f.fontFamily (启动解析的本机 CJK 族), 不套 config.UI.FontFamily —— 它可能是
+// 字体族恒用 f.fontFamily (启动解析的本机 CJK 族), 不套 config.UI.Font.Family —— 它可能是
 // Windows 字体名, 在 mac 不可解析。仅在 config mtime 变化时调用 (非每帧)。
 func (f *darwinForwarder) applyFontFromConfig(cfg *config.Config) {
-	f.renderer.SetFontFollowTheme(cfg.UI.FontSizeFollowTheme)
-	f.renderer.UpdateFont(cfg.UI.FontSize, f.fontFamily)
-	f.renderer.SetGlobalIndexLabels(cfg.UI.CandidateIndexLabels)
+	f.renderer.SetFontFollowTheme(cfg.UI.Candidate.FontSizeFollowTheme)
+	f.renderer.UpdateFont(cfg.UI.Candidate.FontSize, f.fontFamily)
+	f.renderer.SetGlobalIndexLabels(cfg.UI.Candidate.IndexLabels)
 }
 
 // startCandidateForwarder 启动 darwin 渲染转发 goroutine。
@@ -211,8 +211,8 @@ func startCandidateForwarder(srv *bridge.Server, mgr *ui.Manager,
 	// 错过, renderer 会停留在 DefaultRenderConfig 的 HidePreedit=false。提前 seed 一次,
 	// 确保首屏候选框就遵循 InlinePreedit (嵌入编码时不画独立编码栏)。
 	if cfg, err := config.Load(); err == nil {
-		f.renderer.SetHidePreedit(cfg.UI.InlinePreedit)
-		f.renderer.SetPreeditMode(cfg.UI.PreeditMode)
+		f.renderer.SetHidePreedit(cfg.UI.Candidate.InlinePreedit)
+		f.renderer.SetPreeditMode(cfg.UI.Candidate.PreeditMode)
 	}
 
 	mgr.SubscribeCommands(func(cmd uicmd.Command, candidates []ui.Candidate) {

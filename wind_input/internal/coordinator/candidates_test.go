@@ -153,7 +153,7 @@ func TestUiCursorPosDiffersFromDisplayCursorPosWithChinesePrefix(t *testing.T) {
 func TestCompositionUpdateResult(t *testing.T) {
 	t.Run("inline preedit on includes text and caret", func(t *testing.T) {
 		c := &Coordinator{
-			config:         &config.Config{UI: config.UIConfig{InlinePreedit: true}},
+			config:         &config.Config{UI: config.UIConfig{Candidate: config.UICandidateConfig{InlinePreedit: true}}},
 			inputBuffer:    "nihao",
 			inputCursorPos: 5,
 			preeditDisplay: "ni hao",
@@ -175,7 +175,7 @@ func TestCompositionUpdateResult(t *testing.T) {
 
 	t.Run("inline preedit off sends empty text", func(t *testing.T) {
 		c := &Coordinator{
-			config:         &config.Config{UI: config.UIConfig{InlinePreedit: false}},
+			config:         &config.Config{UI: config.UIConfig{Candidate: config.UICandidateConfig{InlinePreedit: false}}},
 			inputBuffer:    "nihao",
 			inputCursorPos: 5,
 			preeditDisplay: "ni hao",
@@ -209,7 +209,7 @@ func TestCompositionUpdateResult(t *testing.T) {
 
 	t.Run("step commit inline off sends empty", func(t *testing.T) {
 		c := &Coordinator{
-			config: &config.Config{UI: config.UIConfig{InlinePreedit: false}},
+			config: &config.Config{UI: config.UIConfig{Candidate: config.UICandidateConfig{InlinePreedit: false}}},
 			confirmedSegments: []ConfirmedSegment{
 				{Text: "中", ConsumedCode: "zhong"},
 			},

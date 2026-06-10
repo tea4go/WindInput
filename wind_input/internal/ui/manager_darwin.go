@@ -428,7 +428,7 @@ func (m *Manager) ConsumeThemeFallbackNotice() string { return "" }
 // GetCurrentThemeID 读 config 的 ui.theme (统一菜单主题项勾选用)。
 func (m *Manager) GetCurrentThemeID() string {
 	if cfg, err := config.Load(); err == nil {
-		return cfg.UI.Theme
+		return cfg.UI.Theme.Name
 	}
 	return ""
 }
@@ -449,7 +449,7 @@ func (m *Manager) ListThemeIDs() []string {
 
 // UpdateConfig 与 Win 版同签名 (4 参)。darwin 上候选窗字体由 forwarder 自持的
 // ui.Renderer 管理: 字号/字号跟随主题经 forwarder 读 config.toml 生效 (applyFontFromConfig),
-// 字体族恒用 forwarder 启动解析的本机 CJK 族 (config.UI.FontFamily 可能是 Win 字体名)。
+// 字体族恒用 forwarder 启动解析的本机 CJK 族 (config.UI.Font.Family 可能是 Win 字体名)。
 // 故此 stub 仅镜像 hideCandidateWindow, fontSize/fontFollowTheme/fontFamily 不在此消费。
 func (m *Manager) UpdateConfig(fontSize float64, fontFollowTheme bool, fontFamily string, hideCandidateWindow bool) {
 	m.mu.Lock()

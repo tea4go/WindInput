@@ -70,7 +70,7 @@ func (c *Coordinator) handleCandidateCopyTooltip(index int) {
 		return
 	}
 	cand := c.candidates[actualIndex]
-	codeEnabled := c.config != nil && c.config.UI.Tooltip.Code.IsEnabled()
+	codeEnabled := c.config != nil && c.config.UI.Tooltip.Code.Enabled
 	engineMgr := c.engineMgr
 	c.mu.Unlock()
 

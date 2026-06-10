@@ -63,9 +63,9 @@ func LoadRuntimeState() (*RuntimeState, error) {
 	if migratedFrom != "" {
 		if err := SaveRuntimeState(state); err != nil {
 			fmt.Fprintf(os.Stderr, "[config] warning: 状态迁移写出失败（下次启动重试） err=%v\n", err)
-		} else {
-			renameLegacyFile(migratedFrom)
 		}
+		// 旧 state.yaml 保留原地不改名（设计 §4.4 网盘混版本共存兜底）；
+		// state.toml 已存在时旧文件不会再被读到，保留零成本。
 	}
 
 	return state, nil

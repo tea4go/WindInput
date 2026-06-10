@@ -287,8 +287,8 @@ func (c *Coordinator) handleCandidateHoverChange(index, tooltipX, tooltipBelowY,
 	}
 	cand := c.candidates[actualIndex]
 	delay := 100
-	if c.config != nil && c.config.UI.TooltipDelay >= 0 {
-		delay = c.config.UI.TooltipDelay
+	if c.config != nil && c.config.UI.Tooltip.Delay >= 0 {
+		delay = c.config.UI.Tooltip.Delay
 	}
 	c.mu.Unlock()
 
@@ -679,8 +679,8 @@ func (c *Coordinator) buildUnifiedMenuState() ui.UnifiedMenuState {
 		currentSchemaID = c.engineMgr.GetCurrentSchemaID()
 	}
 	currentThemeStyle := config.ThemeStyleSystem
-	if c.config != nil && c.config.UI.ThemeStyle != "" {
-		currentThemeStyle = c.config.UI.ThemeStyle
+	if c.config != nil && c.config.UI.Theme.Style != "" {
+		currentThemeStyle = c.config.UI.Theme.Style
 	}
 	currentFilterMode := config.FilterSmart
 	if c.config != nil && c.config.Input.FilterMode != "" {
@@ -688,7 +688,7 @@ func (c *Coordinator) buildUnifiedMenuState() ui.UnifiedMenuState {
 	}
 	s2tVariant := config.S2TStandard
 	if c.config != nil {
-		s2tVariant = c.config.S2T.Variant
+		s2tVariant = c.config.Features.S2T.Variant
 	}
 	return ui.UnifiedMenuState{
 		ChineseMode:          c.chineseMode,
@@ -705,7 +705,7 @@ func (c *Coordinator) buildUnifiedMenuState() ui.UnifiedMenuState {
 		ActiveProcessName:    c.activeProcessName,
 		SkipCaretPending:     c.activeCompatRule != nil && c.activeCompatRule.SkipCaretPending,
 		PinCandidatePosition: c.activeCompatRule != nil && c.activeCompatRule.PinCandidatePosition,
-		S2TEnabled:           c.config != nil && c.config.S2T.Enabled,
+		S2TEnabled:           c.config != nil && c.config.Features.S2T.Enabled,
 		S2TVariant:           s2tVariant,
 	}
 }
@@ -770,7 +770,7 @@ func (c *Coordinator) handleUnifiedMenuAction(id int, capturedProcess string) {
 			c.logger.Info("Theme style selected from unified menu", "style", newStyle)
 			c.mu.Lock()
 			if c.config != nil {
-				c.config.UI.ThemeStyle = newStyle
+				c.config.UI.Theme.Style = newStyle
 			}
 			// Apply the style change
 			if c.uiManager != nil && c.config != nil {

@@ -192,7 +192,7 @@ func main() {
 
 	// Command line overrides config
 	if *logLevel != "" {
-		cfg.Advanced.LogLevel = *logLevel
+		cfg.Debug.LogLevel = *logLevel
 	}
 	// If restarting, wait for previous instance to fully exit
 	if *isRestart {
@@ -212,7 +212,7 @@ func main() {
 	defer releaseSingleton()
 
 	// 初始化日志系统
-	logger := setupLogger(cfg.Advanced.LogLevel)
+	logger := setupLogger(cfg.Debug.LogLevel)
 
 	logger.Info(buildvariant.DisplayName()+" IME Service starting", "version", version)
 
@@ -247,7 +247,7 @@ func main() {
 	// DeferredHandler returns safe defaults (PassThrough keys, "…" icon) until ready.
 	deferredHandler := bridge.NewDeferredHandler(logger)
 	bridgeServer := bridge.NewServer(deferredHandler, logger)
-	hostRenderMgr := bridge.NewHostRenderManager(logger, cfg.Advanced.HostRenderProcesses)
+	hostRenderMgr := bridge.NewHostRenderManager(logger, cfg.Compat.HostRenderProcesses)
 	bridgeServer.SetHostRenderManager(hostRenderMgr)
 
 	go func() {

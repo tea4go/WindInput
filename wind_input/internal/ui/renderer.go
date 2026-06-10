@@ -34,7 +34,7 @@ type RenderConfig struct {
 	ModeAccentColor   color.Color            // Inner glow border color for special modes, nil = no glow
 	PreeditMode       config.PreeditMode     // "top" (default) or "embedded" (inline before candidates); only effective when HidePreedit=false
 	IndexLabels       string                 // 主题序号标签（来自 views.index.labels / 旧 layout）；空 = 默认 1-9,0
-	GlobalIndexLabels string                 // 用户全局序号标签覆盖（config.UI.CandidateIndexLabels）；非空时覆盖 IndexLabels
+	GlobalIndexLabels string                 // 用户全局序号标签覆盖（config.UI.Candidate.IndexLabels）；非空时覆盖 IndexLabels
 	CmdbarPrefix      string                 // 副作用 cmdbar 候选 (Actions 含 ActionEffect) 的前缀符号; 空 = 不显示前缀
 
 	// 候选窗背景图（nil = 仅纯色背景）
@@ -192,7 +192,7 @@ type Renderer struct {
 
 	// Base (unscaled) values for DPI recalculation
 	baseFontSize    float64 // 有效基准字号（= 跟随主题 ? themeFontSize : userFontSize），派生 FontSize/IndexFontSize/ItemHeight
-	userFontSize    float64 // 用户全局字号（config.UI.FontSize），自定义模式下生效
+	userFontSize    float64 // 用户全局字号（config.UI.Candidate.FontSize），自定义模式下生效
 	themeFontSize   float64 // 主题 behavior.font_size（来自 SetTheme），跟随模式下生效
 	fontFollowTheme bool    // true=候选字号跟随主题 behavior.font_size；false=用 userFontSize
 	lastDPI         int     // Last DPI used for scaling; 0 means not yet set
@@ -281,7 +281,7 @@ func (r *Renderer) recomputeBaseFont() {
 	r.applyFontDerivation()
 }
 
-// SetFontFollowTheme 设置候选字号是否跟随主题 behavior.font_size（来自 config.UI.FontSizeFollowTheme）。
+// SetFontFollowTheme 设置候选字号是否跟随主题 behavior.font_size（来自 config.UI.Candidate.FontSizeFollowTheme）。
 func (r *Renderer) SetFontFollowTheme(follow bool) {
 	r.fontFollowTheme = follow
 	r.recomputeBaseFont()
@@ -547,7 +547,7 @@ func (r *Renderer) RenderModeIndicator(mode string) *image.RGBA {
 	return img
 }
 
-// SetGlobalIndexLabels 设置用户全局序号标签覆盖（config.UI.CandidateIndexLabels）。
+// SetGlobalIndexLabels 设置用户全局序号标签覆盖（config.UI.Candidate.IndexLabels）。
 // 非空时在 build 中优先于主题 IndexLabels（见 effectiveIndexLabels）。
 func (r *Renderer) SetGlobalIndexLabels(labels string) {
 	r.config.GlobalIndexLabels = labels
