@@ -438,6 +438,11 @@ func (m *Manager) GetAvailableThemeInfos() []theme.ThemeDisplayInfo {
 	return theme.NewManager(m.logger).ListAvailableThemeInfos()
 }
 
+// ListThemeIDs 返回所有可用主题 ID（内置 + 用户安装）。
+func (m *Manager) ListThemeIDs() []string {
+	return theme.NewManager(m.logger).ListAvailableThemes()
+}
+
 // ============================================================================
 // 配置 setter
 // ============================================================================
@@ -592,6 +597,9 @@ func (m *Manager) SetActiveAppPinState(enabled bool, positionsByMonitor map[stri
 func (m *Manager) OpenSettings() { m.OpenSettingsWithPage("") }
 func (m *Manager) OpenSettingsWithPage(page string) {
 	m.postCmd(uicmd.NewCommand(uicmd.CmdSettingsOpen, 0, uicmd.SettingsOpenPayload{Page: page}))
+}
+func (m *Manager) OpenSettingsWebMode(page string) {
+	m.postCmd(uicmd.NewCommand(uicmd.CmdSettingsOpen, 0, uicmd.SettingsOpenPayload{Page: page, WebMode: true}))
 }
 
 // ============================================================================

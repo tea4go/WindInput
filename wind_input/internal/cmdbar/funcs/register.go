@@ -34,9 +34,12 @@ func RegisterActions(reg *cmdbar.Registry) {
 	for _, spec := range actionFuncs() {
 		reg.Register(spec)
 	}
-	// dict.add / ime.toggle / setting.open 真实实现, 覆盖
-	// registerSideEffectStubs 的 ErrNotImplemented 占位。
+	// dict.add / ime.toggle / ime.schema / ime.theme / ime.theme_cycle / setting.open / setting.web 真实实现
 	for _, spec := range dictIMEActionFuncs() {
+		reg.Register(spec)
+	}
+	// config.get / config.set / config.toggle
+	for _, spec := range configActionFuncs() {
 		reg.Register(spec)
 	}
 }

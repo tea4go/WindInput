@@ -170,6 +170,14 @@ func (m *Manager) ShowTooltipText(text string, centerX, belowY, aboveY int) {
 	}))
 }
 
+// ListThemeIDs 返回所有可用主题 ID（内置 + 用户安装）。
+func (m *Manager) ListThemeIDs() []string {
+	if m.themeManager == nil {
+		return nil
+	}
+	return m.themeManager.ListAvailableThemes()
+}
+
 // LoadTheme loads a theme by name and applies it to all renderers
 func (m *Manager) LoadTheme(themeName string) error {
 	if m.themeManager == nil {

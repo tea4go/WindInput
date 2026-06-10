@@ -13,7 +13,7 @@ import (
 	"github.com/huanfeng/wind_input/internal/cmdbar"
 )
 
-// dictIMEActionFuncs 返回 P4 新增动作的 FuncSpec 列表。
+// dictIMEActionFuncs 返回 P4/P5 新增动作的 FuncSpec 列表。
 // 与 actionFuncs() 一同被 RegisterActions 写入 Registry, 覆盖原本的
 // stub 实现 (registerSideEffectStubs 注册的 ErrNotImplemented)。
 //
@@ -34,9 +34,30 @@ func dictIMEActionFuncs() []cmdbar.FuncSpec {
 	imeToggle := cmdbar.FuncSpec{
 		Name: "ime.toggle", Category: cmdbar.CategoryIME,
 		MinArgs: 1, MaxArgs: 1, Pure: false,
-		Description: "切换 IME 状态 (cn-en / fullshape / layout / candwin)",
+		Description: "切换 IME 状态 (cn-en / fullshape / layout / candwin / s2t / preedit / toolbar)",
 		ExampleSrc:  `ime.toggle("cn-en")`,
 		Eval:        fnIMEToggle,
+	}
+	imeSchema := cmdbar.FuncSpec{
+		Name: "ime.schema", Category: cmdbar.CategoryIME,
+		MinArgs: 1, MaxArgs: 1, Pure: false,
+		Description: "切换输入方案并持久化；id 为方案标识符，如 wubi86 / pinyin",
+		ExampleSrc:  `ime.schema("pinyin")`,
+		Eval:        fnIMESchema,
+	}
+	imeTheme := cmdbar.FuncSpec{
+		Name: "ime.theme", Category: cmdbar.CategoryIME,
+		MinArgs: 1, MaxArgs: 1, Pure: false,
+		Description: "切换主题并持久化；name 为主题名称，如 default / msime 或自定义主题名",
+		ExampleSrc:  `ime.theme("msime")`,
+		Eval:        fnIMETheme,
+	}
+	imeThemeCycle := cmdbar.FuncSpec{
+		Name: "ime.theme_cycle", Category: cmdbar.CategoryIME,
+		MinArgs: 0, MaxArgs: 1, Pure: false,
+		Description: `循环切换主题（内置 + 用户安装）并持久化；dir 可选，"next"（默认）向后，"prev" 向前`,
+		ExampleSrc:  `ime.theme_cycle()`,
+		Eval:        fnIMEThemeCycle,
 	}
 	settingOpen := cmdbar.FuncSpec{
 		Name: "setting.open", Category: cmdbar.CategorySetting,
@@ -45,8 +66,15 @@ func dictIMEActionFuncs() []cmdbar.FuncSpec {
 		ExampleSrc:  `setting.open("dict")`,
 		Eval:        fnIMESetting,
 	}
+	settingWeb := cmdbar.FuncSpec{
+		Name: "setting.web", Category: cmdbar.CategorySetting,
+		MinArgs: 1, MaxArgs: 1, Pure: false,
+		Description: "以 --web 参数启动 wind_setting，直接打开 Web 版设置界面",
+		ExampleSrc:  `setting.web("")`,
+		Eval:        fnSettingWeb,
+	}
 	return []cmdbar.FuncSpec{
-		dictAdd, imeToggle, settingOpen,
+		dictAdd, imeToggle, imeSchema, imeTheme, imeThemeCycle, settingOpen, settingWeb,
 	}
 }
 
@@ -102,6 +130,75 @@ func fnIMESetting(ctx cmdbar.EvalContext, args []string) (string, error) {
 	}
 	if err := s.IME.OpenSetting(args[0]); err != nil {
 		return "", fmt.Errorf("ime.setting: %w", err)
+	}
+	return "", nil
+}
+
+// fnIMESchema 实现 `ime.schema(id)`。id 透传给 IMEController.SetSchema，
+// 由 coordinator 调用 engineMgr 完成引擎切换并持久化。
+func fnIMESchema(ctx cmdbar.EvalContext, args []string) (string, error) {
+	s, err := svcs(ctx)
+	if err != nil {
+		return "", err
+	}
+	if s.IME == nil {
+		return "", fmt.Errorf("ime.schema: %w", cmdbar.ErrServiceUnavailable)
+	}
+	if err := s.IME.SetSchema(args[0]); err != nil {
+		return "", fmt.Errorf("ime.schema: %w", err)
+	}
+	return "", nil
+}
+
+// fnSettingWeb 实现 `setting.web(page)`。以 --web 参数启动 wind_setting，
+// 直接打开 Web 版设置界面；page 可为空字符串表示默认页。
+func fnSettingWeb(ctx cmdbar.EvalContext, args []string) (string, error) {
+	s, err := svcs(ctx)
+	if err != nil {
+		return "", err
+	}
+	if s.IME == nil {
+		return "", fmt.Errorf("setting.web: %w", cmdbar.ErrServiceUnavailable)
+	}
+	if err := s.IME.OpenSettingWeb(args[0]); err != nil {
+		return "", fmt.Errorf("setting.web: %w", err)
+	}
+	return "", nil
+}
+
+// fnIMEThemeCycle 实现 `ime.theme_cycle([dir])`。dir 为 "next"（默认）或 "prev"，
+// 按已安装主题列表（内置 + 用户安装）循环切换并持久化。
+func fnIMEThemeCycle(ctx cmdbar.EvalContext, args []string) (string, error) {
+	s, err := svcs(ctx)
+	if err != nil {
+		return "", err
+	}
+	if s.IME == nil {
+		return "", fmt.Errorf("ime.theme_cycle: %w", cmdbar.ErrServiceUnavailable)
+	}
+	dir := ""
+	if len(args) >= 1 {
+		dir = args[0]
+	}
+	next, err := s.IME.ThemeCycle(dir)
+	if err != nil {
+		return "", err
+	}
+	return next, nil
+}
+
+// fnIMETheme 实现 `ime.theme(name)`。通过 ConfigService.Set("ui.theme", name)
+// 完成主题切换+热更新+持久化，与 config.set("ui.theme", name) 等价。
+func fnIMETheme(ctx cmdbar.EvalContext, args []string) (string, error) {
+	s, err := svcs(ctx)
+	if err != nil {
+		return "", err
+	}
+	if s.Config == nil {
+		return "", fmt.Errorf("ime.theme: %w", cmdbar.ErrServiceUnavailable)
+	}
+	if err := s.Config.Set("ui.theme", args[0]); err != nil {
+		return "", fmt.Errorf("ime.theme: %w", err)
 	}
 	return "", nil
 }

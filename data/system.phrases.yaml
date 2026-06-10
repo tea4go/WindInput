@@ -349,3 +349,19 @@ phrases:
     text: '$CC("打开设置", setting.open(""))'
     weight: 2000
     position: 1
+  - code: "coss"
+    text: '$CC("设置(Web)", setting.web(""))'
+    weight: 2000
+    position: 2
+  - code: "cost"
+    text: '$CC("切简繁", ime.toggle("s2t"))'
+    weight: 2000
+  - code: "copm"
+    text: '$CC("切编码模式", ime.toggle("preedit"))'
+    weight: 2000
+  - code: "cotb"
+    text: '$CC("切工具栏", ime.toggle("toolbar"))'
+    weight: 2000
+  - code: "cots"
+    text: '$CC("切主题", ime.theme_cycle())'
+    weight: 2000

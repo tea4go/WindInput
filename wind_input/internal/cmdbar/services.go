@@ -56,11 +56,19 @@ type DictService interface {
 	AddWord(text, code string) error
 }
 
-// IMEController backs `ime.toggle` / `ime.setting`. P3 keeps interface
-// only.
+// IMEController backs `ime.toggle` / `ime.setting` / `ime.schema`. P3 keeps interface only.
+//
+// Toggle targets（P4/P5 扩展）:
+//   - cn-en, fullshape, layout, candwin（原有）
+//   - s2t     简入繁出开关
+//   - preedit 编码显示模式循环（top ↔ embedded）
+//   - toolbar 工具栏显隐
 type IMEController interface {
 	Toggle(target string) error
 	OpenSetting(page string) error
+	OpenSettingWeb(page string) error      // 以 --web 参数启动设置 Web 版
+	SetSchema(id string) error             // 切换输入方案（持久化）
+	ThemeCycle(dir string) (string, error) // 循环切换主题；dir="next"/"" 向后，dir="prev" 向前，返回新主题 ID
 }
 
 // SearchEngine is optional. The default action implementation composes
@@ -68,6 +76,15 @@ type IMEController interface {
 // alternate semantics.
 type SearchEngine interface {
 	Search(engine, query string) error
+}
+
+// ConfigService backs `config.get` / `config.set` / `config.toggle`.
+// 通过 YAML 键路径（如 "ui.candidate_layout"）提供对持久化配置字段的读写访问，
+// Set/Toggle 在修改后自动持久化并应用运行时效果。
+type ConfigService interface {
+	Get(key string) (string, error)
+	Set(key, value string) error
+	Toggle(key string) (string, error) // 循环切换枚举或翻转 bool，返回新值
 }
 
 // Services bundles every injectable side-effect dependency that action
@@ -81,5 +98,6 @@ type Services struct {
 	Proc   ProcessRunner
 	Dict   DictService
 	IME    IMEController
+	Config ConfigService // config.get / config.set / config.toggle
 	Search SearchEngine
 }
