@@ -21,7 +21,7 @@ const tempWordMaxWeight = 10000
 func (s *Store) LearnTempWord(schemaID, code, text string, addWeight, weightDelta int) error {
 	code = strings.ToLower(code)
 	text = strings.ToLower(text)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketTempWords), true)
 		if err != nil {
 			return err
@@ -61,7 +61,7 @@ func (s *Store) LearnTempWord(schemaID, code, text string, addWeight, weightDelt
 func (s *Store) GetTempWords(schemaID, code string) ([]UserWordRecord, error) {
 	code = strings.ToLower(code)
 	var results []UserWordRecord
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketTempWords), false)
 		if err != nil {
 			return nil
@@ -86,7 +86,7 @@ func (s *Store) GetTempWords(schemaID, code string) ([]UserWordRecord, error) {
 func (s *Store) SearchTempWordsPrefix(schemaID, prefix string, limit int) ([]UserWordRecord, error) {
 	prefix = strings.ToLower(prefix)
 	var results []UserWordRecord
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketTempWords), false)
 		if err != nil {
 			return nil
@@ -115,7 +115,7 @@ func (s *Store) SearchTempWordsPrefix(schemaID, prefix string, limit int) ([]Use
 func (s *Store) PromoteTempWord(schemaID, code, text string) error {
 	code = strings.ToLower(code)
 	text = strings.ToLower(text)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		tmpBucket, err := schemaSubBucket(tx, schemaID, string(bucketTempWords), false)
 		if err != nil {
 			return fmt.Errorf("TempWords bucket: %w", err)
@@ -168,7 +168,7 @@ func (s *Store) EvictTempWords(schemaID string, maxKeep int) (int, error) {
 	}
 	var all []entry
 
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketTempWords), false)
 		if err != nil {
 			return nil
@@ -199,7 +199,7 @@ func (s *Store) EvictTempWords(schemaID string, maxKeep int) (int, error) {
 
 	toDelete := all[:len(all)-maxKeep]
 	deleted := 0
-	err = s.db.Update(func(tx *bolt.Tx) error {
+	err = s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketTempWords), false)
 		if err != nil {
 			return err
@@ -219,7 +219,7 @@ func (s *Store) EvictTempWords(schemaID string, maxKeep int) (int, error) {
 // recreating the TempWords sub-bucket. Returns the number of entries removed.
 func (s *Store) ClearTempWords(schemaID string) (int, error) {
 	var count int
-	err := s.db.Update(func(tx *bolt.Tx) error {
+	err := s.update(func(tx *bolt.Tx) error {
 		parent, err := schemaBucket(tx, schemaID, true)
 		if err != nil {
 			return err
@@ -240,7 +240,7 @@ func (s *Store) ClearTempWords(schemaID string) (int, error) {
 // RemoveTempWord 删除临时词条
 func (s *Store) RemoveTempWord(schemaID, code, text string) error {
 	code = strings.ToLower(code)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketTempWords), false)
 		if err != nil || b == nil {
 			return nil
@@ -251,7 +251,7 @@ func (s *Store) RemoveTempWord(schemaID, code, text string) error {
 
 func (s *Store) TempWordCount(schemaID string) (int, error) {
 	var count int
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketTempWords), false)
 		if err != nil {
 			return nil

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-20 | Updated: 2026-05-17 -->
+<!-- Generated: 2026-04-20 | Updated: 2026-06-10 -->
 
 # internal/store
 
@@ -9,7 +9,7 @@
 ## Key Files
 | File | Description |
 |------|-------------|
-| `store.go` | `Store`：bbolt 数据库包装；`Open()`/`Close()` 生命周期；bucket 初始化（Meta、Schemas、Phrases）；`schemaBucket`/`schemaSubBucket` 导航辅助函数；`ClearSchema`/`DeleteSchema`/`ClearAllSchemas` 数据清理；Meta 键值（版本、设备 ID）管理 |
+| `store.go` | `Store`：bbolt 数据库包装；`Open()`/`Close()`/`Pause()`/`Resume()` 生命周期；**并发模型**：`db` 受 `dbMu` 保护，所有事务经 `view`/`update` 辅助方法在读锁下执行，Pause/Resume 持写锁热替换（等待在途事务排空），暂停期间读写返回导出错误 `ErrPaused`；`boltOptions` 统一打开参数（2s 文件锁超时，**禁止设 NoSync**）；bucket 初始化（`initBuckets`，Meta、Schemas、Phrases）；`schemaBucket`/`schemaSubBucket` 导航辅助函数；`ClearSchema`/`DeleteSchema`/`ClearAllSchemas` 数据清理；Meta 键值（版本、设备 ID）管理 |
 | `user_words.go` | `UserDict`：用户造词存储，按 schema 隔离；`AddUserWord` 单条原子写入；`BatchAddUserWords` 单事务批量写入（批量导入必用，避免逐条 fsync 超时）；`RemoveUserWord`/`UpdateUserWordWeight`；`SearchUserWordsPrefix`/`CountUserWords` 分页查询；权重排序 |
 | `temp_words.go` | `TempDict`：临时词存储（加词过程中的暂存），生命周期短；独立 bucket |
 | `phrases.go` | `PhraseStorage`：短语管理存储；`Put`/`Get`/`List`/`Remove`/`ResetDefaults`。**2026-05-16 schema 简化**: `PhraseRecord` 字段精简为 `(Code, Text, Weight, Position, Enabled, IsSystem)`, 删除原 `Texts`/`Name`/`Type` 派生字段, **text 是分类的唯一信任源** (`$AA(...)` 字符组 / `$SS(...)` 字符串数组 / `$CC(...)` 命令 / 普通); 包内 `legacyPhraseRecord` 仅供 migration 反序列化旧数据用; `phraseKey` 统一为 `code\x00text`; `RemovePhrase(code, text)` / `SetPhraseEnabled(code, text, enabled)` 删除 name 参数 |
@@ -18,6 +18,7 @@
 | `freq.go` | `FreqStorage`：词频统计存储；`Update`/`Get`/`GetTop`/`Delete` |
 | `write_buffer.go` | `WriteBuffer`：构建模式的原子事务写入缓冲，用于批量操作；`Put`/`Delete`/`Commit` |
 | `write_buffer_test.go` | WriteBuffer 单元测试 |
+| `pause_race_test.go` | Pause/Resume 热替换与并发读写的回归测试（需 `go test -race` 才能发挥作用） |
 | `freq_test.go`/`phrases_test.go`/`shadow_test.go`/`user_words_test.go` | 各模块单元测试 |
 
 ## For AI Agents
@@ -27,8 +28,8 @@
   - 顶层桶: `Meta`（全局 kv）/ `Schemas` / `Phrases`
   - `Schemas` → `{schemaID}` (各方案数据) → `UserWords` / `TempWords` / `Shadow` / `Freq` (子桶)
   - **Shadow 按方案桶**: pin 和 delete 都写 `Schemas/{schemaID}/Shadow`。短语候选的"删除"已改走 `PhraseRecord.Enabled = false` (跨方案的"禁用"语义), Shadow 不再需要全局桶。详见 `shadow.go` 顶部注释
-- **初始化**：`Store.init()` 创建必要 bucket 并初始化 Meta 默认值（版本=1、设备 ID=UUID）
-- **事务语义**：所有写操作通过 `db.Update()`、读操作通过 `db.View()` 保证原子性
+- **初始化**：`initBuckets(db)` 创建必要 bucket 并初始化 Meta 默认值（版本=1、设备 ID=UUID）；由 `Open` 和持写锁的 `Resume` 直接调用（不经 view/update，避免自死锁）
+- **事务语义**：所有写操作通过 `s.update()`、读操作通过 `s.view()` 保证原子性；二者在 `dbMu` 读锁下执行，暂停期间返回 `ErrPaused`。**新增读写方法必须走这两个辅助方法，不要直接访问 `s.db`**（会重新引入 Pause 竞争）
 - **schema 隔离**：不同方案的词典、频率、规则独立存储在各自的 bucket 下，切换方案时通过 `schemaBucket(schemaID, create=true)` 导航
 - **WriteBuffer**：批量 Put/Delete 操作时先缓冲，最后 `Commit()` 一次性写入 bbolt，减少事务次数
 - **清理操作**：

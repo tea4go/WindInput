@@ -107,7 +107,7 @@ func NewDailyStat(date string) *DailyStat {
 // GetDailyStat 获取指定日期的统计
 func (s *Store) GetDailyStat(date string) (*DailyStat, error) {
 	var stat *DailyStat
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return nil
@@ -129,7 +129,7 @@ func (s *Store) GetDailyStat(date string) (*DailyStat, error) {
 // GetDailyStats 获取日期范围内的统计 (含首尾，key 按字典序)
 func (s *Store) GetDailyStats(from, to string) ([]*DailyStat, error) {
 	var results []*DailyStat
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return nil
@@ -160,7 +160,7 @@ func (s *Store) PutDailyStat(stat *DailyStat) error {
 	if err != nil {
 		return fmt.Errorf("marshal DailyStat: %w", err)
 	}
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return fmt.Errorf("Stats bucket not found")
@@ -176,7 +176,7 @@ func (s *Store) PutDailyStat(stat *DailyStat) error {
 // GetStatsMeta 获取全局元数据
 func (s *Store) GetStatsMeta() (*StatsMeta, error) {
 	var meta StatsMeta
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return nil
@@ -200,7 +200,7 @@ func (s *Store) PutStatsMeta(meta *StatsMeta) error {
 	if err != nil {
 		return fmt.Errorf("marshal StatsMeta: %w", err)
 	}
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return fmt.Errorf("Stats bucket not found")
@@ -216,7 +216,7 @@ func (s *Store) PutStatsMeta(meta *StatsMeta) error {
 // PruneStats 清理指定日期之前的统计数据，返回删除条数
 func (s *Store) PruneStats(before string) (int, error) {
 	var count int
-	err := s.db.Update(func(tx *bolt.Tx) error {
+	err := s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return nil
@@ -244,7 +244,7 @@ func (s *Store) PruneStats(before string) (int, error) {
 func (s *Store) RecalculateStatsMeta() (*StatsMeta, error) {
 	meta := &StatsMeta{}
 	var dates []string
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return nil
@@ -308,7 +308,7 @@ func calculateStreaks(dates []string) (current, max int, lastDay string) {
 
 // ClearStats 清空所有统计数据
 func (s *Store) ClearStats() error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return nil
@@ -338,7 +338,7 @@ func (s *Store) ClearStats() error {
 // CountStatsDays 返回统计数据的天数
 func (s *Store) CountStatsDays() (int, error) {
 	var count int
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return nil

@@ -68,7 +68,7 @@ func parsePhraseKey(key []byte) (code, identifier string) {
 // GetAllPhrases returns every phrase in the Phrases bucket.
 func (s *Store) GetAllPhrases() ([]PhraseRecord, error) {
 	var results []PhraseRecord
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return nil
@@ -89,7 +89,7 @@ func (s *Store) GetAllPhrases() ([]PhraseRecord, error) {
 // GetPhrasesByCode returns all phrases whose code matches exactly.
 func (s *Store) GetPhrasesByCode(code string) ([]PhraseRecord, error) {
 	var results []PhraseRecord
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return nil
@@ -111,7 +111,7 @@ func (s *Store) GetPhrasesByCode(code string) ([]PhraseRecord, error) {
 
 // AddPhrase inserts or overwrites a phrase record.
 func (s *Store) AddPhrase(rec PhraseRecord) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return fmt.Errorf("Phrases bucket not found")
@@ -138,7 +138,7 @@ func (s *Store) UpdatePhrase(rec PhraseRecord) error {
 // db 由极旧版本升级、migration 未跑过, 可能仍有 legacy key 残留 —— 由
 // ForEach 扫描兜底删除匹配的 rec.Text 即可。
 func (s *Store) RemovePhrase(code, text string) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return nil
@@ -149,7 +149,7 @@ func (s *Store) RemovePhrase(code, text string) error {
 
 // RemovePhrasesBatch deletes multiple phrases in a single transaction.
 func (s *Store) RemovePhrasesBatch(items []PhraseRecord) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return nil
@@ -203,7 +203,7 @@ func removePhraseInBucket(b *bolt.Bucket, code, text string) error {
 // SetPhraseEnabled toggles the Enabled flag of an existing phrase, identified
 // by (code, text)。
 func (s *Store) SetPhraseEnabled(code, text string, enabled bool) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return fmt.Errorf("Phrases bucket not found")
@@ -229,7 +229,7 @@ func (s *Store) SetPhraseEnabled(code, text string, enabled bool) error {
 // PhraseCount returns the total number of phrase entries.
 func (s *Store) PhraseCount() (int, error) {
 	var count int
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return nil
@@ -242,7 +242,7 @@ func (s *Store) PhraseCount() (int, error) {
 
 // ClearAllPhrases removes all phrases by deleting and recreating the Phrases bucket.
 func (s *Store) ClearAllPhrases() error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		if tx.Bucket(bucketPhrases) != nil {
 			if err := tx.DeleteBucket(bucketPhrases); err != nil {
 				return fmt.Errorf("delete Phrases bucket: %w", err)
@@ -256,7 +256,7 @@ func (s *Store) ClearAllPhrases() error {
 // SeedPhrases inserts records only when the Phrases bucket is empty.
 // If phrases already exist the call is a no-op.
 func (s *Store) SeedPhrases(records []PhraseRecord) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return fmt.Errorf("Phrases bucket not found")

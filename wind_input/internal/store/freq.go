@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -36,7 +37,7 @@ func freqKey(code, text string) string {
 // Returns a zero FreqRecord (Count==0) if the key does not exist yet.
 func (s *Store) GetFreq(schemaID, code, text string) (FreqRecord, error) {
 	var rec FreqRecord
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketFreq), false)
 		if err != nil {
 			// Bucket not yet created → treat as empty.
@@ -54,7 +55,7 @@ func (s *Store) GetFreq(schemaID, code, text string) (FreqRecord, error) {
 // IncrementFreq increments Count by 1, updates LastUsed to now (Unix seconds),
 // and increments Streak (capped at 255) for the given (code, text) pair.
 func (s *Store) IncrementFreq(schemaID, code, text string) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketFreq), true)
 		if err != nil {
 			return fmt.Errorf("IncrementFreq: %w", err)
@@ -82,7 +83,7 @@ func (s *Store) IncrementFreq(schemaID, code, text string) error {
 // ResetStreak sets Streak to 0 for the given (code, text) pair.
 // If the record does not exist, this is a no-op.
 func (s *Store) ResetStreak(schemaID, code, text string) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketFreq), false)
 		if err != nil {
 			// Bucket not yet created → nothing to reset.
@@ -120,7 +121,7 @@ type FreqEntry struct {
 // If prefix is empty, returns all entries. Results are limited by limit (0 = unlimited).
 func (s *Store) SearchFreqPrefix(schemaID, prefix string, limit int) ([]FreqEntry, error) {
 	var results []FreqEntry
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketFreq), false)
 		if err != nil {
 			return nil
@@ -161,7 +162,7 @@ func (s *Store) SearchFreqPrefix(schemaID, prefix string, limit int) ([]FreqEntr
 
 // PutFreq sets a FreqRecord directly for the given (code, text) pair.
 func (s *Store) PutFreq(schemaID, code, text string, rec FreqRecord) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketFreq), true)
 		if err != nil {
 			return fmt.Errorf("PutFreq: %w", err)
@@ -176,7 +177,7 @@ func (s *Store) PutFreq(schemaID, code, text string, rec FreqRecord) error {
 
 // DeleteFreq removes a single frequency record.
 func (s *Store) DeleteFreq(schemaID, code, text string) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketFreq), false)
 		if err != nil {
 			return nil
@@ -189,7 +190,7 @@ func (s *Store) DeleteFreq(schemaID, code, text string) error {
 // recreating the Freq sub-bucket. Returns the number of entries removed.
 func (s *Store) ClearAllFreq(schemaID string) (int, error) {
 	var count int
-	err := s.db.Update(func(tx *bolt.Tx) error {
+	err := s.update(func(tx *bolt.Tx) error {
 		parent, err := schemaBucket(tx, schemaID, true)
 		if err != nil {
 			return fmt.Errorf("ClearAllFreq: %w", err)
@@ -213,7 +214,7 @@ func (s *Store) ClearAllFreq(schemaID string) (int, error) {
 // GetAllFreq returns all FreqRecords for the given schema, keyed by "code:text".
 func (s *Store) GetAllFreq(schemaID string) (map[string]FreqRecord, error) {
 	result := make(map[string]FreqRecord)
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketFreq), false)
 		if err != nil {
 			// Bucket not yet created → return empty map.
@@ -366,17 +367,7 @@ func (s *Store) flushFreqDeltas() error {
 	s.freqDeltas = make(map[freqDeltaKey]int)
 	s.freqMu.Unlock()
 
-	if s.db == nil {
-		// 暂停状态：将增量放回，等 Resume 后下次 flush 再处理
-		s.freqMu.Lock()
-		for k, v := range deltas {
-			s.freqDeltas[k] += v
-		}
-		s.freqMu.Unlock()
-		return nil
-	}
-
-	return s.db.Update(func(tx *bolt.Tx) error {
+	err := s.update(func(tx *bolt.Tx) error {
 		for key, delta := range deltas {
 			b, err := schemaSubBucket(tx, key.schemaID, string(bucketFreq), true)
 			if err != nil {
@@ -404,4 +395,14 @@ func (s *Store) flushFreqDeltas() error {
 		}
 		return nil
 	})
+	if errors.Is(err, ErrPaused) {
+		// 暂停状态：将增量放回，等 Resume 后下次 flush 再处理
+		s.freqMu.Lock()
+		for k, v := range deltas {
+			s.freqDeltas[k] += v
+		}
+		s.freqMu.Unlock()
+		return nil
+	}
+	return err
 }

@@ -88,7 +88,7 @@ type ShadowRecord struct {
 func (s *Store) GetShadowRules(schemaID, code string) (ShadowRecord, error) {
 	code = strings.ToLower(code)
 	var rec ShadowRecord
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketShadow), false)
 		if err != nil {
 			return nil
@@ -129,7 +129,7 @@ func shadowMatchDel(d ShadowDelete, word, candID string) bool {
 // candID 非空时按 id 匹配, 否则按 word; word 仍持久化以便手输规则 / UI 显示。
 func (s *Store) PinShadow(schemaID, code, word, candID string, position int) error {
 	code = strings.ToLower(code)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketShadow), true)
 		if err != nil {
 			return err
@@ -169,7 +169,7 @@ func (s *Store) PinShadow(schemaID, code, word, candID string, position int) err
 // candID 非空时按 id 匹配, 否则按 word。
 func (s *Store) DeleteShadow(schemaID, code, word, candID string) error {
 	code = strings.ToLower(code)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketShadow), true)
 		if err != nil {
 			return err
@@ -212,7 +212,7 @@ func (s *Store) DeleteShadow(schemaID, code, word, candID string) error {
 // If a record becomes empty the key is deleted entirely.
 func (s *Store) RemoveShadowRule(schemaID, code, word, candID string) error {
 	code = strings.ToLower(code)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketShadow), false)
 		if err != nil {
 			return nil
@@ -251,7 +251,7 @@ func (s *Store) RemoveShadowRule(schemaID, code, word, candID string) error {
 // in the given schema. 用于 UI 统计显示。
 func (s *Store) ShadowRuleCount(schemaID string) (int, error) {
 	var count int
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketShadow), false)
 		if err != nil {
 			return nil
@@ -265,7 +265,7 @@ func (s *Store) ShadowRuleCount(schemaID string) (int, error) {
 // GetAllShadowRules returns all code→ShadowRecord entries in the schema bucket.
 func (s *Store) GetAllShadowRules(schemaID string) (map[string]ShadowRecord, error) {
 	result := make(map[string]ShadowRecord)
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketShadow), false)
 		if err != nil {
 			return nil

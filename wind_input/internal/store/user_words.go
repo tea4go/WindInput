@@ -54,7 +54,7 @@ func hasPrefix(key, prefix []byte) bool {
 // is updated to max(old, new).
 func (s *Store) AddUserWord(schemaID, code, text string, weight int) error {
 	code = strings.ToLower(code)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketUserWords), true)
 		if err != nil {
 			return err
@@ -84,7 +84,7 @@ func (s *Store) AddUserWord(schemaID, code, text string, weight int) error {
 func (s *Store) BatchAddUserWords(schemaID string, words []UserWordRecord) (int, error) {
 	count := 0
 	now := time.Now().Unix()
-	err := s.db.Update(func(tx *bolt.Tx) error {
+	err := s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketUserWords), true)
 		if err != nil {
 			return err
@@ -125,7 +125,7 @@ func (s *Store) BatchAddUserWords(schemaID string, words []UserWordRecord) (int,
 // RemoveUserWord deletes a user word entry from the given schema.
 func (s *Store) RemoveUserWord(schemaID, code, text string) error {
 	code = strings.ToLower(code)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketUserWords), false)
 		if err != nil {
 			return fmt.Errorf("RemoveUserWord: %w", err)
@@ -138,7 +138,7 @@ func (s *Store) RemoveUserWord(schemaID, code, text string) error {
 // Returns an error if the entry does not exist.
 func (s *Store) UpdateUserWordWeight(schemaID, code, text string, newWeight int) error {
 	code = strings.ToLower(code)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketUserWords), false)
 		if err != nil {
 			return fmt.Errorf("UpdateUserWordWeight: %w", err)
@@ -165,7 +165,7 @@ func (s *Store) UpdateUserWordWeight(schemaID, code, text string, newWeight int)
 func (s *Store) GetUserWords(schemaID, code string) ([]UserWordRecord, error) {
 	code = strings.ToLower(code)
 	var results []UserWordRecord
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketUserWords), false)
 		if err != nil {
 			return nil
@@ -190,7 +190,7 @@ func (s *Store) GetUserWords(schemaID, code string) ([]UserWordRecord, error) {
 func (s *Store) SearchUserWordsPrefix(schemaID, prefix string, limit int) ([]UserWordRecord, error) {
 	prefix = strings.ToLower(prefix)
 	var results []UserWordRecord
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketUserWords), false)
 		if err != nil {
 			return nil
@@ -218,7 +218,7 @@ func (s *Store) SearchUserWordsPrefix(schemaID, prefix string, limit int) ([]Use
 // recreating the UserWords sub-bucket. Returns the number of entries removed.
 func (s *Store) ClearUserWords(schemaID string) (int, error) {
 	var count int
-	err := s.db.Update(func(tx *bolt.Tx) error {
+	err := s.update(func(tx *bolt.Tx) error {
 		parent, err := schemaBucket(tx, schemaID, true)
 		if err != nil {
 			return err
@@ -238,7 +238,7 @@ func (s *Store) ClearUserWords(schemaID string) (int, error) {
 // UserWordCount returns the total number of user word entries for schemaID.
 func (s *Store) UserWordCount(schemaID string) (int, error) {
 	var count int
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketUserWords), false)
 		if err != nil {
 			return nil
@@ -254,7 +254,7 @@ func (s *Store) UserWordCount(schemaID string) (int, error) {
 // count reaches a multiple of countThreshold.
 func (s *Store) OnWordSelected(schemaID, code, text string, boostDelta, countThreshold int) error {
 	code = strings.ToLower(code)
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketUserWords), true)
 		if err != nil {
 			return fmt.Errorf("OnWordSelected: %w", err)

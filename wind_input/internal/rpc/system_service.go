@@ -198,15 +198,18 @@ func (s *SystemService) Shutdown(args *rpcapi.Empty, reply *rpcapi.SystemShutdow
 func (s *SystemService) Pause(args *rpcapi.Empty, reply *rpcapi.SystemPauseReply) error {
 	s.logger.Info("RPC System.Pause: pausing service")
 
+	// 先设置服务暂停状态（拒绝非系统请求），再关库——顺序不可颠倒：
+	// 反过来会留下「库已关、请求仍被接受」的窗口。store 侧的 dbMu 写锁
+	// 会等待在途事务排空，二者配合消除暂停期间的访问竞争。
+	s.server.SetPaused(true)
+
 	// 关闭数据库
 	if s.store != nil {
 		if err := s.store.Pause(); err != nil {
+			s.server.SetPaused(false) // 关库失败则回滚暂停状态，避免服务卡在半暂停
 			return fmt.Errorf("pause store: %w", err)
 		}
 	}
-
-	// 设置服务暂停状态（拒绝非系统请求）
-	s.server.SetPaused(true)
 
 	reply.OK = true
 	s.logger.Info("RPC System.Pause: service paused")

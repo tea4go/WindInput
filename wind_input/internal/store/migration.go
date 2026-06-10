@@ -19,7 +19,7 @@ import (
 // 实现: 用 legacyPhraseRecord 读旧字段 (新 PhraseRecord 已删 Texts/Name/Type),
 // 重组完成后写新 PhraseRecord (只含 Code/Text/Weight/Position/Enabled/IsSystem)。
 func (s *Store) MigratePhraseRecordsToAA() (migrated int, err error) {
-	err = s.db.Update(func(tx *bolt.Tx) error {
+	err = s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return nil
@@ -102,7 +102,7 @@ func (s *Store) RefreshSystemPhraseWeights(yamlMap map[string]int) (refreshed in
 	if len(yamlMap) == 0 {
 		return 0, nil
 	}
-	err = s.db.Update(func(tx *bolt.Tx) error {
+	err = s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return nil

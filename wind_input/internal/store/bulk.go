@@ -58,7 +58,7 @@ func (s *Store) AllTempWords(schemaID string) ([]UserWordBulkEntry, error) {
 // allUserWordEntries 从指定方案的指定子 bucket 中读取所有词条。
 func allUserWordEntries(s *Store, schemaID, subBucket string) ([]UserWordBulkEntry, error) {
 	var results []UserWordBulkEntry
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		schemas := tx.Bucket(bucketSchemas)
 		if schemas == nil {
 			return nil
@@ -102,7 +102,7 @@ func (s *Store) BulkPutTempWords(schemaID string, entries []UserWordBulkEntry) e
 
 // bulkPutUserWordEntries 将词条写入指定方案的指定子 bucket。
 func bulkPutUserWordEntries(s *Store, schemaID, subBucket string, entries []UserWordBulkEntry) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, subBucket, true)
 		if err != nil {
 			return fmt.Errorf("bulkPutUserWordEntries: %w", err)
@@ -129,7 +129,7 @@ func bulkPutUserWordEntries(s *Store, schemaID, subBucket string, entries []User
 // AllFreq 导出指定方案的所有词频数据。
 func (s *Store) AllFreq(schemaID string) ([]FreqBulkEntry, error) {
 	var results []FreqBulkEntry
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		schemas := tx.Bucket(bucketSchemas)
 		if schemas == nil {
 			return nil
@@ -169,7 +169,7 @@ func (s *Store) AllFreq(schemaID string) ([]FreqBulkEntry, error) {
 
 // BulkPutFreq 批量写入词频数据（追加，不清空已有数据）。
 func (s *Store) BulkPutFreq(schemaID string, entries []FreqBulkEntry) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketFreq), true)
 		if err != nil {
 			return fmt.Errorf("BulkPutFreq: %w", err)
@@ -195,7 +195,7 @@ func (s *Store) BulkPutFreq(schemaID string, entries []FreqBulkEntry) error {
 // AllShadow 导出指定方案的所有 Shadow 规则（保留原始字节）。
 func (s *Store) AllShadow(schemaID string) ([]ShadowBulkEntry, error) {
 	var results []ShadowBulkEntry
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		schemas := tx.Bucket(bucketSchemas)
 		if schemas == nil {
 			return nil
@@ -223,7 +223,7 @@ func (s *Store) AllShadow(schemaID string) ([]ShadowBulkEntry, error) {
 
 // BulkPutShadow 批量写入 Shadow 规则（追加，不清空已有数据）。
 func (s *Store) BulkPutShadow(schemaID string, entries []ShadowBulkEntry) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := schemaSubBucket(tx, schemaID, string(bucketShadow), true)
 		if err != nil {
 			return fmt.Errorf("BulkPutShadow: %w", err)
@@ -251,7 +251,7 @@ func (s *Store) BulkPutSchemaPhrases(_ string, _ []PhraseBulkEntry) error {
 // AllGlobalPhrases 导出全局短语（保留原始字节）。
 func (s *Store) AllGlobalPhrases() ([]PhraseBulkEntry, error) {
 	var results []PhraseBulkEntry
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return nil
@@ -276,7 +276,7 @@ func (s *Store) AllGlobalPhrases() ([]PhraseBulkEntry, error) {
 // BulkPutGlobalPhrases 批量写入全局短语（追加，不清空已有数据）。
 // 使用 RawKey 实现字节级 round-trip。
 func (s *Store) BulkPutGlobalPhrases(entries []PhraseBulkEntry) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketPhrases)
 		if b == nil {
 			return fmt.Errorf("Phrases bucket not found")
@@ -293,7 +293,7 @@ func (s *Store) BulkPutGlobalPhrases(entries []PhraseBulkEntry) error {
 // AllStats 导出所有每日统计（保留原始 JSON）。
 func (s *Store) AllStats() ([]DailyStatBulkEntry, error) {
 	var results []DailyStatBulkEntry
-	err := s.db.View(func(tx *bolt.Tx) error {
+	err := s.view(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketStats)
 		if b == nil {
 			return nil
@@ -317,7 +317,7 @@ func (s *Store) AllStats() ([]DailyStatBulkEntry, error) {
 
 // BulkPutStats 批量写入每日统计（追加，不清空已有数据）。
 func (s *Store) BulkPutStats(entries []DailyStatBulkEntry) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(bucketStats)
 		if err != nil {
 			return fmt.Errorf("BulkPutStats create Stats: %w", err)
