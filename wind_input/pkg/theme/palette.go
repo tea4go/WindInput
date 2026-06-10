@@ -63,7 +63,9 @@ func (p *PaletteSchema) UnmarshalYAML(value *yaml.Node) error {
 				return fmt.Errorf("colors.meta: %w", err)
 			}
 		case "primary":
-			if err := valNode.Decode(&p.Primary); err != nil {
+			// yaml.v3 反射对泛型实例化类型 *LightDark[string] 无法可靠识别 yaml.Unmarshaler；
+			// 直接调用方法，绕过反射派发。
+			if err := p.Primary.UnmarshalYAML(valNode); err != nil {
 				return fmt.Errorf("colors.primary: %w", err)
 			}
 		case "derive":
@@ -79,7 +81,7 @@ func (p *PaletteSchema) UnmarshalYAML(value *yaml.Node) error {
 				continue
 			}
 			var c Color
-			if err := valNode.Decode(&c); err != nil {
+			if err := c.UnmarshalYAML(valNode); err != nil {
 				return fmt.Errorf("colors.%s: %w", key, err)
 			}
 			p.Tokens[key] = c
