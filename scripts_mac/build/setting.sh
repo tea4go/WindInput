@@ -25,6 +25,14 @@ REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 SETTING_DIR="$REPO_DIR/wind_setting"
 APP="$SETTING_DIR/build/bin/wind_setting.app"
 
+# 版本号: 与 build.sh 同源读 VERSION (剥 UTF-8 BOM + 空白); 缺失则回落 dev。
+# 必须经 -X main.version 注入, 否则设置应用 GetVersion() 永远是 version.go 默认值 "dev"。
+# 注意: macOS BSD tr 不支持 \xHH, 不能用 tr 剥 BOM; 用 LC_ALL=C sed 删首行 BOM 字节。
+APP_VERSION="dev"
+if [[ -f "$REPO_DIR/VERSION" ]]; then
+    APP_VERSION=$(LC_ALL=C sed $'1s/^\xef\xbb\xbf//' "$REPO_DIR/VERSION" | tr -d ' \t\r\n')
+fi
+
 bold() { printf "\033[1m%s\033[0m\n" "$*"; }
 err()  { printf "\033[31m[错误] %s\033[0m\n" "$*" >&2; }
 
@@ -35,11 +43,12 @@ UNIVERSAL="${WIND_MAC_UNIVERSAL:-0}"
 # 自动连 WindInput_debug/rpc.sock (与 debug 服务对齐), 实现配置分离; 再把 bundleID/名称
 # 改成 debug 变体并重命名 .app, 与正式设置应用共存。
 VARIANT_SUFFIX=""
-LDFLAGS_EXTRA=""
+# 版本号始终注入; 变体标志 (debug) 由下方按需追加。
+LDFLAGS_EXTRA="-X main.version=$APP_VERSION"
 for arg in "$@"; do
     case "$arg" in
         --universal) UNIVERSAL=1 ;;
-        --debug)     VARIANT_SUFFIX="_debug"; LDFLAGS_EXTRA="-X github.com/huanfeng/wind_input/pkg/buildvariant.variant=debug" ;;
+        --debug)     VARIANT_SUFFIX="_debug"; LDFLAGS_EXTRA="$LDFLAGS_EXTRA -X github.com/huanfeng/wind_input/pkg/buildvariant.variant=debug" ;;
         *) err "未知参数: $arg"; exit 1 ;;
     esac
 done
@@ -70,12 +79,9 @@ bold "==> [2/5] 安装前端依赖"
 bold "==> [3/5] 构建前端 (vite, 跳过 vue-tsc 严格门禁)"
 ( cd frontend && ./node_modules/.bin/vite build )
 
-bold "==> [4/5] 编译 + 打包 (wails build -s 跳过前端步骤, 自签名; $WAILS_PLATFORM)"
-if [[ -n "$LDFLAGS_EXTRA" ]]; then
-    wails build -s -platform "$WAILS_PLATFORM" -ldflags "$LDFLAGS_EXTRA"
-else
-    wails build -s -platform "$WAILS_PLATFORM"
-fi
+bold "==> [4/5] 编译 + 打包 (wails build -s 跳过前端步骤, 自签名; $WAILS_PLATFORM; version=$APP_VERSION)"
+# LDFLAGS_EXTRA 恒含 main.version (debug 时再加变体标志), 故始终传 -ldflags。
+wails build -s -platform "$WAILS_PLATFORM" -ldflags "$LDFLAGS_EXTRA"
 
 [[ -d "$APP" ]] || { err "未生成 $APP"; exit 1; }
 

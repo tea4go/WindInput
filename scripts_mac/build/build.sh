@@ -52,9 +52,10 @@ else
 fi
 
 # -------- 版本号 --------
+# 注意: macOS BSD tr 不支持 \xHH, 不能用 tr 剥 BOM; 用 LC_ALL=C sed 删首行 BOM 字节再去空白。
 APP_VERSION="dev"
 if [[ -f "$REPO_DIR/VERSION" ]]; then
-    APP_VERSION=$(tr -d '\xef\xbb\xbf \t\r\n' < "$REPO_DIR/VERSION")
+    APP_VERSION=$(LC_ALL=C sed $'1s/^\xef\xbb\xbf//' "$REPO_DIR/VERSION" | tr -d ' \t\r\n')
 fi
 
 bold()  { printf "\033[1m%s\033[0m\n" "$*"; }
