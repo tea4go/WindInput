@@ -86,7 +86,7 @@ func (a *App) ExportPerfData() (*rpcapi.SystemDumpPerfReply, error) {
 	}
 
 	defaultFilename := fmt.Sprintf("perf_%s.jsonl", time.Now().Format("20060102_150405"))
-	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	path, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出性能诊断数据",
 		DefaultFilename: defaultFilename,
 		Filters: []wailsRuntime.FileFilter{
@@ -434,7 +434,7 @@ func (a *App) OpenExternalURL(url string) error {
 
 // SelectDataDir 打开目录选择对话框
 func (a *App) SelectDataDir() (string, error) {
-	return wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	return a.openDirectoryDialog(wailsRuntime.OpenDialogOptions{
 		Title: "选择数据存储目录",
 	})
 }

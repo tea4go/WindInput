@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -42,4 +43,29 @@ func (a *App) emitEvent(name string, data ...any) {
 		return
 	}
 	wailsRuntime.EventsEmit(a.ctx, name, data...)
+}
+
+// openFileDialog Web 安全的文件选择对话框。
+// Web 模式下文件对话框依赖 Wails ctx，不可用；返回 error 由调用方向前端报错。
+func (a *App) openFileDialog(opts wailsRuntime.OpenDialogOptions) (string, error) {
+	if a.webMode {
+		return "", fmt.Errorf("文件选择对话框在 Web 模式下不可用")
+	}
+	return wailsRuntime.OpenFileDialog(a.ctx, opts)
+}
+
+// saveFileDialog Web 安全的文件保存对话框。
+func (a *App) saveFileDialog(opts wailsRuntime.SaveDialogOptions) (string, error) {
+	if a.webMode {
+		return "", fmt.Errorf("文件保存对话框在 Web 模式下不可用")
+	}
+	return wailsRuntime.SaveFileDialog(a.ctx, opts)
+}
+
+// openDirectoryDialog Web 安全的目录选择对话框。
+func (a *App) openDirectoryDialog(opts wailsRuntime.OpenDialogOptions) (string, error) {
+	if a.webMode {
+		return "", fmt.Errorf("目录选择对话框在 Web 模式下不可用")
+	}
+	return wailsRuntime.OpenDirectoryDialog(a.ctx, opts)
 }

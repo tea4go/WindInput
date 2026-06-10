@@ -794,7 +794,7 @@ func (a *App) ExportSchema(schemaID string) (string, error) {
 	}
 	defaultName := fmt.Sprintf("%s-%s.zip", schemaID, version)
 
-	savePath, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	savePath, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出输入方案",
 		DefaultFilename: defaultName,
 		Filters: []wailsRuntime.FileFilter{
@@ -881,7 +881,7 @@ type ImportPreview struct {
 
 // PreviewImportSchema 打开文件对话框，读取 ZIP 中所有方案的预览信息（不解压）
 func (a *App) PreviewImportSchema() (*ImportPreview, error) {
-	openPath, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	openPath, err := a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title: "导入输入方案",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "方案包 (*.zip, *.7z)", Pattern: "*.zip;*.7z"},
@@ -1173,7 +1173,7 @@ func (a *App) ExportSchemas(schemaIDs []string) (string, error) {
 	}
 	defaultName := fmt.Sprintf("%s-%s.zip", primaryID, version)
 
-	savePath, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	savePath, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出输入方案",
 		DefaultFilename: defaultName,
 		Filters: []wailsRuntime.FileFilter{

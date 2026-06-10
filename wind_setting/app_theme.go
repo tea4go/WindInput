@@ -28,7 +28,7 @@ type ImportThemeResult struct {
 // ImportThemeFromFile 打开系统文件选择对话框，读取并导入 yaml 主题文件。
 // force=true 时覆盖同名主题。冲突时在结果中回传 FilePath，供前端确认覆盖时调用 ImportThemeFromFilePath 无需重新选择文件。
 func (a *App) ImportThemeFromFile(force bool) ImportThemeResult {
-	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	path, err := a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title: "选择主题文件",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "YAML 主题文件 (*.yaml)", Pattern: "*.yaml"},

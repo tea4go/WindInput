@@ -13,7 +13,7 @@ import (
 // ExportSchemaData 导出指定方案的数据为 .wdict.yaml 文件
 func (a *App) ExportSchemaData(schemaID string, sections []string, schemaName string) (*ImportExportResult, error) {
 	defaultFilename := fmt.Sprintf("%s_%s.wdict.yaml", schemaID, time.Now().Format("20060102"))
-	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	path, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出词库数据",
 		DefaultFilename: defaultFilename,
 		Filters: []wailsRuntime.FileFilter{
@@ -64,7 +64,7 @@ func (a *App) ExportSchemaData(schemaID string, sections []string, schemaName st
 func (a *App) ExportPhrasesFile(format string) (*ImportExportResult, error) {
 	_ = format // 保留入参以维持前端调用签名稳定
 	defaultFilename := fmt.Sprintf("phrases_%s.wdict.yaml", time.Now().Format("20060102"))
-	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	path, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出短语",
 		DefaultFilename: defaultFilename,
 		Filters: []wailsRuntime.FileFilter{
@@ -102,7 +102,7 @@ func (a *App) ExportPhrasesFile(format string) (*ImportExportResult, error) {
 // ExportFullBackup 全量备份为 ZIP
 func (a *App) ExportFullBackup(schemaIDs []string, schemaNames map[string]string, includePhrases bool) (*ImportExportResult, error) {
 	defaultFilename := fmt.Sprintf("wind_backup_%s.zip", time.Now().Format("20060102"))
-	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	path, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出完整备份",
 		DefaultFilename: defaultFilename,
 		Filters: []wailsRuntime.FileFilter{

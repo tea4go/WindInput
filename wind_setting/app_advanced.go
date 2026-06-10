@@ -40,7 +40,7 @@ func (a *App) GetBackupPreview() BackupPreviewResult {
 // BackupData 弹出保存对话框并执行备份
 func (a *App) BackupData() BackupResult {
 	defaultName := "WindInput_backup_" + time.Now().Format("2006-01-02") + ".zip"
-	zipPath, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	zipPath, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "选择备份保存位置",
 		DefaultFilename: defaultName,
 		Filters: []wailsRuntime.FileFilter{
@@ -61,7 +61,7 @@ func (a *App) BackupData() BackupResult {
 
 // GetRestorePreview 弹出打开对话框并返回备份文件预览
 func (a *App) GetRestorePreview() RestorePreviewResult {
-	zipPath, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	zipPath, err := a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title: "选择备份文件",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "备份文件 (*.zip)", Pattern: "*.zip"},

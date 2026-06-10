@@ -138,7 +138,7 @@ func (a *App) SwitchUserDictSchema(schemaID string) error {
 
 // ImportUserDict 从文件导入用户词库
 func (a *App) ImportUserDict() (*ImportExportResult, error) {
-	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	path, err := a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title: "导入用户词库",
 		Filters: []wailsRuntime.FileFilter{
 			{
@@ -178,7 +178,7 @@ func (a *App) ImportUserDict() (*ImportExportResult, error) {
 func (a *App) ExportUserDict() (*ImportExportResult, error) {
 	defaultFilename := fmt.Sprintf("user_dict_%s.txt", time.Now().Format("20060102"))
 
-	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	path, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出用户词库",
 		DefaultFilename: defaultFilename,
 		Filters: []wailsRuntime.FileFilter{
@@ -215,7 +215,7 @@ func (a *App) ExportUserDict() (*ImportExportResult, error) {
 
 // ImportUserDictForSchema 导入指定方案的用户词库
 func (a *App) ImportUserDictForSchema(schemaID string) (*ImportExportResult, error) {
-	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	path, err := a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title: "导入用户词库",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "词库文件 (*.txt)", Pattern: "*.txt"},
@@ -247,7 +247,7 @@ func (a *App) ImportUserDictForSchema(schemaID string) (*ImportExportResult, err
 // ExportUserDictForSchema 导出指定方案的用户词库
 func (a *App) ExportUserDictForSchema(schemaID string) (*ImportExportResult, error) {
 	defaultFilename := fmt.Sprintf("user_dict_%s_%s.txt", schemaID, time.Now().Format("20060102"))
-	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	path, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出用户词库",
 		DefaultFilename: defaultFilename,
 		Filters: []wailsRuntime.FileFilter{

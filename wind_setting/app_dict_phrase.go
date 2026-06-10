@@ -411,7 +411,7 @@ type phraseYAMLFile struct {
 
 // ImportPhrases 导入短语（简化 YAML 格式）
 func (a *App) ImportPhrases() (*ImportExportResult, error) {
-	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	path, err := a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title: "导入短语",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "短语文件 (*.yaml, *.yml)", Pattern: "*.yaml;*.yml"},
@@ -464,7 +464,7 @@ func (a *App) ImportPhrases() (*ImportExportResult, error) {
 // ExportPhrases 导出短语（简化 YAML 格式）
 func (a *App) ExportPhrases() (*ImportExportResult, error) {
 	defaultFilename := fmt.Sprintf("phrases_%s.yaml", time.Now().Format("20060102"))
-	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	path, err := a.saveFileDialog(wailsRuntime.SaveDialogOptions{
 		Title:           "导出短语",
 		DefaultFilename: defaultFilename,
 		Filters: []wailsRuntime.FileFilter{
@@ -523,7 +523,7 @@ func (a *App) ReloadPhrases() error {
 // PickExePath 弹出文件选择对话框, 只筛选 .exe, 返回所选路径或空串 (取消)。
 // 用于命令直通车 "命令·打开" 子编辑器的 "程序" 子类型。
 func (a *App) PickExePath() (string, error) {
-	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	return a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title: "选择程序",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "可执行文件 (*.exe)", Pattern: "*.exe"},
@@ -535,7 +535,7 @@ func (a *App) PickExePath() (string, error) {
 // PickAnyPath 弹出文件选择对话框, 不过滤类型, 返回所选路径或空串 (取消)。
 // 用于命令直通车 "命令·打开" 子编辑器的 "文件" 子类型。
 func (a *App) PickAnyPath() (string, error) {
-	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	return a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title: "选择文件",
 	})
 }

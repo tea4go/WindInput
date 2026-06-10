@@ -46,7 +46,7 @@ type ZipSchemaPreviewItem struct {
 // SelectImportFile 打开文件选择对话框
 func (a *App) SelectImportFile(format string) (string, error) {
 	filters := importFileFilters(format)
-	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+	path, err := a.openFileDialog(wailsRuntime.OpenDialogOptions{
 		Title:   "选择导入文件",
 		Filters: filters,
 	})
