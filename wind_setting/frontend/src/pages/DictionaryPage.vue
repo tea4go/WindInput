@@ -17,180 +17,178 @@
       </Button>
     </div>
 
-    <template>
-      <!-- ===== 内容卡片（包含类型选择器 + 面板） ===== -->
-      <div
-        class="dict-content-card"
-        data-search-anchor="dictionary.action.manage"
-      >
-        <!-- ===== 类型选择器行 ===== -->
-        <DictTypeSelector :schemas="allSchemaStatuses" v-model="selection">
-          <template #actions>
-            <!-- 导入/导出（短语模式 或 方案非混输用户词库 或 混输候选调整） -->
-            <Button
-              v-if="showImportExport"
-              variant="outline"
-              size="sm"
-              @click="openIeDialog('import')"
-            >
-              导入
-            </Button>
-            <Button
-              v-if="showImportExport"
-              variant="outline"
-              size="sm"
-              @click="openIeDialog('export')"
-            >
-              导出
-            </Button>
-            <!-- 方案操作菜单 -->
-            <DropdownMenu v-if="selection.mode === 'schema'">
-              <DropdownMenuTrigger as-child>
-                <Button variant="destructive" size="sm">操作 ▾</Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  class="text-destructive"
-                  @click="handleResetCurrentSchema"
-                >
-                  重置当前方案
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  class="text-destructive"
-                  @click="handleResetAllSchemas"
-                >
-                  重置所有方案
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  v-if="selectedSchemaOrphaned"
-                  class="text-destructive"
-                  @click="handleDeleteOrphanedSchema"
-                >
-                  删除当前方案
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </template>
-        </DictTypeSelector>
+    <!-- ===== 内容卡片（包含类型选择器 + 面板） ===== -->
+    <div
+      class="dict-content-card"
+      data-search-anchor="dictionary.action.manage"
+    >
+      <!-- ===== 类型选择器行 ===== -->
+      <DictTypeSelector :schemas="allSchemaStatuses" v-model="selection">
+        <template #actions>
+          <!-- 导入/导出（短语模式 或 方案非混输用户词库 或 混输候选调整） -->
+          <Button
+            v-if="showImportExport"
+            variant="outline"
+            size="sm"
+            @click="openIeDialog('import')"
+          >
+            导入
+          </Button>
+          <Button
+            v-if="showImportExport"
+            variant="outline"
+            size="sm"
+            @click="openIeDialog('export')"
+          >
+            导出
+          </Button>
+          <!-- 方案操作菜单 -->
+          <DropdownMenu v-if="selection.mode === 'schema'">
+            <DropdownMenuTrigger as-child>
+              <Button variant="destructive" size="sm">操作 ▾</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                class="text-destructive"
+                @click="handleResetCurrentSchema"
+              >
+                重置当前方案
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                class="text-destructive"
+                @click="handleResetAllSchemas"
+              >
+                重置所有方案
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                v-if="selectedSchemaOrphaned"
+                class="text-destructive"
+                @click="handleDeleteOrphanedSchema"
+              >
+                删除当前方案
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </template>
+      </DictTypeSelector>
 
-        <!-- ===== 残留方案警告 ===== -->
-        <div
-          v-if="selection.mode === 'schema' && selectedSchemaOrphaned"
-          class="orphan-banner"
-        >
-          ⚠ 此方案数据为历史残留（仅可查看和删除，不可添加）
+      <!-- ===== 残留方案警告 ===== -->
+      <div
+        v-if="selection.mode === 'schema' && selectedSchemaOrphaned"
+        class="orphan-banner"
+      >
+        ⚠ 此方案数据为历史残留（仅可查看和删除，不可添加）
+      </div>
+
+      <!-- ===== 快捷短语面板 ===== -->
+      <PhrasePanel
+        v-if="selection.mode === 'phrases'"
+        ref="phrasePanelRef"
+        @loading="onLoading"
+      />
+
+      <!-- ===== 方案模式 ===== -->
+      <template v-if="selection.mode === 'schema' && selection.schemaId">
+        <!-- 方案子标签页 -->
+        <div class="schema-sub-tabs">
+          <button
+            v-for="tab in schemaTabs"
+            :key="tab.key"
+            :class="['sub-tab', { active: schemaSubTab === tab.key }]"
+            @click="switchSchemaSubTab(tab.key)"
+          >
+            {{ tab.label }}
+          </button>
         </div>
 
-        <!-- ===== 快捷短语面板 ===== -->
-        <PhrasePanel
-          v-if="selection.mode === 'phrases'"
-          ref="phrasePanelRef"
-          @loading="onLoading"
-        />
+        <!-- 混输方案提示（用户词库/临时词库继承自主方案 + 拼音共享桶） -->
+        <div
+          v-if="
+            selectedSchemaIsMixed &&
+            (schemaSubTab === 'userdict' || schemaSubTab === 'temp')
+          "
+          class="mixed-hint"
+        >
+          <p>此方案为混输方案，{{ schemaSubTabLabel }}继承自主方案。</p>
+          <p class="dict-note">
+            请在主方案<a
+              v-if="selectedSchemaPrimaryAvailable"
+              class="primary-link"
+              href="#"
+              @click.prevent="switchToPrimary"
+              >「{{ selectedSchemaPrimaryName }}」</a
+            ><strong v-else>「{{ selectedSchemaPrimaryName }}」</strong
+            >中管理。拼音部分在<a
+              v-if="mixedPinyinAvailable"
+              class="primary-link"
+              href="#"
+              @click.prevent="switchToMixedPinyin"
+              >「{{ mixedPinyinName }}」</a
+            ><strong v-else>「{{ mixedPinyinName }}」</strong>中管理。
+          </p>
+        </div>
 
-        <!-- ===== 方案模式 ===== -->
-        <template v-if="selection.mode === 'schema' && selection.schemaId">
-          <!-- 方案子标签页 -->
-          <div class="schema-sub-tabs">
-            <button
-              v-for="tab in schemaTabs"
-              :key="tab.key"
-              :class="['sub-tab', { active: schemaSubTab === tab.key }]"
-              @click="switchSchemaSubTab(tab.key)"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
+        <!-- 双拼方案：所有 4 个子面板都共享全拼方案的"pinyin"桶，引导用户切换 -->
+        <div v-if="selectedSchemaIsShuangpinOnly" class="mixed-hint">
+          <p>
+            当前为双拼方案，所有词库数据与<a
+              v-if="selectedSchemaPrimaryAvailable"
+              class="primary-link"
+              href="#"
+              @click.prevent="switchToPrimary"
+              >「{{ selectedSchemaPrimaryName }}」</a
+            ><strong v-else>「{{ selectedSchemaPrimaryName }}」</strong
+            >共享，请在主方案中统一管理。
+          </p>
+        </div>
 
-          <!-- 混输方案提示（用户词库/临时词库继承自主方案 + 拼音共享桶） -->
-          <div
-            v-if="
-              selectedSchemaIsMixed &&
-              (schemaSubTab === 'userdict' || schemaSubTab === 'temp')
-            "
-            class="mixed-hint"
-          >
-            <p>此方案为混输方案，{{ schemaSubTabLabel }}继承自主方案。</p>
-            <p class="dict-note">
-              请在主方案<a
-                v-if="selectedSchemaPrimaryAvailable"
-                class="primary-link"
-                href="#"
-                @click.prevent="switchToPrimary"
-                >「{{ selectedSchemaPrimaryName }}」</a
-              ><strong v-else>「{{ selectedSchemaPrimaryName }}」</strong
-              >中管理。拼音部分在<a
-                v-if="mixedPinyinAvailable"
-                class="primary-link"
-                href="#"
-                @click.prevent="switchToMixedPinyin"
-                >「{{ mixedPinyinName }}」</a
-              ><strong v-else>「{{ mixedPinyinName }}」</strong>中管理。
-            </p>
-          </div>
-
-          <!-- 双拼方案：所有 4 个子面板都共享全拼方案的"pinyin"桶，引导用户切换 -->
-          <div v-if="selectedSchemaIsShuangpinOnly" class="mixed-hint">
-            <p>
-              当前为双拼方案，所有词库数据与<a
-                v-if="selectedSchemaPrimaryAvailable"
-                class="primary-link"
-                href="#"
-                @click.prevent="switchToPrimary"
-                >「{{ selectedSchemaPrimaryName }}」</a
-              ><strong v-else>「{{ selectedSchemaPrimaryName }}」</strong
-              >共享，请在主方案中统一管理。
-            </p>
-          </div>
-
-          <!-- 各子面板 — 用 :key 强制切换方案时重建 -->
-          <!-- 双拼方案：所有 4 个 tab 都隐藏，统一在主方案管理 -->
-          <template
-            v-if="
-              !selectedSchemaIsShuangpinOnly &&
-              (!selectedSchemaIsMixed ||
-                schemaSubTab === 'shadow' ||
-                schemaSubTab === 'freq')
-            "
-          >
-            <UserDictPanel
-              v-if="schemaSubTab === 'userdict'"
-              ref="userDictPanelRef"
-              :key="'ud-' + selection.schemaId"
-              :schema-id="selection.schemaId"
-              :readonly="selectedSchemaOrphaned"
-              @loading="onLoading"
-              @schema-changed="handleSchemaChanged"
-            />
-            <FreqPanel
-              v-if="schemaSubTab === 'freq'"
-              ref="freqPanelRef"
-              :key="'fq-' + selection.schemaId"
-              :schema-id="selection.schemaId"
-              :schema-name="selectedSchemaName"
-              @loading="onLoading"
-            />
-            <TempDictPanel
-              v-if="schemaSubTab === 'temp'"
-              ref="tempDictPanelRef"
-              :key="'tp-' + selection.schemaId"
-              :schema-id="selection.schemaId"
-              @loading="onLoading"
-              @schema-changed="handleSchemaChanged"
-            />
-            <ShadowPanel
-              v-if="schemaSubTab === 'shadow'"
-              ref="shadowPanelRef"
-              :key="'sw-' + selection.schemaId"
-              :schema-id="selection.schemaId"
-              :readonly="selectedSchemaOrphaned"
-              @loading="onLoading"
-              @schema-changed="handleSchemaChanged"
-            />
-          </template>
+        <!-- 各子面板 — 用 :key 强制切换方案时重建 -->
+        <!-- 双拼方案：所有 4 个 tab 都隐藏，统一在主方案管理 -->
+        <template
+          v-if="
+            !selectedSchemaIsShuangpinOnly &&
+            (!selectedSchemaIsMixed ||
+              schemaSubTab === 'shadow' ||
+              schemaSubTab === 'freq')
+          "
+        >
+          <UserDictPanel
+            v-if="schemaSubTab === 'userdict'"
+            ref="userDictPanelRef"
+            :key="'ud-' + selection.schemaId"
+            :schema-id="selection.schemaId"
+            :readonly="selectedSchemaOrphaned"
+            @loading="onLoading"
+            @schema-changed="handleSchemaChanged"
+          />
+          <FreqPanel
+            v-if="schemaSubTab === 'freq'"
+            ref="freqPanelRef"
+            :key="'fq-' + selection.schemaId"
+            :schema-id="selection.schemaId"
+            :schema-name="selectedSchemaName"
+            @loading="onLoading"
+          />
+          <TempDictPanel
+            v-if="schemaSubTab === 'temp'"
+            ref="tempDictPanelRef"
+            :key="'tp-' + selection.schemaId"
+            :schema-id="selection.schemaId"
+            @loading="onLoading"
+            @schema-changed="handleSchemaChanged"
+          />
+          <ShadowPanel
+            v-if="schemaSubTab === 'shadow'"
+            ref="shadowPanelRef"
+            :key="'sw-' + selection.schemaId"
+            :schema-id="selection.schemaId"
+            :readonly="selectedSchemaOrphaned"
+            @loading="onLoading"
+            @schema-changed="handleSchemaChanged"
+          />
         </template>
-      </div>
-    </template>
+      </template>
+    </div>
 
     <!-- 导入/导出对话框 -->
     <ImportExportDialog
@@ -434,6 +432,7 @@ async function loadSchemaStatuses() {
     }
   } catch (e) {
     console.error("加载方案状态失败", e);
+    toast(`加载方案列表失败: ${e}`, "error");
   }
 }
 
