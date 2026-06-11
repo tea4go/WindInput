@@ -378,6 +378,29 @@ func (e *Engine) isPossiblePinyinSequence(prefix string) bool {
 	return trie.HasPrefix(remainder)
 }
 
+// suppressNonPinyinPreedit 在超长降级输入已不构成合法拼音序列时，清除拼音音节分段，
+// 使预编辑区回退到连写原始编码（混输打英文的典型场景）。
+//
+// 背景：超过 maxCodeLen 的输入会被降级为拼音并按音节切分显示（如 "ni hao"）。
+// 但当输入已是无效拼音（如 "abcde"、"nihaozk"）时，仍按音节切碎成 "ab cd e"
+// 这类碎片分段会很别扭，连写英文更自然。判定复用 isPossiblePinyinSequence：
+// 其为 false 即表示「已经是无效的拼音」。
+//
+// 安全性：混输模式已关闭简拼（SkipAbbrev），碎片化分段只可能来自非拼音输入；
+// 临时拼音模式依赖简拼且走独立路径（manager_temp_pinyin），不经过本引擎，故不受影响。
+func (e *Engine) suppressNonPinyinPreedit(input string, result *ConvertResult) {
+	if result == nil || result.PreeditDisplay == "" {
+		return
+	}
+	if e.isPossiblePinyinSequence(input) {
+		return
+	}
+	result.PreeditDisplay = ""
+	result.CompletedSyllables = nil
+	result.PartialSyllable = ""
+	result.HasPartial = false
+}
+
 // isWholeSyllablePinyin 判断 prefix 是否恰好由完整拼音音节构成（切在音节边界、无残缺尾音节）。
 //
 // 用于顶码歧义裁决：只有"整音节"前缀才允许放行顶码覆盖拼音保护，这样无论裁决倒向
@@ -583,6 +606,9 @@ func (e *Engine) convertPinyinOnly(input string, maxCandidates int) *ConvertResu
 		result.HasPartial = pinyinResult.Composition.HasPartial()
 	}
 
+	// 无效拼音时取消音节分段，回退为连写英文显示
+	e.suppressNonPinyinPreedit(input, result)
+
 	// 超长输入也需要全码自动顶屏判定（长码精确唯一无后继时上屏）
 	result.ShouldCommit, result.CommitText = e.recheckAutoCommit(input, candidates, len(pinyinResult.Candidates) > 0)
 
@@ -724,6 +750,9 @@ func (e *Engine) convertMixedOverflow(input string, maxCandidates int) *ConvertR
 		}
 	}
 
+	// 无效拼音时取消音节分段，回退为连写英文显示
+	e.suppressNonPinyinPreedit(input, result)
+
 	// 超长输入也需要全码自动顶屏判定（长码精确唯一无后继时上屏）
 	result.ShouldCommit, result.CommitText = e.recheckAutoCommit(input, merged, len(pinyinCandidates) > 0)
 
@@ -742,6 +771,7 @@ func (e *Engine) convertMixed(input string, maxCandidates int) *ConvertResult {
 	var codetableCandidates []candidate.Candidate
 	var pinyinCandidates []candidate.Candidate
 	var codetableResult *codetable.ConvertResult
+	var pinyinResult *pinyin.PinyinConvertResult
 	var ctElapsed, pyElapsed time.Duration
 
 	var wg sync.WaitGroup
@@ -765,7 +795,7 @@ func (e *Engine) convertMixed(input string, maxCandidates int) *ConvertResult {
 		go func() {
 			defer wg.Done()
 			pyStart := time.Now()
-			pinyinResult := e.pinyinEngine.ConvertEx(input, maxCandidates)
+			pinyinResult = e.pinyinEngine.ConvertEx(input, maxCandidates)
 			pinyinCandidates = pinyinResult.Candidates
 			pinyinHasFullSyllable = pinyinResult.HasFullSyllable
 			pyElapsed = time.Since(pyStart)
@@ -891,6 +921,25 @@ func (e *Engine) convertMixed(input string, maxCandidates int) *ConvertResult {
 		Candidates: merged,
 		IsEmpty:    len(merged) == 0,
 		Timing:     &mixedTiming{Codetable: ctElapsed, Pinyin: pyElapsed, Merge: mergeElapsed, Shadow: shadowElapsed},
+	}
+
+	// 输入 ≤ maxCodeLen 且构成合法的多音节拼音序列时，启用拼音预编辑分段显示
+	// （如 "nihao"→"ni hao"、"anweishi"→"an wei shi"）。与 convertMixedOverflow 行为对齐。
+	//
+	// 用 isPossiblePinyinSequence 前置门控（而非像 overflow 那样先设置再 suppress）：
+	// suppressNonPinyinPreedit 只清 PreeditDisplay/音节字段、不会重置 IsPinyinFallback，
+	// 而 convertMixed 处于正常码长区间，必须避免把单元音五笔码（"aaaa"）或残缺拼音
+	// 误标为拼音降级而残留 IsPinyinFallback。要求 CompletedSyllables>=2：单音节
+	// （如五笔 "an"）无可视分段且常与码表冲突，保持码表编码显示。
+	if pinyinResult != nil && pinyinResult.Composition != nil &&
+		len(pinyinResult.Composition.CompletedSyllables) >= 2 &&
+		e.isPossiblePinyinSequence(input) {
+		result.IsPinyinFallback = true
+		result.PreeditDisplay = pinyinResult.PreeditDisplay
+		result.FullPinyinInput = pinyinResult.FullPinyinInput
+		result.CompletedSyllables = pinyinResult.Composition.CompletedSyllables
+		result.PartialSyllable = pinyinResult.Composition.PartialSyllable
+		result.HasPartial = pinyinResult.Composition.HasPartial()
 	}
 
 	// Shadow 可能删词，需在应用后重新评估自动上屏条件（不能直接继承子引擎的 ShouldCommit）

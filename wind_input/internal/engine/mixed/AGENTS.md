@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-01 | Updated: 2026-05-15 -->
+<!-- Generated: 2026-04-01 | Updated: 2026-06-11 -->
 
 # internal/engine/mixed
 
@@ -10,6 +10,8 @@
 - 1 码：仅查码表
 - 2~4 码：并行查码表+拼音，码表优先（双向夹击权重）
 - >4 码：降级为纯拼音（`IsPinyinFallback=true`）
+
+`IsPinyinFallback` 不再是 ">maxCodeLen" 专属标记：**2~maxCodeLen 码内构成合法多音节拼音序列**（`Composition.CompletedSyllables>=2` 且 `isPossiblePinyinSequence` 为真，如 `nihao`/`woai`）时，`convertMixed` 也会置 `IsPinyinFallback=true` 并填充音节分段预编辑区（`ni hao`），码表候选仍并列参与。该置位用 `isPossiblePinyinSequence` **前置门控**（非 overflow 路径"先设后 suppress"），因为 `suppressNonPinyinPreedit` 不重置 `IsPinyinFallback`，正常码长区间须避免单元音五笔码（`aaaa`）/残缺拼音残留该标记；单音节（`CompletedSyllables<2`，如五笔 `an`）保持码表编码显示、不分段。
 
 ## Key Files
 | File | Description |
