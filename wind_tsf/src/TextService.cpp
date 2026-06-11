@@ -3277,12 +3277,20 @@ BOOL CTextService::RefreshTextInputContext()
     if (!_hasTextInputContext && _pThreadMgr != nullptr)
     {
         ITfDocumentMgr* pDocMgr = nullptr;
-        if (SUCCEEDED(_pThreadMgr->GetFocus(&pDocMgr)) && pDocMgr != nullptr)
+        HRESULT hr = _pThreadMgr->GetFocus(&pDocMgr);
+        if (SUCCEEDED(hr) && pDocMgr != nullptr)
         {
             _hasTextInputContext = _DocMgrHasEditableContext(pDocMgr);
             pDocMgr->Release();
             if (_hasTextInputContext)
                 WIND_LOG_DEBUG_FMT(L"RefreshTextInputContext: late editable context focusSession=%llu", _focusSessionId);
+            else
+                WIND_LOG_DEBUG_FMT(L"RefreshTextInputContext: docmgr present but not editable focusSession=%llu", _focusSessionId);
+        }
+        else
+        {
+            WIND_LOG_DEBUG_FMT(L"RefreshTextInputContext: no focused docmgr hr=0x%08X focusSession=%llu",
+                (uint32_t)hr, _focusSessionId);
         }
     }
     return _hasTextInputContext;

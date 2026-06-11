@@ -341,12 +341,15 @@ STDAPI CKeyEventSink::OnTestKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM 
     {
         BOOL hasSession = _pTextService->HasActiveComposition() || _hasCandidates;
         BOOL hasTextCtx = _pTextService->RefreshTextInputContext();
+        WIND_LOG_DEBUG_FMT(L"compat.toggle_key test_down: vk=0x%02X resolvedVK=0x%02X mods=0x%04X hasSession=%d hasTextCtx=%d",
+            (uint32_t)wParam, resolvedVK, modifiers, (int)hasSession, (int)hasTextCtx);
         if (!hasSession && !hasTextCtx)
         {
             *pfEaten = FALSE;
             _LogKeyDecision(L"test_down", _pTextService->GetFocusSessionId(), wParam, modifiers, HotkeyType::ToggleMode,
                             _pTextService->IsChineseMode(), FALSE, _hasCandidates,
                             FALSE, FALSE, L"toggle_no_text_ctx");
+            WindLogForegroundProcessInfo(4, L"compat.toggle_no_textctx.host");
             return S_OK;
         }
         *pfEaten = TRUE;
@@ -748,12 +751,16 @@ STDAPI CKeyEventSink::OnKeyDown(ITfContext* pContext, WPARAM wParam, LPARAM lPar
         // guard must be repeated here to prevent _pendingKeyUpKey from being set.
         {
             BOOL hasSession = _pTextService->HasActiveComposition() || _hasCandidates;
-            if (!hasSession && !_pTextService->RefreshTextInputContext())
+            BOOL hasTextCtx = _pTextService->RefreshTextInputContext();
+            WIND_LOG_DEBUG_FMT(L"compat.toggle_key down: vk=0x%02X resolvedVK=0x%02X mods=0x%04X hasSession=%d hasTextCtx=%d",
+                (uint32_t)wParam, resolvedVK, modifiers, (int)hasSession, (int)hasTextCtx);
+            if (!hasSession && !hasTextCtx)
             {
                 *pfEaten = FALSE;
                 _LogKeyDecision(L"down", _pTextService->GetFocusSessionId(), wParam, modifiers, HotkeyType::ToggleMode,
                                 _pTextService->IsChineseMode(), FALSE, _hasCandidates,
                                 FALSE, FALSE, L"toggle_no_text_ctx");
+                WindLogForegroundProcessInfo(4, L"compat.toggle_no_textctx.host");
                 return S_OK;
             }
         }
@@ -1399,14 +1406,19 @@ BOOL CKeyEventSink::_IsMatchingKeyUp(WPARAM wParam, uint32_t pendingKey)
     {
         // pendingKey is specific (VK_LSHIFT or VK_RSHIFT)
         // Check if that specific key is no longer pressed
-        if (pendingKey == VK_LSHIFT && !(GetAsyncKeyState(VK_LSHIFT) & 0x8000))
+        SHORT lshiftState = GetAsyncKeyState(VK_LSHIFT);
+        SHORT rshiftState = GetAsyncKeyState(VK_RSHIFT);
+        WIND_LOG_DEBUG_FMT(L"compat.keyup_match: pendingKey=0x%02X lshift_async=0x%04X rshift_async=0x%04X",
+            pendingKey, (uint16_t)lshiftState, (uint16_t)rshiftState);
+        if (pendingKey == VK_LSHIFT && !(lshiftState & 0x8000))
         {
             return TRUE;
         }
-        if (pendingKey == VK_RSHIFT && !(GetAsyncKeyState(VK_RSHIFT) & 0x8000))
+        if (pendingKey == VK_RSHIFT && !(rshiftState & 0x8000))
         {
             return TRUE;
         }
+        WIND_LOG_DEBUG_FMT(L"compat.keyup_match: VK_SHIFT->pendingKey=0x%02X not matched (key still held?)", pendingKey);
         return FALSE;
     }
 
