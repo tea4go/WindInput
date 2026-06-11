@@ -75,4 +75,30 @@ func TestExportKeyPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("已写出 %d 个 key 到 %s", len(AllKeyPaths()), out)
+
+	// 同时写出 Go 侧命名常量包 configkey，供 Go 调用方以编译期可校验的常量
+	// 替代裸字符串键路径。
+	constOut := filepath.Join("configkey", "keys_gen.go")
+	if err := os.MkdirAll(filepath.Dir(constOut), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(constOut, []byte(GenerateConfigKeyConsts()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("已写出 configkey 常量到 %s", constOut)
+}
+
+// TestFieldsKeysAreValid 守卫：accessor.Fields 注册表里的每个键路径都必须 ∈ AllKeyPaths()
+// （即对应 Config 结构体真实存在的 yaml tag）。重构 struct tag 后若 Fields 未同步，
+// 本测试立即失败——防止 config.get/set/toggle 操作一个不存在的键路径（历史 bug 根因）。
+func TestFieldsKeysAreValid(t *testing.T) {
+	valid := make(map[string]bool)
+	for _, p := range AllKeyPaths() {
+		valid[p] = true
+	}
+	for key := range Fields {
+		if !valid[key] {
+			t.Errorf("accessor.Fields 含非法键路径 %q：在 Config yaml tag 中不存在（struct 改名后未同步？）", key)
+		}
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/huanfeng/wind_input/internal/cmdbar"
+	"github.com/huanfeng/wind_input/pkg/config/configkey"
 )
 
 // dictIMEActionFuncs 返回 P4/P5 新增动作的 FuncSpec 列表。
@@ -197,7 +198,7 @@ func fnIMETheme(ctx cmdbar.EvalContext, args []string) (string, error) {
 	if s.Config == nil {
 		return "", fmt.Errorf("ime.theme: %w", cmdbar.ErrServiceUnavailable)
 	}
-	if err := s.Config.Set("ui.theme.name", args[0]); err != nil {
+	if err := s.Config.Set(configkey.UiThemeName, args[0]); err != nil {
 		return "", fmt.Errorf("ime.theme: %w", err)
 	}
 	return "", nil

@@ -8,6 +8,7 @@ package keys
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -194,6 +195,39 @@ func (k Key) Valid() bool {
 		return true
 	}
 	return false
+}
+
+// CanonicalKeys 返回全部规范 Key（去重、按字典序排序）。
+// 用途：导出给设置前端做 enums.ts 的 Key 值一致性校验——前端按键 token 的值
+// 必须 ∈ 本清单，杜绝历史上出现过的别名漂移（如前端用 "open_bracket" 而 Go
+// 规范是 "lbracket"）。由 keys_export_test.go 的 -update 写出 keys.json。
+func CanonicalKeys() []Key {
+	seen := make(map[Key]bool, len(aliasToKey))
+	out := make([]Key, 0, len(aliasToKey))
+	for _, v := range aliasToKey {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// CanonicalModifiers 返回全部规范 Modifier（按字典序排序）。
+func CanonicalModifiers() []Modifier {
+	out := []Modifier{ModAlt, ModCtrl, ModShift, ModWin}
+	return out
+}
+
+// Aliases 返回别名 → 规范 Key 的全量映射副本（含规范名自映射）。
+// 前端可用它把存量配置中的别名（如 "backtick"）归一化为规范名后再做控件回显匹配。
+func Aliases() map[string]Key {
+	m := make(map[string]Key, len(aliasToKey))
+	for k, v := range aliasToKey {
+		m[k] = v
+	}
+	return m
 }
 
 // ParseModifier 把任意输入字符串解析为规范 Modifier（处理大小写）。

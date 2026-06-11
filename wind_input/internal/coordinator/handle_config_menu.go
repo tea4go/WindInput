@@ -86,7 +86,7 @@ func (c *Coordinator) HandleMenuCommand(command string) *bridge.StatusUpdateData
 	needBroadcast := false
 
 	switch command {
-	case "toggle_mode":
+	case menuCmdToggleMode:
 		c.chineseMode = !c.chineseMode
 		c.logger.Debug("Mode toggled via menu", "chineseMode", c.chineseMode)
 
@@ -112,17 +112,17 @@ func (c *Coordinator) HandleMenuCommand(command string) *bridge.StatusUpdateData
 
 		needBroadcast = true
 
-	case "toggle_width":
+	case menuCmdToggleWidth:
 		c.applyToggleFullWidth()
 		c.logger.Debug("Full-width toggled via menu", "fullWidth", c.fullWidth)
 		needBroadcast = true
 
-	case "toggle_punct":
+	case menuCmdTogglePunct:
 		c.applyTogglePunct()
 		c.logger.Debug("Chinese punctuation toggled via menu", "chinesePunctuation", c.chinesePunctuation)
 		needBroadcast = true
 
-	case "toggle_toolbar":
+	case menuCmdToggleToolbar:
 		c.toolbarVisible = !c.toolbarVisible
 		c.logger.Debug("Toolbar visibility toggled via menu", "toolbarVisible", c.toolbarVisible)
 
@@ -142,30 +142,30 @@ func (c *Coordinator) HandleMenuCommand(command string) *bridge.StatusUpdateData
 
 		needBroadcast = true
 
-	case "open_settings":
+	case menuCmdOpenSettings:
 		c.logger.Info("Opening settings requested")
 		// Open settings window (will be implemented in UI)
 		if c.uiManager != nil {
 			c.uiManager.OpenSettings()
 		}
 
-	case "open_dictionary":
+	case menuCmdOpenDictionary:
 		c.logger.Info("Opening dictionary manager requested")
 		if c.uiManager != nil {
 			c.uiManager.OpenSettingsWithPage("dictionary")
 		}
 
-	case "add_word":
+	case menuCmdAddWord:
 		c.logger.Info("Quick add word requested from menu")
 		c.enterAddWordMode()
 
-	case "show_about":
+	case menuCmdShowAbout:
 		c.logger.Info("Showing about dialog requested")
 		if c.uiManager != nil {
 			c.uiManager.OpenSettingsWithPage("about")
 		}
 
-	case "reload_config":
+	case menuCmdReloadConfig:
 		c.logger.Info("Reload config requested from menu")
 		// 保存完整输入状态（reload 过程中可能被 CompositionTerminated/FocusLost 事件清空）
 		hadActiveInput := len(c.inputBuffer) > 0 || c.tempPinyinMode || c.tempEnglishMode
@@ -229,7 +229,7 @@ func (c *Coordinator) HandleMenuCommand(command string) *bridge.StatusUpdateData
 			}
 		}()
 
-	case "exit":
+	case menuCmdExit:
 		c.logger.Info("Exit requested from menu")
 		RequestExit()
 	}

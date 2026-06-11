@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-08 | Updated: 2026-06-10 -->
+<!-- Generated: 2026-04-08 | Updated: 2026-06-11 -->
 
 # internal/coordinator
 
@@ -16,7 +16,8 @@
 | `handle_candidate_action.go` | 候选词快捷键操作：`matchCandidateActionKey` 匹配 Ctrl+数字/Ctrl+Shift+数字热键；`handleDeleteCandidateByKey` 删除指定候选词（走 `dm.DeleteWord(code, text, cand.ID)`）；`handlePinCandidateByKey` 置顶指定候选词（走 `dm.PinWord(code, text, cand.ID, 0)`）；**R2**: 短语候选统一走 Shadow（不再走 PhraseLayer.MoveToTop） |
 | `handle_candidates.go` | 候选词请求引擎计算、分页管理、UI 更新；候选数分档：`refreshEffectivePerPage` 在每条分页源头把生效每页数物化到 `c.candidatesPerPage`（基础档 `candidatesPerPageBase` / 扩展档 `candidatesPerPageExtended`），`shouldUseExtendedCandidates` 是新增"扩展档"场景的唯一对接点 |
 | `handle_config.go` | 配置更新处理（引擎切换、热键、UI、工具栏等） |
-| `handle_config_menu.go` | 右键菜单命令处理 |
+| `handle_config_menu.go` | 右键菜单命令处理（`HandleMenuCommand`，case 走 `menu_commands.go` 的 `menuCmd*` 常量） |
+| `menu_commands.go` | 托盘菜单 / 全局热键命令码的 Go 侧具名常量（`menuCmd*`）。命令字符串由 C++ 经 bridge 发来（跨进程协议，值不可单边变更），常量供 `HandleMenuCommand` / `handleGlobalHotkeyCommand` 两处 switch 及彼此转发引用，消除拼写漂移 |
 | `handle_config_state.go` | 状态查询方法（`GetChineseMode`、`GetCurrentEngineName` 等） |
 | `handle_lifecycle.go` | 焦点获得/失去、IME 激活/停用、客户端断连；含 `HandleCommitRequest`（barrier 机制，见下方说明） |
 | `toolbar_visibility.go` | 工具栏位置计算 (`computeToolbarPositionLocked`) + ShellHook 全屏事件转发 (`OnShellFullscreenChange`)；显隐决策已迁出，本文件仅做位置算子与事件适配 |

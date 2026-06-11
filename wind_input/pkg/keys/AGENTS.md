@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Updated: 2026-05-01 -->
+<!-- Updated: 2026-06-11 -->
 
 # wind_input/pkg/keys
 
@@ -12,6 +12,7 @@
 |------|-------------|
 | `keys.go` | `Key`/`Modifier` 类型定义；字母 a-z、数字 0-9、F1-F12、标点、控制键、修饰键 token 常量；`aliasToKey` 双向规范化表；`ParseKey`/`ParseModifier`/`Valid` |
 | `pair.go` | `PairGroup` 类型 + `pairGroupKeys` 表；翻页键、选择键、移动高亮等"组合键群"配置项的规范名集合 |
+| `keys_export_test.go` | `TestExportKeys -update` 写出 `wind_setting/frontend/src/generated/keys.json`（规范键 / 修饰键 / 别名映射），供前端 `enums.ts` 一致性校验 |
 
 ## 常量清单
 
@@ -67,10 +68,20 @@
 
 > ⚠️ `PairShiftTab` 与 `PairTab` 字面量不同但实际配对相同，是历史 YAML 兼容产物。修改任一条 `pairGroupKeys` 必须同步另一条，否则会产生行为漂移。
 
+### 导出 API（前端镜像生成）
+
+| 函数 | 用途 |
+|------|------|
+| `CanonicalKeys() []Key` | 全部规范 `Key`（去重、字典序），导出给前端做一致性校验 |
+| `CanonicalModifiers() []Modifier` | 全部规范 `Modifier` |
+| `Aliases() map[string]Key` | 别名 → 规范 `Key` 全量映射副本（前端把存量别名归一化用） |
+
+前端 `lib/enums.ts` 的 `Key`/`Modifier` **值必须 ∈ 这些导出**（由 `keys.json` + 前端 `keysEnums.test.ts` 守卫，杜绝历史上 `"open_bracket"` vs 规范 `"lbracket"` 之类的前后端漂移）。
+
 ## For AI Agents
 
 ### Working In This Directory
-- **新增按键 token**：①在 `keys.go` 加 `KeyXxx` 常量 → ②在 `aliasToKey` 加映射（含所有可能的别名形式）→ ③同步前端 `lib/enums.ts` 中的 `Key` 镜像（若前端会用到）。
+- **新增按键 token**：①在 `keys.go` 加 `KeyXxx` 常量 → ②在 `aliasToKey` 加映射（含所有可能的别名形式）→ ③若前端会用到，同步 `lib/enums.ts` 的 `Key` 镜像（**值用规范名，不可用别名**）并重新生成 `keys.json`（`go test ./pkg/keys -run TestExportKeys -update`）；前端 `keysEnums.test.ts` 会校验值是否为规范名。
 - **新增组合键群**：①在 `pair.go` 加 `PairXxx` 常量 → ②在 `pairGroupKeys` 表加映射 → ③同步前端 `lib/enums.ts` 中的 `PairGroup` 镜像。
 - 业务代码**不要**直接 `switch s` 字符串；先 `key, ok := keys.ParseKey(s)`，对 `Key` 比较。
 - 修改字面量值会破坏旧 YAML 配置兼容性 —— 通常**只在 `aliasToKey` 加新别名**，而非改规范名。

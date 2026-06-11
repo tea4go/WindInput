@@ -56,7 +56,7 @@ var Fields = map[string]FieldDesc{
 	// ── UI ──────────────────────────────────────────────────────────────
 	"ui.candidate.layout": {
 		Description: "候选布局 horizontal（横排）| vertical（竖排）",
-		Values:      []string{"horizontal", "vertical"},
+		Values:      []string{string(LayoutHorizontal), string(LayoutVertical)},
 		Get:         func(cfg *Config) string { return string(cfg.UI.Candidate.Layout) },
 		Set: func(cfg *Config, v string) error {
 			l := CandidateLayout(v)
@@ -80,7 +80,7 @@ var Fields = map[string]FieldDesc{
 	},
 	"ui.theme.style": {
 		Description: "主题风格 system（跟随系统）| light | dark",
-		Values:      []string{"system", "light", "dark"},
+		Values:      []string{string(ThemeStyleSystem), string(ThemeStyleLight), string(ThemeStyleDark)},
 		Get:         func(cfg *Config) string { return string(cfg.UI.Theme.Style) },
 		Set: func(cfg *Config, v string) error {
 			s := ThemeStyle(v)
@@ -93,7 +93,7 @@ var Fields = map[string]FieldDesc{
 	},
 	"ui.candidate.preedit_mode": {
 		Description: "编码显示模式 top（独立行）| embedded（嵌入候选行前）",
-		Values:      []string{"top", "embedded"},
+		Values:      []string{string(PreeditTop), string(PreeditEmbedded)},
 		Get:         func(cfg *Config) string { return string(cfg.UI.Candidate.PreeditMode) },
 		Set: func(cfg *Config, v string) error {
 			m := PreeditMode(v)
@@ -158,7 +158,7 @@ var Fields = map[string]FieldDesc{
 	},
 	"features.s2t.variant": {
 		Description: "繁体变体 s2t（标准）| s2tw（台湾正体）| s2twp（台湾正体+词汇）| s2hk（香港繁体）",
-		Values:      []string{"s2t", "s2tw", "s2twp", "s2hk"},
+		Values:      []string{string(S2TStandard), string(S2TTaiwan), string(S2TTaiwanPhrase), string(S2THongKong)},
 		Get:         func(cfg *Config) string { return string(cfg.Features.S2T.Variant) },
 		Set: func(cfg *Config, v string) error {
 			sv := S2TVariant(v)
@@ -172,7 +172,7 @@ var Fields = map[string]FieldDesc{
 	// ── Input ────────────────────────────────────────────────────────────
 	"input.filter_mode": {
 		Description: "候选过滤模式 smart（智能）| general（常用字）| gb18030（不限制）",
-		Values:      []string{"smart", "general", "gb18030"},
+		Values:      []string{string(FilterSmart), string(FilterGeneral), string(FilterGB18030)},
 		Get:         func(cfg *Config) string { return string(cfg.Input.FilterMode) },
 		Set: func(cfg *Config, v string) error {
 			m := FilterMode(v)
@@ -185,7 +185,7 @@ var Fields = map[string]FieldDesc{
 	},
 	"input.enter_behavior": {
 		Description: "回车键行为 commit（上屏）| clear（清空）| commit_and_input | ignore",
-		Values:      []string{"commit", "clear", "commit_and_input", "ignore"},
+		Values:      []string{string(EnterCommit), string(EnterClear), string(EnterCommitAndInput), string(EnterIgnore)},
 		Get:         func(cfg *Config) string { return string(cfg.Input.EnterBehavior) },
 		Set: func(cfg *Config, v string) error {
 			b := EnterBehavior(v)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/huanfeng/wind_input/internal/ipc"
+	"github.com/huanfeng/wind_input/pkg/keys"
 )
 
 // keyCodeToKeyName converts a virtual key code to a key name string,
@@ -23,9 +24,9 @@ func keyCodeToKeyName(keyCode uint32) string {
 	case ipc.VK_SPACE:
 		return "space"
 	case ipc.VK_PRIOR:
-		return "page_up"
+		return string(keys.KeyPageUp)
 	case ipc.VK_NEXT:
-		return "page_down"
+		return string(keys.KeyPageDown)
 	case ipc.VK_CAPITAL:
 		return "capslock"
 	case ipc.VK_LSHIFT:

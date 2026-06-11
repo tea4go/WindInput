@@ -123,6 +123,8 @@ export const Modifier = {
 export type ModifierValue = (typeof Modifier)[keyof typeof Modifier];
 
 // 仅收录前端实际使用到的按键 token；如需扩充按 keys.go 同步添加。
+// 值必须是 Go pkg/keys 的规范名（canonical），不可用别名——一致性由
+// keysEnums.test.ts 对照 generated/keys.json 守卫（防止 "open_bracket" 之类别名漂移）。
 export const Key = {
   // 字母（仅前端用到的）
   Z: "z",
@@ -133,9 +135,9 @@ export const Key = {
   Period: "period",
   Slash: "slash",
   Backslash: "backslash",
-  OpenBracket: "open_bracket",
-  CloseBracket: "close_bracket",
-  Backtick: "backtick",
+  LBracket: "lbracket",
+  RBracket: "rbracket",
+  Grave: "grave",
   // 控制键
   Tab: "tab",
   // 修饰键作为独立 token

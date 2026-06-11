@@ -9,6 +9,7 @@
 //    system-event）；EventsOn(name, cb) 的 cb 收到的就是后端 payload（与桌面 EventsEmit 同形）。
 
 import { DESKTOP_ONLY_HINT } from "./webEnv";
+import { WailsEvent } from "./enums";
 
 // showWebToast 注入一个轻量、自动消失的提示条，独立于各页 toast 系统，
 // 仅用于 Web 模式下的兜底提示（如调用桌面专属方法且页面未自行处理时）。
@@ -29,10 +30,10 @@ function showWebToast(msg: string): void {
 // - update:*：App 直接 emit、经 webServer.broadcast 投递（在线升级下载进度/完成/失败/有更新）。
 // EventSource 必须按名 addEventListener，故需枚举；新增 App 广播事件时在此补充。
 const BACKEND_EVENTS = [
-  "config-event",
-  "dict-event",
-  "stats-event",
-  "system-event",
+  WailsEvent.Config,
+  WailsEvent.Dict,
+  WailsEvent.Stats,
+  WailsEvent.System,
   "update:progress",
   "update:done",
   "update:error",

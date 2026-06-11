@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Updated: 2026-05-01 -->
+<!-- Updated: 2026-06-11 -->
 
 # lib
 
@@ -39,9 +39,9 @@
 | 常量名 | 字面量值 | Go 镜像 |
 |--------|---------|---------|
 | `Modifier` | `ctrl` / `shift` / `alt` / `win` | `ModCtrl` / `ModShift` / `ModAlt` / `ModWin` |
-| `Key`（前端按需收录子集） | `z` / `semicolon` / `quote` / `comma` / `period` / `slash` / `backslash` / `open_bracket` / `close_bracket` / `backtick` / `tab` / `lshift` / `rshift` / `lctrl` / `rctrl` / `capslock` | `KeyZ` / `KeySemicolon` / `KeyQuote` / `KeyComma` / `KeyPeriod` / `KeySlash` / `KeyBackslash` / `KeyLBracket` / `KeyRBracket` / `KeyGrave` / `KeyTab` / `KeyLShift` / `KeyRShift` / `KeyLCtrl` / `KeyRCtrl` / `KeyCapsLock` |
+| `Key`（前端按需收录子集） | `z` / `semicolon` / `quote` / `comma` / `period` / `slash` / `backslash` / `lbracket` / `rbracket` / `grave` / `tab` / `lshift` / `rshift` / `lctrl` / `rctrl` / `capslock` | `KeyZ` / `KeySemicolon` / `KeyQuote` / `KeyComma` / `KeyPeriod` / `KeySlash` / `KeyBackslash` / `KeyLBracket` / `KeyRBracket` / `KeyGrave` / `KeyTab` / `KeyLShift` / `KeyRShift` / `KeyLCtrl` / `KeyRCtrl` / `KeyCapsLock` |
 
-注：前端 `Key.Backtick = "backtick"` 对应 Go 侧 `KeyGrave = "grave"`，由 `aliasToKey` 双向表负责规范化；前端 `Key.OpenBracket`/`CloseBracket` 对应 Go 的 `KeyLBracket`/`KeyRBracket`。
+注：前端 `Key.Grave`/`LBracket`/`RBracket` 的值即 Go 规范名 `grave`/`lbracket`/`rbracket`（对应 `KeyGrave`/`KeyLBracket`/`KeyRBracket`），不再使用别名；值与 Go 规范名的一致性由 `keysEnums.test.ts` 对照 `generated/keys.json` 守卫。
 
 ### 组合键群（对应 Go `pkg/keys/pair.go`）
 

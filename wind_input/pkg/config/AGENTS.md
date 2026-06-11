@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-13 | Updated: 2026-06-10 -->
+<!-- Generated: 2026-03-13 | Updated: 2026-06-11 -->
 
 # pkg/config
 
@@ -21,7 +21,8 @@
 | `migrate.go` | 版本机制：`currentConfigVersion`/`ErrFutureConfigVersion`/`migrateConfigMap`（map 层迁移链）/`injectVersion`/`safeGet*` 弱类型取值辅助 |
 | `migration_v1.go` | `migrateV0toV1`：v0→v1 全量 key 重映射 + 三个启发式熔合（quick_input 旧字段、theme:"dark"、status_indicator 旧顶层键回填）；`renameKeyV1`/`putIfAbsent`/`ensureMapV1`/`moveKeysLazy` 搬移辅助 |
 | `codec.go` | TOML 桥接编解码层：`IsTOMLPath`/`LegacyYAMLPath`/`normalizeToYAML`/`marshalTOML`/`marshalForPath`/`readFileWithLegacyFallback`/`renameLegacyFile`（仅损坏/清理路径用，正常迁移不再改名） |
-| `keypaths.go` | `AllKeyPaths()` 反射导出全量 v1 点路径；`keypaths_test.go -update` 写出 `wind_setting/frontend/src/generated/config-keys.json` 供前端 key 一致性校验 |
+| `keypaths.go` | `AllKeyPaths()` 反射导出全量 v1 点路径；`GenerateConfigKeyConsts()` 生成 Go 命名常量源码；`keypaths_test.go -update` 写出前端 `config-keys.json` **和** Go `configkey/keys_gen.go`。`keypaths_test.go` 的 `TestFieldsKeysAreValid` 守卫 `accessor.Fields` 的 key 全部 ∈ 反射清单（重构 tag 后失配即测试失败） |
+| `configkey/` | 子包：由 `keypaths.go` 反射生成的键路径命名常量（如 `configkey.UiThemeName = "ui.theme.name"`），键路径字符串的 SSOT，供调用方以编译期可校验的常量替代裸字符串。**生成文件，勿手改** |
 | `clone.go` | `Config.Clone()` 反射式深拷贝。**红线：异步持久化（`go config.Save(...)`）必须先 Clone，禁止浅拷贝**——共享底层 map/slice 并发修改会硬 panic |
 | `accessor.go` | cmdbar `config.get/set/toggle` 的字段注册表（`Fields`，v1 点路径索引如 `"ui.candidate.layout"`、`"features.s2t.enabled"`）；**key 重命名需同步本表**（用户已保存的 cmdbar 命令字符串引用这些路径） |
 | `paths.go` | 路径常量与辅助函数（`GetConfigDir`、`GetDataDir`、`GetSystemConfigPath`（toml 优先回退旧 yaml）等） |

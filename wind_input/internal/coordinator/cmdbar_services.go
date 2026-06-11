@@ -11,6 +11,8 @@ import (
 	"github.com/huanfeng/wind_input/internal/cmdbar"
 	"github.com/huanfeng/wind_input/internal/proc"
 	"github.com/huanfeng/wind_input/pkg/config"
+	"github.com/huanfeng/wind_input/pkg/config/configkey"
+	"github.com/huanfeng/wind_input/pkg/rpcapi"
 )
 
 // cmdbarClipService 实现 cmdbar.ClipboardService。SetText/GetText 直接转发到
@@ -98,28 +100,40 @@ type cmdbarIMEService struct {
 	c *Coordinator
 }
 
+// ime.toggle(target) 的合法目标值。cmdbar DSL 协议参数（用户命令字符串引用，
+// 值不可变更）；此处常量供 Toggle switch 引用，避免与文档/校验处拼写漂移。
+const (
+	imeToggleCnEn      = "cn-en"
+	imeToggleFullShape = "fullshape"
+	imeToggleLayout    = "layout"
+	imeToggleCandWin   = "candwin"
+	imeToggleS2T       = "s2t"
+	imeTogglePreedit   = "preedit"
+	imeToggleToolbar   = "toolbar"
+)
+
 func (s cmdbarIMEService) Toggle(target string) error {
 	if s.c == nil {
 		return cmdbar.ErrServiceUnavailable
 	}
 	switch target {
-	case "cn-en":
+	case imeToggleCnEn:
 		s.c.toggleChineseModeForCmdbar()
 		return nil
-	case "fullshape":
+	case imeToggleFullShape:
 		s.c.toggleFullWidthForCmdbar()
 		return nil
-	case "layout":
+	case imeToggleLayout:
 		s.c.toggleCandidateLayoutForCmdbar()
 		return nil
-	case "candwin":
+	case imeToggleCandWin:
 		s.c.toggleCandidateWindowForCmdbar()
 		return nil
-	case "s2t":
+	case imeToggleS2T:
 		return s.c.toggleS2TForCmdbar()
-	case "preedit":
+	case imeTogglePreedit:
 		return s.c.togglePreeditModeForCmdbar()
-	case "toolbar":
+	case imeToggleToolbar:
 		s.c.toggleToolbarForCmdbar()
 		return nil
 	default:
@@ -175,7 +189,7 @@ func (s cmdbarIMEService) ThemeCycle(dir string) (string, error) {
 	} else {
 		next = themes[(idx+1)%len(themes)]
 	}
-	if err := (cmdbarConfigService{c: s.c}).Set("ui.theme.name", next); err != nil {
+	if err := (cmdbarConfigService{c: s.c}).Set(configkey.UiThemeName, next); err != nil {
 		return "", fmt.Errorf("ime.theme_cycle: %w", err)
 	}
 	return next, nil
@@ -405,13 +419,13 @@ func (s cmdbarConfigService) Toggle(key string) (string, error) {
 func (s cmdbarConfigService) applySection(key string, cfgCopy *config.Config) {
 	c := s.c
 	switch config.Section(key) {
-	case "ui":
+	case string(rpcapi.ConfigSectionUI):
 		c.UpdateUIConfig(&cfgCopy.UI)
-	case "features":
+	case string(rpcapi.ConfigSectionFeatures):
 		c.UpdateS2TConfig(&cfgCopy.Features.S2T)
-	case "input":
+	case string(rpcapi.ConfigSectionInput):
 		c.UpdateInputConfig(&cfgCopy.Input)
-	case "general":
+	case string(rpcapi.ConfigSectionGeneral):
 		c.UpdateStartupConfig(&cfgCopy.General)
 	}
 }

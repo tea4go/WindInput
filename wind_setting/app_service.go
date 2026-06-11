@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/huanfeng/wind_input/pkg/config"
+	"github.com/huanfeng/wind_input/pkg/config/configkey"
 	"github.com/huanfeng/wind_input/pkg/rpcapi"
 	"github.com/huanfeng/wind_input/pkg/systemfont"
 	"github.com/huanfeng/wind_input/pkg/theme"
@@ -208,8 +209,8 @@ func (a *App) GetAvailableThemes() ([]ThemeInfo, error) {
 	// 获取当前配置的主题
 	currentTheme := "default"
 	if a.rpcClient != nil {
-		if reply, err := a.rpcClient.ConfigGet([]string{"ui.theme"}); err == nil {
-			if val, ok := reply.Values["ui.theme"]; ok {
+		if reply, err := a.rpcClient.ConfigGet([]string{configkey.UiThemeName}); err == nil {
+			if val, ok := reply.Values[configkey.UiThemeName]; ok {
 				if s, ok := val.(string); ok && s != "" {
 					currentTheme = s
 				}

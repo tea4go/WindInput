@@ -103,21 +103,21 @@ func (c *Coordinator) setupGlobalHotkeyCallbacks() {
 func (c *Coordinator) handleGlobalHotkeyCommand(command string) {
 	c.logger.Debug("Global hotkey command", "command", command)
 	switch command {
-	case "switch_engine":
+	case menuCmdSwitchEngine:
 		c.handleGlobalSwitchEngine()
-	case "toggle_full_width":
+	case menuCmdToggleFullWidth:
 		c.handleToolbarToggleWidth()
-	case "toggle_punct":
+	case menuCmdTogglePunct:
 		c.handleToolbarTogglePunct()
-	case "toggle_toolbar":
-		c.HandleMenuCommand("toggle_toolbar")
-	case "open_settings":
-		c.HandleMenuCommand("open_settings")
-	case "take_screenshot":
+	case menuCmdToggleToolbar:
+		c.HandleMenuCommand(menuCmdToggleToolbar)
+	case menuCmdOpenSettings:
+		c.HandleMenuCommand(menuCmdOpenSettings)
+	case menuCmdTakeScreenshot:
 		if c.uiManager != nil {
 			c.uiManager.TakeUIScreenshots()
 		}
-	case "activate_ime":
+	case menuCmdActivateIME:
 		if c.uiManager != nil {
 			go c.uiManager.ActivateIME()
 		}
