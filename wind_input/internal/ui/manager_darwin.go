@@ -632,8 +632,9 @@ func (m *Manager) TakeUIScreenshots() {}
 
 func (m *Manager) SetHostRenderFunc(func(img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error, func()) {
 }
-func (m *Manager) IsHostRendering() bool    { return false }
-func (m *Manager) SetHostHover(int, string) {}
+func (m *Manager) SetTooltipHostRenderFunc(func(img *image.RGBA, x, y int) error, func()) {}
+func (m *Manager) IsHostRendering() bool                                                  { return false }
+func (m *Manager) SetHostHover(int, string)                                               {}
 
 // ============================================================================
 // callback 注册

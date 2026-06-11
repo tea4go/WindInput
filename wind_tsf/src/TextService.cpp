@@ -886,7 +886,7 @@ CTextService::CTextService()
     , _pIPCClient(nullptr)
     , _pLangBarItemButton(nullptr)
     , _pHotkeyManager(nullptr)
-    , _pHostWindow(nullptr)
+    , _pHostWindow{}
     , _bChineseMode(TRUE)
     , _bFullWidth(FALSE)
     , _focusSessionId(0)
@@ -2090,11 +2090,16 @@ void CTextService::_SyncStateFromResponse(const ServiceResponse& response)
 
 void CTextService::_DestroyHostWindow()
 {
-    if (_pHostWindow != nullptr)
+    // Destroy non-candidate (owned) windows first, then the candidate (owner) last, so
+    // owned tooltip/status windows are torn down before their z-order owner disappears.
+    for (int k = HOST_WINDOW_KIND_COUNT - 1; k >= 0; --k)
     {
-        _pHostWindow->Uninitialize();
-        delete _pHostWindow;
-        _pHostWindow = nullptr;
+        if (_pHostWindow[k] != nullptr)
+        {
+            _pHostWindow[k]->Uninitialize();
+            delete _pHostWindow[k];
+            _pHostWindow[k] = nullptr;
+        }
     }
 }
 
@@ -2103,15 +2108,16 @@ void CTextService::_EnsureHostRenderSetup(const ServiceResponse& response, BOOL 
     if (_pIPCClient == nullptr || !_pIPCClient->IsConnected())
         return;
 
-    BOOL hadHostWindow = (_pHostWindow != nullptr);
+    CHostWindow*& candidate = _pHostWindow[HOST_WINDOW_CANDIDATE];
+    BOOL hadHostWindow = (candidate != nullptr);
     BOOL hostRenderAvailable = response.IsHostRenderAvailable();
     BOOL shouldRetryExistingHost = forceRefresh && hadHostWindow && !hostRenderAvailable;
 
     if (!hostRenderAvailable && !shouldRetryExistingHost)
     {
-        if (forceRefresh && _pHostWindow != nullptr)
+        if (forceRefresh && hadHostWindow)
         {
-            WIND_LOG_INFO(L"Host render unavailable after refresh, disabling existing host window\n");
+            WIND_LOG_INFO(L"Host render unavailable after refresh, disabling existing host windows\n");
             _DestroyHostWindow();
         }
         return;
@@ -2122,22 +2128,28 @@ void CTextService::_EnsureHostRenderSetup(const ServiceResponse& response, BOOL 
         WIND_LOG_WARN(L"Host render flag missing after reconnect, retrying setup because host window was previously active\n");
     }
 
-    if (_pHostWindow != nullptr && !forceRefresh)
+    if (candidate != nullptr && !forceRefresh)
     {
-        // Check if the host's band has changed (e.g., user switched from
-        // Start Menu search band=6 to taskbar search band=13).
-        // UpdateBand recreates only the display window, not the shared memory.
-        DWORD currentHostBand = _pHostWindow->GetHostBand();
-        if (currentHostBand > 1 && currentHostBand != _pHostWindow->GetCurrentBand())
+        // Check if the host's band has changed (e.g., user switched from Start Menu
+        // search band=6 to taskbar search band=13). Recreate ALL host windows rather
+        // than UpdateBand on each: the tooltip/status windows are owned by the candidate
+        // hwnd for z-order, so recreating the candidate alone would leave them pointing
+        // at a destroyed owner. Full re-setup keeps ownership consistent.
+        DWORD currentHostBand = candidate->GetHostBand();
+        if (currentHostBand > 1 && currentHostBand != candidate->GetCurrentBand())
         {
-            _pHostWindow->UpdateBand(currentHostBand);
+            WIND_LOG_INFO_FMT(L"Host band changed to %u, recreating all host windows\n", currentHostBand);
+            _DestroyHostWindow();
+            // fall through to recreate at the new band
         }
-        return;
+        else
+        {
+            return; // no change needed
+        }
     }
-
-    if (_pHostWindow != nullptr)
+    else if (candidate != nullptr)
     {
-        WIND_LOG_INFO(L"Refreshing host render window after service reconnection\n");
+        WIND_LOG_INFO(L"Refreshing host render windows after service reconnection\n");
         _DestroyHostWindow();
     }
 
@@ -2146,22 +2158,54 @@ void CTextService::_EnsureHostRenderSetup(const ServiceResponse& response, BOOL 
     ServiceResponse hrResponse;
     if (_pIPCClient->SendHostRenderRequest(hrResponse) &&
         hrResponse.type == ResponseType::HostRenderSetup &&
-        !hrResponse.shmName.empty() && !hrResponse.eventName.empty())
+        !hrResponse.hostRenderSetups.empty())
     {
-        _pHostWindow = new CHostWindow();
-        if (!_pHostWindow->Initialize(
-            hrResponse.shmName.c_str(),
-            hrResponse.eventName.c_str(),
-            hrResponse.maxBufferSize,
-            _pIPCClient)) // weak ref: host window routes mouse events back to Go
+        // Create the candidate window first (pass 0) so its hwnd can serve as the z-order
+        // owner for the tooltip/status windows (pass 1) — owned windows always sit above
+        // their owner, so the tooltip never gets occluded by the candidate band window.
+        HWND candidateOwner = NULL;
+        for (int pass = 0; pass < 2; ++pass)
         {
-            WIND_LOG_WARN(L"Host window initialization failed, falling back to Go window\n");
-            delete _pHostWindow;
-            _pHostWindow = nullptr;
+            for (size_t i = 0; i < hrResponse.hostRenderSetups.size(); ++i)
+            {
+                const HostRenderSetupInfo& info = hrResponse.hostRenderSetups[i];
+                bool isCandidate = (info.windowKind == HOST_WINDOW_CANDIDATE);
+                if ((pass == 0) != isCandidate)
+                    continue; // pass 0: candidate only; pass 1: the rest
+                if (info.windowKind >= HOST_WINDOW_KIND_COUNT)
+                    continue;
+                if (info.shmName.empty() || info.eventName.empty())
+                    continue;
+                if (_pHostWindow[info.windowKind] != nullptr)
+                    continue; // already created (defensive against duplicate entries)
+
+                CHostWindow* win = new CHostWindow();
+                HWND owner = isCandidate ? NULL : candidateOwner; // others owned by candidate
+                if (!win->Initialize(
+                        info.shmName.c_str(),
+                        info.eventName.c_str(),
+                        info.maxBufferSize,
+                        _pIPCClient, // weak ref: candidate routes mouse events back to Go
+                        (HostWindowKind)info.windowKind,
+                        owner))
+                {
+                    WIND_LOG_WARN_FMT(L"Host window kind=%u init failed, skipping\n", info.windowKind);
+                    delete win;
+                    continue;
+                }
+                _pHostWindow[info.windowKind] = win;
+                if (isCandidate)
+                    candidateOwner = win->GetHwnd();
+            }
+        }
+
+        if (_pHostWindow[HOST_WINDOW_CANDIDATE] != nullptr)
+        {
+            WIND_LOG_INFO(L"Host windows initialized successfully\n");
         }
         else
         {
-            WIND_LOG_INFO(L"Host window initialized successfully\n");
+            WIND_LOG_WARN(L"Candidate host window missing after setup, falling back to Go window\n");
         }
     }
     else

@@ -32,6 +32,14 @@ type TooltipWindow struct {
 	onRightClick  func(text string, x, y int)
 	imgRes        imageResolver // P8 切片6：背景图/layers 解码缓存（与候选窗共享基础设施）
 
+	// Host render（高 Band 宿主进程）：非 nil 时把渲染好的 bitmap 经 SHM 送到宿主进程的
+	// tooltip band 窗口显示，本地 hwnd 保持隐藏。用于宿主进程（如开始菜单/任务栏搜索）下
+	// 候选框走 host render 时，tooltip 也必须走 host render 才能压在候选窗之上不被遮挡。
+	// hostVisible 镜像 host 模式下的可见性（本地 visible 在 host 模式不反映真实状态）。
+	hostRenderFunc func(img *image.RGBA, x, y int) error
+	hostHideFunc   func()
+	hostVisible    bool
+
 	TextBackendManager
 }
 
@@ -257,6 +265,31 @@ func (w *TooltipWindow) Show(text string, centerX, belowY, aboveY int) {
 
 	w.mu.Lock()
 	w.text = text
+	hostRender := w.hostRenderFunc
+	w.mu.Unlock()
+
+	// Host render 路径：把 bitmap 送到宿主进程的 tooltip band 窗口，本地窗口保持隐藏。
+	if hostRender != nil {
+		if err := hostRender(img, x, y); err != nil {
+			// 宿主渲染失败（如进程重启后 SHM 失效）：清除陈旧回调，回退本地窗口。
+			w.logger.Error("Host render tooltip failed, falling back to local", "error", err)
+			w.mu.Lock()
+			w.hostRenderFunc = nil
+			w.hostHideFunc = nil
+			w.hostVisible = false
+			w.mu.Unlock()
+		} else {
+			w.mu.Lock()
+			w.visible = true
+			w.hostVisible = true
+			w.mu.Unlock()
+			// 隐藏本地窗口（若此前为本地模式显示过；隐藏已隐藏窗口无副作用）
+			procShowWindow.Call(uintptr(w.hwnd), SW_HIDE)
+			return
+		}
+	}
+
+	w.mu.Lock()
 	w.visible = true
 	w.mu.Unlock()
 
@@ -267,12 +300,22 @@ func (w *TooltipWindow) Show(text string, centerX, belowY, aboveY int) {
 // Hide hides the tooltip. If the mouse is currently over the tooltip, hiding is
 // deferred until the mouse leaves (WM_MOUSELEAVE fires and calls Hide again).
 func (w *TooltipWindow) Hide() {
+	w.mu.Lock()
+	hostHide := w.hostHideFunc
+	over := w.mouseOver
+	w.mu.Unlock()
+	// Host render 模式：band 窗口无本地鼠标交互，直接经 SHM 隐藏（不受 mouseOver 影响）。
+	if hostHide != nil {
+		hostHide()
+		w.mu.Lock()
+		w.visible = false
+		w.hostVisible = false
+		w.mu.Unlock()
+		return
+	}
 	if w.hwnd == 0 {
 		return
 	}
-	w.mu.Lock()
-	over := w.mouseOver
-	w.mu.Unlock()
 	if over {
 		return
 	}
@@ -282,15 +325,33 @@ func (w *TooltipWindow) Hide() {
 	w.mu.Unlock()
 }
 
+// SetHostRenderFunc 设置 tooltip 的宿主渲染回调。非 nil 时 Show 把 bitmap 经 SHM 送到
+// 宿主进程的 tooltip band 窗口，本地窗口保持隐藏；传 nil 恢复本地窗口渲染。
+func (w *TooltipWindow) SetHostRenderFunc(renderFunc func(img *image.RGBA, x, y int) error, hideFunc func()) {
+	w.mu.Lock()
+	w.hostRenderFunc = renderFunc
+	w.hostHideFunc = hideFunc
+	if renderFunc == nil {
+		w.hostVisible = false
+	}
+	w.mu.Unlock()
+}
+
 // ForceHide 强制隐藏 tooltip，绕过 mouseOver 保护。用于候选窗关闭、菜单弹出、
 // 输入会话结束等"必须立即消失"的场景（避免 tip 残留在屏幕上）。
 func (w *TooltipWindow) ForceHide() {
-	if w.hwnd == 0 {
-		return
+	w.mu.Lock()
+	hostHide := w.hostHideFunc
+	w.mu.Unlock()
+	if hostHide != nil {
+		hostHide()
 	}
-	procShowWindow.Call(uintptr(w.hwnd), SW_HIDE)
+	if w.hwnd != 0 {
+		procShowWindow.Call(uintptr(w.hwnd), SW_HIDE)
+	}
 	w.mu.Lock()
 	w.visible = false
+	w.hostVisible = false
 	w.mouseOver = false
 	w.trackingMouse = false
 	w.leaveBlocked = false

@@ -1350,36 +1350,56 @@ BOOL CIPCClient::_ParseResponse(const IpcHeader& header, const std::vector<uint8
         {
             response.type = ResponseType::HostRenderSetup;
 
-            if (payload.size() < sizeof(HostRenderSetupHeader))
+            // Wire: entryCount(4) + entryCount × { HostRenderSetupEntryHeader(16) + shmName + eventName }.
+            if (payload.size() < 4)
             {
                 _LogError(L"HostRenderSetup payload too short");
                 return FALSE;
             }
+            uint32_t entryCount = 0;
+            memcpy(&entryCount, payload.data(), 4);
+            size_t offset = 4;
 
-            const HostRenderSetupHeader* setupHeader = reinterpret_cast<const HostRenderSetupHeader*>(payload.data());
-            response.maxBufferSize = setupHeader->maxBufferSize;
-
-            size_t offset = sizeof(HostRenderSetupHeader);
-            // 减法形式防 32 位加法回绕；offset <= payload.size() 由上方守卫保证，
-            // 且仅在通过检查后才推进 offset，保持不变式。
-            // Extract shared memory name
-            if (setupHeader->shmNameLen > 0 && setupHeader->shmNameLen <= payload.size() - offset)
+            for (uint32_t i = 0; i < entryCount; ++i)
             {
-                response.shmName = _Utf8ToWide(
-                    reinterpret_cast<const char*>(payload.data() + offset),
-                    setupHeader->shmNameLen);
-                offset += setupHeader->shmNameLen;
-            }
-            // Extract event name
-            if (setupHeader->eventNameLen > 0 && setupHeader->eventNameLen <= payload.size() - offset)
-            {
-                response.eventName = _Utf8ToWide(
-                    reinterpret_cast<const char*>(payload.data() + offset),
-                    setupHeader->eventNameLen);
+                if (payload.size() - offset < sizeof(HostRenderSetupEntryHeader))
+                {
+                    _LogError(L"HostRenderSetup entry header truncated");
+                    return FALSE;
+                }
+                const HostRenderSetupEntryHeader* eh =
+                    reinterpret_cast<const HostRenderSetupEntryHeader*>(payload.data() + offset);
+                offset += sizeof(HostRenderSetupEntryHeader);
+
+                HostRenderSetupInfo info;
+                info.windowKind = eh->windowKind;
+                info.maxBufferSize = eh->maxBufferSize;
+                // 减法形式防 32 位加法回绕；offset <= payload.size() 由上方守卫保证。
+                if (eh->shmNameLen > 0 && eh->shmNameLen <= payload.size() - offset)
+                {
+                    info.shmName = _Utf8ToWide(
+                        reinterpret_cast<const char*>(payload.data() + offset), eh->shmNameLen);
+                    offset += eh->shmNameLen;
+                }
+                if (eh->eventNameLen > 0 && eh->eventNameLen <= payload.size() - offset)
+                {
+                    info.eventName = _Utf8ToWide(
+                        reinterpret_cast<const char*>(payload.data() + offset), eh->eventNameLen);
+                    offset += eh->eventNameLen;
+                }
+                response.hostRenderSetups.push_back(info);
+
+                // Mirror the candidate (kind 0) entry into the legacy single fields.
+                if (info.windowKind == HOST_WINDOW_CANDIDATE)
+                {
+                    response.shmName = info.shmName;
+                    response.eventName = info.eventName;
+                    response.maxBufferSize = info.maxBufferSize;
+                }
             }
 
-            _LogInfo(L"Response: HostRenderSetup shm=%ls, event=%ls, maxSize=%u",
-                     response.shmName.c_str(), response.eventName.c_str(), response.maxBufferSize);
+            _LogInfo(L"Response: HostRenderSetup entries=%u (candidate shm=%ls)",
+                     entryCount, response.shmName.c_str());
         }
         break;
 

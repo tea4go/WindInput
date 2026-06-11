@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Globals.h"
+#include "BinaryProtocol.h" // HostWindowKind / HOST_WINDOW_KIND_COUNT for the host window array
 #include <string>
 
 // Forward declarations
@@ -250,7 +251,10 @@ private:
     CIPCClient* _pIPCClient;
     CLangBarItemButton* _pLangBarItemButton;
     CHotkeyManager* _pHotkeyManager;
-    CHostWindow* _pHostWindow;
+    // One host band window per kind (candidate / tooltip / status). Indexed by
+    // HostWindowKind. _pHostWindow[HOST_WINDOW_CANDIDATE] is the candidate window
+    // (also the z-order owner of the tooltip/status windows).
+    CHostWindow* _pHostWindow[HOST_WINDOW_KIND_COUNT];
 
     // Input mode state
     BOOL _bChineseMode;

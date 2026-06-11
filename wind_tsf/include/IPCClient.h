@@ -37,6 +37,16 @@ enum class IPCLogLevel
     Debug = 3      // Everything including verbose debug
 };
 
+// One parsed CMD_HOST_RENDER_SETUP list entry: an SHM channel for one host window kind
+// (candidate / tooltip / status). The DLL creates one band window per entry.
+struct HostRenderSetupInfo
+{
+    uint32_t windowKind = 0;    // HostWindowKind
+    uint32_t maxBufferSize = 0; // Max shared-memory size for this channel
+    std::wstring shmName;
+    std::wstring eventName;
+};
+
 // Response from Go Service (simplified for binary protocol)
 struct ServiceResponse
 {
@@ -66,7 +76,10 @@ struct ServiceResponse
     std::vector<uint32_t> keyDownHotkeys;
     std::vector<uint32_t> keyUpHotkeys;
 
-    // For HostRenderSetup
+    // For HostRenderSetup — one entry per host window kind (candidate/tooltip/status).
+    // The legacy single fields below mirror the candidate (first) entry for back-compat
+    // logging; _EnsureHostRenderSetup iterates hostRenderSetups to create all band windows.
+    std::vector<HostRenderSetupInfo> hostRenderSetups;
     std::wstring shmName;
     std::wstring eventName;
     uint32_t maxBufferSize = 0;

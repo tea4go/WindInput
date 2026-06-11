@@ -3,12 +3,14 @@ package coordinator
 
 import (
 	"fmt"
+	"image"
 	"runtime"
 	"runtime/debug"
 	"time"
 	"unicode/utf8"
 
 	"github.com/huanfeng/wind_input/internal/bridge"
+	"github.com/huanfeng/wind_input/internal/ipc"
 	"github.com/huanfeng/wind_input/internal/store"
 	"github.com/huanfeng/wind_input/internal/transform"
 	"github.com/huanfeng/wind_input/internal/ui"
@@ -316,8 +318,18 @@ func (c *Coordinator) updateHostRenderState() {
 		}
 		c.uiManager.SetHostRenderFunc(nil, nil)
 	}
-	// TODO: StatusWindow 的 host render 集成需要 DLL 侧协议扩展，
-	// 当前状态窗口使用本地窗口渲染。后续可通过 sw.SetHostRenderFunc 接入。
+
+	// Tooltip host render：与候选同进退。高 Band 宿主下 tooltip 也必须走 host render，
+	// 否则会被候选 band 窗口遮挡。tooltip 无命中矩形/高亮，故 rects=nil、renderedHover=-1。
+	if tipWrite, tipHide := c.bridgeServer.GetActiveHostRenderFor(ipc.HostWindowTooltip); tipWrite != nil {
+		c.uiManager.SetTooltipHostRenderFunc(func(img *image.RGBA, x, y int) error {
+			return tipWrite(img, x, y, nil, -1)
+		}, tipHide)
+	} else {
+		c.uiManager.SetTooltipHostRenderFunc(nil, nil)
+	}
+
+	// TODO(Phase 2): StatusWindow 的 host render 接入（HostWindowStatus）。
 }
 
 // HandleFocusLost handles focus lost events (real focus change, e.g., user clicked another window).

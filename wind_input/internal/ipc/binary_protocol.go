@@ -344,10 +344,36 @@ type SharedRenderHeader struct {
 }
 
 // HostRenderSetupPayload is sent from Go to DLL with shared memory details.
+// (darwin host render path only; the Windows path uses HostRenderSetupEntry below.)
 type HostRenderSetupPayload struct {
 	MaxBufferSize uint32 // Maximum shared memory size
 	ShmName       string // Shared memory name (e.g. "Local\\WindInput_SHM_12345")
 	EventName     string // Named event name (e.g. "Local\\WindInput_EVT_12345")
+}
+
+// HostWindowKind identifies which host-rendered window an SHM channel / band window
+// belongs to. Each kind has its OWN shared-memory section, per-PID wake event, and DLL
+// band window, because the candidate / tooltip / status windows can all be visible at
+// the same time and therefore cannot share a single bitmap channel.
+type HostWindowKind uint32
+
+const (
+	HostWindowCandidate HostWindowKind = 0 // 候选框（含鼠标交互）
+	HostWindowTooltip   HostWindowKind = 1 // 候选悬停 tooltip（纯显示）
+	HostWindowStatus    HostWindowKind = 2 // 状态提示气泡（纯显示）
+)
+
+// HostWindowKindCount bounds the per-kind arrays on both Go and DLL sides.
+const HostWindowKindCount = 3
+
+// HostRenderSetupEntry describes one host-rendered window's SHM channel. The Windows
+// CmdHostRenderSetup response carries a list of these (one per active kind); the DLL
+// creates one band window per entry.
+type HostRenderSetupEntry struct {
+	WindowKind    HostWindowKind // which window this channel feeds
+	MaxBufferSize uint32         // max shared-memory size for this channel
+	ShmName       string         // shared-memory section name
+	EventName     string         // per-PID wake event name
 }
 
 // CalcKeyHash computes the key hash for hotkey matching

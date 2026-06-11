@@ -185,9 +185,17 @@ func (s *Server) markUnfocused(clientID int) {
 	s.focusMu.Unlock()
 }
 
-// GetActiveHostRender returns write/hide functions if the active process has host rendering.
-// Returns nil functions if host rendering is not active.
+// GetActiveHostRender returns the candidate window's write/hide functions if the active
+// process has host rendering. Returns nil functions if host rendering is not active.
 func (s *Server) GetActiveHostRender() (writeFrame func(img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error, hideFunc func()) {
+	return s.GetActiveHostRenderFor(ipc.HostWindowCandidate)
+}
+
+// GetActiveHostRenderFor returns write/hide functions for the given host window kind
+// (candidate / tooltip / status) bound to the active process. Returns nil functions if
+// host rendering is not active or that kind's channel is missing. Writes wake ONLY this
+// process's render thread for that kind (per-(PID,kind) event).
+func (s *Server) GetActiveHostRenderFor(kind ipc.HostWindowKind) (writeFrame func(img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error, hideFunc func()) {
 	if s.hostRender == nil {
 		return nil, nil
 	}
@@ -201,13 +209,15 @@ func (s *Server) GetActiveHostRender() (writeFrame func(img *image.RGBA, x, y in
 	}
 
 	state := s.hostRender.GetActiveState(pid)
-	if state == nil || state.SHM == nil || state.Event == nil {
+	if state == nil || state.channels[kind] == nil {
 		return nil, nil
 	}
 
-	// Bind to this process's state so writes wake ONLY this process's render thread
-	// (per-PID event), even though the SHM section is shared across all hosts.
-	return state.WriteFrame, state.WriteHide
+	return func(img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error {
+			return state.WriteFrame(kind, img, x, y, rects, renderedHover)
+		}, func() {
+			state.WriteHide(kind)
+		}
 }
 
 // Start begins listening for connections from C++ Bridge.

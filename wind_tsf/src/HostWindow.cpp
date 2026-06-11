@@ -38,6 +38,8 @@ CHostWindow::CHostWindow()
     , _lastSequence(0)
     , _pfnCreateWindowInBand(nullptr)
     , _pfnGetWindowBand(nullptr)
+    , _windowKind(HOST_WINDOW_CANDIDATE)
+    , _ownerOverride(NULL)
     , _pIPCClient(nullptr)
     , _frameX(0)
     , _frameY(0)
@@ -134,7 +136,10 @@ LRESULT CALLBACK CHostWindow::_WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     if (msg == WM_MOUSEACTIVATE)
         return MA_NOACTIVATE;
 
-    if (self != nullptr)
+    // Mouse interaction is candidate-only. Tooltip/status are pure-display band windows
+    // (their occlusion fix is z-order, not interaction), so they fall through to
+    // DefWindowProc for all mouse messages.
+    if (self != nullptr && self->_windowKind == HOST_WINDOW_CANDIDATE)
     {
         switch (msg)
         {
@@ -381,18 +386,30 @@ BOOL CHostWindow::_CreateBandWindow(DWORD band)
 
     // For WS_POPUP windows, the hWndParent parameter sets the "owner" window.
     // Owned windows always appear above their owner in z-order.
-    // Use the foreground window from the same process as owner to ensure the
-    // candidate window appears above the host's search panel (especially at band=13).
+    //
+    // If an owner override was supplied (tooltip/status → candidate hwnd), use it so the
+    // window sits above the candidate band window and never gets occluded by it. Otherwise
+    // (candidate) use the foreground window from the same process so the candidate appears
+    // above the host's search panel (especially at band=13).
     HWND owner = NULL;
-    HWND hwndFg = GetForegroundWindow();
-    if (hwndFg)
+    if (_ownerOverride != NULL)
     {
-        DWORD fgPID = 0;
-        GetWindowThreadProcessId(hwndFg, &fgPID);
-        if (fgPID == GetCurrentProcessId())
+        owner = _ownerOverride;
+        WIND_LOG_INFO_FMT(L"HostWindow: Using override owner hwnd=0x%p (kind=%u) for band=%u\n",
+            owner, (unsigned)_windowKind, band);
+    }
+    else
+    {
+        HWND hwndFg = GetForegroundWindow();
+        if (hwndFg)
         {
-            owner = hwndFg;
-            WIND_LOG_INFO_FMT(L"HostWindow: Using owner hwnd=0x%p for band=%u\n", owner, band);
+            DWORD fgPID = 0;
+            GetWindowThreadProcessId(hwndFg, &fgPID);
+            if (fgPID == GetCurrentProcessId())
+            {
+                owner = hwndFg;
+                WIND_LOG_INFO_FMT(L"HostWindow: Using owner hwnd=0x%p for band=%u\n", owner, band);
+            }
         }
     }
 
@@ -432,12 +449,15 @@ BOOL CHostWindow::_CreateBandWindow(DWORD band)
     return TRUE;
 }
 
-BOOL CHostWindow::Initialize(const wchar_t* shmName, const wchar_t* eventName, DWORD maxBufferSize, CIPCClient* ipcClient)
+BOOL CHostWindow::Initialize(const wchar_t* shmName, const wchar_t* eventName, DWORD maxBufferSize,
+                             CIPCClient* ipcClient, HostWindowKind kind, HWND ownerOverride)
 {
-    WIND_LOG_INFO_FMT(L"HostWindow: Initializing, shm=%s, event=%s, maxSize=%u\n",
-        shmName, eventName, maxBufferSize);
+    WIND_LOG_INFO_FMT(L"HostWindow: Initializing, kind=%u, shm=%s, event=%s, maxSize=%u\n",
+        (unsigned)kind, shmName, eventName, maxBufferSize);
 
-    _pIPCClient = ipcClient; // weak ref for routing mouse events back to Go
+    _windowKind = kind;
+    _ownerOverride = ownerOverride;
+    _pIPCClient = ipcClient; // weak ref for routing mouse events back to Go (candidate only)
 
     // Resolve undocumented APIs
     if (!_ResolveAPIs())

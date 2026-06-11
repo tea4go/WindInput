@@ -663,26 +663,37 @@ func (c *BinaryCodec) EncodeActivationStatusPush(chineseMode, fullWidth, chinese
 	return result
 }
 
-// EncodeHostRenderSetup encodes a host render setup response (CMD_HOST_RENDER_SETUP)
-// Contains shared memory name, event name, and max buffer size
-func (c *BinaryCodec) EncodeHostRenderSetup(setup *HostRenderSetupPayload) []byte {
-	shmBytes := []byte(setup.ShmName)
-	evtBytes := []byte(setup.EventName)
-
-	// Payload: maxBufferSize(4) + shmNameLen(4) + eventNameLen(4) + shmName + eventName
-	payloadLen := uint32(12 + len(shmBytes) + len(evtBytes))
+// EncodeHostRenderSetup encodes a host render setup response (CMD_HOST_RENDER_SETUP).
+// Wire format: entryCount(4) + entryCount × { windowKind(4) + maxBufferSize(4) +
+// shmNameLen(4) + eventNameLen(4) + shmName + eventName }. One entry per host window
+// kind (candidate / tooltip / status); the DLL creates one band window per entry.
+func (c *BinaryCodec) EncodeHostRenderSetup(entries []HostRenderSetupEntry) []byte {
+	// Compute payload length: 4-byte count + per-entry 16-byte header + name bytes.
+	payloadLen := uint32(4)
+	for i := range entries {
+		payloadLen += 16 + uint32(len(entries[i].ShmName)) + uint32(len(entries[i].EventName))
+	}
 	header := c.EncodeHeader(CmdHostRenderSetup, payloadLen)
-
-	setupHeader := make([]byte, 12)
-	binary.LittleEndian.PutUint32(setupHeader[0:4], setup.MaxBufferSize)
-	binary.LittleEndian.PutUint32(setupHeader[4:8], uint32(len(shmBytes)))
-	binary.LittleEndian.PutUint32(setupHeader[8:12], uint32(len(evtBytes)))
 
 	result := make([]byte, 0, HeaderSize+payloadLen)
 	result = append(result, header...)
-	result = append(result, setupHeader...)
-	result = append(result, shmBytes...)
-	result = append(result, evtBytes...)
+
+	var count [4]byte
+	binary.LittleEndian.PutUint32(count[:], uint32(len(entries)))
+	result = append(result, count[:]...)
+
+	for i := range entries {
+		shmBytes := []byte(entries[i].ShmName)
+		evtBytes := []byte(entries[i].EventName)
+		var eh [16]byte
+		binary.LittleEndian.PutUint32(eh[0:4], uint32(entries[i].WindowKind))
+		binary.LittleEndian.PutUint32(eh[4:8], entries[i].MaxBufferSize)
+		binary.LittleEndian.PutUint32(eh[8:12], uint32(len(shmBytes)))
+		binary.LittleEndian.PutUint32(eh[12:16], uint32(len(evtBytes)))
+		result = append(result, eh[:]...)
+		result = append(result, shmBytes...)
+		result = append(result, evtBytes...)
+	}
 	return result
 }
 

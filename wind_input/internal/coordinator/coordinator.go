@@ -380,6 +380,9 @@ type BridgeServer interface {
 	// GetActiveHostRender returns write/hide functions if the active process has host rendering.
 	// Returns nil functions if host rendering is not active for the current process.
 	GetActiveHostRender() (writeFrame func(img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error, hideFunc func())
+	// GetActiveHostRenderFor returns write/hide functions for a specific host window kind
+	// (candidate / tooltip / status) bound to the active process; nil if unavailable.
+	GetActiveHostRenderFor(kind ipc.HostWindowKind) (writeFrame func(img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error, hideFunc func())
 
 	// IsActivelyFocusedPID 报告指定 PID 当下是否仍有任一 TSF clientID 持有可编辑焦点。
 	// 用于 HandleIMEDeactivated / HandleFocusLost 区分两种场景：

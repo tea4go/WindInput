@@ -145,6 +145,11 @@ func (s *Server) GetActiveHostRender() (writeFrame func(img *image.RGBA, x, y in
 	return nil, nil
 }
 
+// GetActiveHostRenderFor darwin 上始终返回 nil（host render 走 push 通道，不分 kind）。
+func (s *Server) GetActiveHostRenderFor(_ ipc.HostWindowKind) (writeFrame func(img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error, hideFunc func()) {
+	return nil, nil
+}
+
 // Start 启动 bridge 监听。先建立运行时目录, 再 listen 两个 socket。
 // 阻塞直到 listener 异常或 RestartService 调用。
 func (s *Server) Start() error {

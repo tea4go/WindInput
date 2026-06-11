@@ -19,8 +19,17 @@ public:
     // Initialize with shared memory and event names from Go service.
     // Creates the Band window and starts the render thread. ipcClient (may be null) is
     // used to route mouse click/hover back to Go (CMD_CANDIDATE_SELECT / CMD_CANDIDATE_HOVER).
+    // kind selects the window role: only HOST_WINDOW_CANDIDATE enables mouse interaction;
+    // tooltip/status are pure display. ownerOverride (may be NULL) forces the band window's
+    // owner — the candidate's hwnd is passed for tooltip/status so they sit above the
+    // candidate in z-order (owned windows always render above their owner).
     // Returns TRUE on success.
-    BOOL Initialize(const wchar_t* shmName, const wchar_t* eventName, DWORD maxBufferSize, CIPCClient* ipcClient);
+    BOOL Initialize(const wchar_t* shmName, const wchar_t* eventName, DWORD maxBufferSize,
+                    CIPCClient* ipcClient, HostWindowKind kind, HWND ownerOverride);
+
+    // The band window handle (NULL until created). Used as the z-order owner for
+    // sibling host windows (tooltip/status owned by the candidate).
+    HWND GetHwnd() const { return _hwnd; }
 
     // Shut down: stop render thread, destroy window, unmap shared memory.
     void Uninitialize();
@@ -107,6 +116,13 @@ private:
 
     CreateWindowInBand_t _pfnCreateWindowInBand;
     GetWindowBand_t      _pfnGetWindowBand;
+
+    // Window role. Only HOST_WINDOW_CANDIDATE routes mouse events to Go; tooltip/status
+    // are pure-display band windows (their occlusion fix is z-order, not interaction).
+    HostWindowKind _windowKind;
+    // Forced band-window owner (NULL = derive from foreground). Non-candidate windows are
+    // owned by the candidate hwnd so they stay above it in z-order.
+    HWND _ownerOverride;
 
     // ── Mouse routing state ─────────────────────────────────────────────────
     CIPCClient* _pIPCClient; // weak ref (owned by TextService); routes mouse events to Go

@@ -609,7 +609,7 @@ func (s *Server) handleHostRenderRequest(clientID int, processID uint32) []byte 
 	}
 
 	s.logger.Info("Host render setup sent", "clientID", clientID, "processID", processID,
-		"shmName", setup.ShmName, "eventName", setup.EventName)
+		"kinds", len(setup))
 
 	// Notify coordinator that host render is ready so it can update UI render callbacks.
 	// This handles the case where FocusGained arrived before host render was set up

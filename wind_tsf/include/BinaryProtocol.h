@@ -307,16 +307,29 @@ static_assert(sizeof(HostRenderHitRect) == 20, "HostRenderHitRect must be 20 byt
 // count can never make the DLL read past the buffer.
 constexpr uint32_t MAX_HOST_RENDER_RECTS = 256;
 
-// Host render setup payload (from Go, response to CMD_HOST_RENDER_REQUEST)
-// Wire format: maxBufferSize(4) + shmNameLen(4) + eventNameLen(4) + shmName + eventName
-struct HostRenderSetupHeader
+// Host window kind: identifies which host-rendered window an SHM channel / band window
+// belongs to. Each kind has its own SHM section + per-PID event + band window, because
+// candidate / tooltip / status can all be visible simultaneously.
+enum HostWindowKind : uint32_t
 {
-    uint32_t maxBufferSize;  // Maximum shared memory size
+    HOST_WINDOW_CANDIDATE = 0, // 候选框（含鼠标交互）
+    HOST_WINDOW_TOOLTIP   = 1, // 候选悬停 tooltip（纯显示）
+    HOST_WINDOW_STATUS    = 2, // 状态提示气泡（纯显示）
+};
+constexpr uint32_t HOST_WINDOW_KIND_COUNT = 3;
+
+// Host render setup payload (from Go, response to CMD_HOST_RENDER_REQUEST).
+// Wire format: entryCount(4) + entryCount × { HostRenderSetupEntryHeader + shmName + eventName }.
+// One entry per active window kind; the DLL creates one band window per entry.
+struct HostRenderSetupEntryHeader
+{
+    uint32_t windowKind;     // HostWindowKind
+    uint32_t maxBufferSize;  // Maximum shared memory size for this channel
     uint32_t shmNameLen;     // Length of shared memory name (UTF-8)
     uint32_t eventNameLen;   // Length of event name (UTF-8)
     // Followed by: shmName (shmNameLen bytes) + eventName (eventNameLen bytes)
 };
-static_assert(sizeof(HostRenderSetupHeader) == 12, "HostRenderSetupHeader must be 12 bytes");
+static_assert(sizeof(HostRenderSetupEntryHeader) == 16, "HostRenderSetupEntryHeader must be 16 bytes");
 
 // Push pipe token handshake payload (client → server, 8 bytes written immediately after connecting)
 // Token format: (uint64_t)GetCurrentProcessId() << 32 | per-process-instance-counter (uint32)

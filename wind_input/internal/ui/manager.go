@@ -550,6 +550,17 @@ func (m *Manager) IsHostRendering() bool {
 	return m.hostRenderFunc != nil
 }
 
+// SetTooltipHostRenderFunc wires the tooltip window's host render callback (高 Band 宿主
+// 进程下 tooltip 也走 host render，压在候选窗之上避免遮挡)。传 nil 恢复本地渲染。
+func (m *Manager) SetTooltipHostRenderFunc(renderFunc func(img *image.RGBA, x, y int) error, hideFunc func()) {
+	m.mu.Lock()
+	tt := m.tooltip
+	m.mu.Unlock()
+	if tt != nil {
+		tt.SetHostRenderFunc(renderFunc, hideFunc)
+	}
+}
+
 // SetToolbarCallbacks sets the callbacks for toolbar actions.
 // 用 wrapToolbarCallbacks 包装传入 callbacks, 每次触发同时推一份 EvtToolbarClick。
 func (m *Manager) SetToolbarCallbacks(callbacks *ToolbarCallback) {
