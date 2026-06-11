@@ -48,12 +48,13 @@ func winSHMNameFor(kind ipc.HostWindowKind) string {
 	}
 }
 
-// winEvtNameFor 返回某 PID 某窗口种类的私有唤醒 event 名。按 (PID, kind) 隔离：Go 只
-// signal 焦点进程对应窗口的 event，背景进程或其它窗口的渲染线程休眠，避免多个 reader 争
-// 抢同一 auto-reset event 只唤醒其中一个（不确定是谁）导致拿不到帧的串扰。候选保持原名
-// 向后兼容。
-func winEvtNameFor(pid uint32, kind ipc.HostWindowKind) string {
-	base := fmt.Sprintf("Local\\WindInput_EVT_%d", pid)
+// winEvtNameFor 返回某「实例（bridge clientID）」某窗口种类的私有唤醒 event 名。
+// 按 (clientID, kind) 隔离，而非按 PID：同一宿主进程内可能有多个 TextService 实例
+// （如两个记事本窗口 = 同 PID），它们各自的 render 线程绝不能等在同一个 auto-reset
+// event 上——单次 SetEvent 只放行一个等待线程，会造成「两层候选、只隐一个」。clientID
+// 是服务进程内单调递增、全局唯一的连接号，天然给每个实例一个独立 event。
+func winEvtNameFor(clientID int, kind ipc.HostWindowKind) string {
+	base := fmt.Sprintf("Local\\WindInput_EVT_C%d", clientID)
 	switch kind {
 	case ipc.HostWindowTooltip:
 		return base + "_TIP"
@@ -64,59 +65,38 @@ func winEvtNameFor(pid uint32, kind ipc.HostWindowKind) string {
 	}
 }
 
-// hostRenderChannel 是单个窗口种类的发送通道：全局共享段 + 本进程私有唤醒 event。
+// hostRenderChannel 是单个窗口种类的发送通道：全局共享段 + 本实例私有唤醒 event。
 type hostRenderChannel struct {
 	SHM   *SharedMemory // 该 kind 的全局共享段（懒建常驻，所有 state 共享同一个）
-	Event *NamedEvent   // 本进程该 kind 私有唤醒 event
+	Event *NamedEvent   // 本实例该 kind 私有唤醒 event
 }
 
-// HostRenderState tracks host rendering state for a single client process, keyed by
-// window kind. Each channel's SHM points at the global per-kind section; its Event is
-// this process's private wake event for that kind.
+// HostRenderState tracks host rendering state for a single bridge connection (one
+// TextService instance), keyed by window kind. Each channel's SHM points at the global
+// per-kind section; its Event is this INSTANCE's private wake event for that kind.
+// InstanceID == the bridge clientID; Go stamps it into SharedRenderHeader.TargetInstanceID
+// so the DLL render thread can tell whether a frame on the shared SHM targets it.
 type HostRenderState struct {
-	ProcessID uint32
-	channels  map[ipc.HostWindowKind]*hostRenderChannel
-	Active    bool   // Whether host render is currently active
-	SetupSeq  uint64 // Monotonic counter to distinguish old vs new state
-}
-
-// WriteFrame writes a frame to the given kind's SHM, then wakes ONLY this process's
-// render thread for that kind. server.GetActiveHostRenderFor hands this back bound to
-// the active PID + kind, so frames wake only the right band window of the right process.
-func (st *HostRenderState) WriteFrame(kind ipc.HostWindowKind, img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error {
-	ch := st.channels[kind]
-	if ch == nil || ch.SHM == nil {
-		return fmt.Errorf("host render channel %d unavailable", kind)
-	}
-	if err := ch.SHM.WriteFrame(img, x, y, rects, renderedHover); err != nil {
-		return err
-	}
-	ch.Event.Signal()
-	return nil
-}
-
-// WriteHide writes a hide frame to the given kind's SHM, then wakes only this process.
-func (st *HostRenderState) WriteHide(kind ipc.HostWindowKind) {
-	ch := st.channels[kind]
-	if ch == nil || ch.SHM == nil {
-		return
-	}
-	ch.SHM.WriteHide()
-	ch.Event.Signal()
+	InstanceID int    // bridge clientID (也是 SHM 帧的 TargetInstanceID)
+	ProcessID  uint32 // 宿主进程 PID（同 PID 可有多个实例）
+	channels   map[ipc.HostWindowKind]*hostRenderChannel
+	Active     bool   // Whether host render is currently active
+	SetupSeq   uint64 // Monotonic counter to distinguish old vs new state
 }
 
 // HostRenderManager manages host rendering for whitelisted processes.
 //
-// 每窗口种类一块全局 SHM + per-(PID,kind) event 模型：每类窗口（候选/tooltip/状态）
-// 各有一份全局共享 SHM（内存恒一份），但每个宿主进程对每类有独立唤醒 event。这样多个
-// 高 Band 进程（如多个 SearchHost 实例）可同时安全工作，且同一进程内多类窗口互不串扰
-// ——Go 只 signal 焦点进程对应窗口的 event。
+// 每窗口种类一块全局 SHM + per-(实例,kind) event 模型：每类窗口（候选/tooltip/状态）
+// 各有一份全局共享 SHM（内存恒一份），但每个 TextService 实例（bridge 连接）对每类有
+// 独立唤醒 event。同一 PID 可有多个实例（如两个记事本窗口）：写帧时 Go 把活动实例 ID
+// 盖进 SHM 头的 TargetInstanceID，并 signal 该 PID 下所有实例的 event——目标实例渲染、
+// 其余实例据 TargetInstanceID 自行隐藏，从而"恰好一个 band 窗口显示、其余清空"。
 type HostRenderManager struct {
 	mu       sync.Mutex
 	logger   *slog.Logger
 	patterns []string                             // 小写进程名模式，支持 filepath.Match 通配符（"*" 短路匹配全部）
 	shms     map[ipc.HostWindowKind]*SharedMemory // 每窗口种类的全局共享段（懒建常驻）
-	clients  map[uint32]*HostRenderState          // PID -> state（持 per-(PID,kind) event）
+	clients  map[int]*HostRenderState             // clientID -> state（持 per-(实例,kind) event）
 	setupSeq uint64                               // Monotonic counter for setup generation
 }
 
@@ -126,7 +106,7 @@ func NewHostRenderManager(logger *slog.Logger, processNames []string) *HostRende
 		logger:   logger,
 		patterns: normalizePatterns(processNames),
 		shms:     make(map[ipc.HostWindowKind]*SharedMemory),
-		clients:  make(map[uint32]*HostRenderState),
+		clients:  make(map[int]*HostRenderState),
 	}
 }
 
@@ -181,26 +161,28 @@ func (m *HostRenderManager) IsProcessWhitelisted(processID uint32) bool {
 }
 
 // SetupHostRender lazily creates one global shared-memory section per host window kind
-// and one per-PID wake event per kind for the client, returning one setup entry per kind
-// for the DLL (which creates one band window per entry).
-func (m *HostRenderManager) SetupHostRender(processID uint32) ([]ipc.HostRenderSetupEntry, error) {
+// and one per-INSTANCE wake event per kind for this bridge connection, returning one setup
+// entry per kind for the DLL (which creates one band window per entry). Keyed by clientID
+// so multiple TextService instances in one process each get their own events.
+func (m *HostRenderManager) SetupHostRender(clientID int, processID uint32) ([]ipc.HostRenderSetupEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 重建该 PID 的私有 events（若已存在先关旧的所有 kind）
-	if old, ok := m.clients[processID]; ok {
+	// 重建该实例的私有 events（若已存在先关旧的所有 kind）
+	if old, ok := m.clients[clientID]; ok {
 		for _, ch := range old.channels {
 			if ch.Event != nil {
 				ch.Event.Close()
 			}
 		}
-		delete(m.clients, processID)
+		delete(m.clients, clientID)
 	}
 
 	state := &HostRenderState{
-		ProcessID: processID,
-		channels:  make(map[ipc.HostWindowKind]*hostRenderChannel, len(hostRenderKinds)),
-		Active:    true,
+		InstanceID: clientID,
+		ProcessID:  processID,
+		channels:   make(map[ipc.HostWindowKind]*hostRenderChannel, len(hostRenderKinds)),
+		Active:     true,
 	}
 	entries := make([]ipc.HostRenderSetupEntry, 0, len(hostRenderKinds))
 
@@ -217,10 +199,10 @@ func (m *HostRenderManager) SetupHostRender(processID uint32) ([]ipc.HostRenderS
 			m.logger.Info("Host render SHM created", "kind", kind, "shmName", s.Name())
 		}
 
-		evtName := winEvtNameFor(processID, kind)
+		evtName := winEvtNameFor(clientID, kind)
 		evt, err := newNamedEvent(evtName)
 		if err != nil {
-			return nil, fmt.Errorf("create wake event kind %d for PID %d: %w", kind, processID, err)
+			return nil, fmt.Errorf("create wake event kind %d for client %d: %w", kind, clientID, err)
 		}
 		state.channels[kind] = &hostRenderChannel{SHM: shm, Event: evt}
 		entries = append(entries, ipc.HostRenderSetupEntry{
@@ -233,55 +215,102 @@ func (m *HostRenderManager) SetupHostRender(processID uint32) ([]ipc.HostRenderS
 
 	m.setupSeq++
 	state.SetupSeq = m.setupSeq
-	m.clients[processID] = state
+	m.clients[clientID] = state
 
-	m.logger.Info("Host render setup created", "processID", processID, "kinds", len(entries))
+	m.logger.Info("Host render setup created", "clientID", clientID, "processID", processID, "kinds", len(entries))
 	return entries, nil
 }
 
-// GetSetupSeq returns the current setup sequence for a process, or 0 if not found.
+// GetSetupSeq returns the current setup sequence for a client, or 0 if not found.
 // Used by disconnect handlers to pass to CleanupClient for race-safe cleanup.
-func (m *HostRenderManager) GetSetupSeq(processID uint32) uint64 {
+func (m *HostRenderManager) GetSetupSeq(clientID int) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if state, ok := m.clients[processID]; ok {
+	if state, ok := m.clients[clientID]; ok {
 		return state.SetupSeq
 	}
 	return 0
 }
 
-// GetActiveState returns the host render state for a process, or nil if not active.
-// Presence in the clients map implies the process was whitelisted at setup time.
-func (m *HostRenderManager) GetActiveState(processID uint32) *HostRenderState {
+// HasChannel reports whether the given client has an active host-render channel for the
+// kind. server.GetActiveHostRenderFor uses it to decide if the active instance can host.
+func (m *HostRenderManager) HasChannel(clientID int, kind ipc.HostWindowKind) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	state := m.clients[processID]
-	if state != nil && state.Active {
-		return state
+	state := m.clients[clientID]
+	return state != nil && state.Active && state.channels[kind] != nil
+}
+
+// eventsForLocked collects every instance's wake event for the given (PID, kind). Caller
+// must hold m.mu. Writing a frame signals ALL of them so non-target instances see the
+// frame's TargetInstanceID and hide; the target renders.
+func (m *HostRenderManager) eventsForLocked(pid uint32, kind ipc.HostWindowKind) []*NamedEvent {
+	var events []*NamedEvent
+	for _, state := range m.clients {
+		if state.ProcessID != pid || !state.Active {
+			continue
+		}
+		if ch := state.channels[kind]; ch != nil && ch.Event != nil {
+			events = append(events, ch.Event)
+		}
+	}
+	return events
+}
+
+// WriteFrameForKind writes a frame to the kind's global SHM stamped with targetInstanceID,
+// then wakes EVERY instance of pid for that kind. The target instance renders it; siblings
+// (same PID, different instance) see the mismatch and hide their band window.
+func (m *HostRenderManager) WriteFrameForKind(kind ipc.HostWindowKind, pid uint32, targetInstanceID uint32, img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error {
+	m.mu.Lock()
+	shm := m.shms[kind]
+	events := m.eventsForLocked(pid, kind)
+	m.mu.Unlock()
+
+	if shm == nil {
+		return fmt.Errorf("host render SHM kind %d unavailable", kind)
+	}
+	if err := shm.WriteFrame(img, x, y, rects, renderedHover, targetInstanceID); err != nil {
+		return err
+	}
+	for _, e := range events {
+		e.Signal()
 	}
 	return nil
 }
 
-// CleanupClient removes host render state for a disconnected client. Only this PID's
-// per-kind wake events are closed; the global per-kind SHM sections persist (other
-// processes share them). The expectedSeq guard prevents an old connection's cleanup
-// goroutine from closing a newer connection's events for the same (recycled) PID.
-func (m *HostRenderManager) CleanupClient(processID uint32, expectedSeq uint64) {
-	if processID == 0 {
+// WriteHideForKind writes a hide frame (not visible) to the kind's global SHM, then wakes
+// every instance of pid for that kind so they all clear their band window.
+func (m *HostRenderManager) WriteHideForKind(kind ipc.HostWindowKind, pid uint32) {
+	m.mu.Lock()
+	shm := m.shms[kind]
+	events := m.eventsForLocked(pid, kind)
+	m.mu.Unlock()
+
+	if shm == nil {
 		return
 	}
+	shm.WriteHide()
+	for _, e := range events {
+		e.Signal()
+	}
+}
 
+// CleanupClient removes host render state for a disconnected client. Only this instance's
+// per-kind wake events are closed; the global per-kind SHM sections persist (other clients
+// share them). The expectedSeq guard prevents an old connection's cleanup goroutine from
+// closing a newer connection's events.
+func (m *HostRenderManager) CleanupClient(clientID int, expectedSeq uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	state, ok := m.clients[processID]
+	state, ok := m.clients[clientID]
 	if !ok {
 		return
 	}
 
 	if expectedSeq != 0 && state.SetupSeq != expectedSeq {
 		m.logger.Info("Host render cleanup skipped: stale generation",
-			"processID", processID, "expected", expectedSeq, "current", state.SetupSeq)
+			"clientID", clientID, "expected", expectedSeq, "current", state.SetupSeq)
 		return
 	}
 
@@ -290,23 +319,23 @@ func (m *HostRenderManager) CleanupClient(processID uint32, expectedSeq uint64) 
 			ch.Event.Close()
 		}
 	}
-	delete(m.clients, processID)
-	m.logger.Info("Host render cleanup", "processID", processID, "seq", expectedSeq)
+	delete(m.clients, clientID)
+	m.logger.Info("Host render cleanup", "clientID", clientID, "seq", expectedSeq)
 }
 
-// CleanupAll closes all per-PID events and all per-kind global shared memory sections.
+// CleanupAll closes all per-instance events and all per-kind global shared memory sections.
 // Called on service shutdown.
 func (m *HostRenderManager) CleanupAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for pid, state := range m.clients {
+	for clientID, state := range m.clients {
 		for _, ch := range state.channels {
 			if ch.Event != nil {
 				ch.Event.Close()
 			}
 		}
-		delete(m.clients, pid)
+		delete(m.clients, clientID)
 	}
 	for kind, shm := range m.shms {
 		if shm != nil {

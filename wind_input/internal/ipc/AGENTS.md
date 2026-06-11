@@ -48,7 +48,8 @@
 - `CmdKeyType`（下行 0x0512, push）darwin 专用：命令直通车 key.type / clip.paste 文本上屏, `EncodeKeyType(text)`; payload = 整段 UTF-8 (无长度前缀, 同 `EncodeOpenSettings` 风格); forwarder 收 `uicmd.CmdKeyType` 转译, .app 经 `client.insertText` 上屏 (不模拟按键, 免辅助功能授权)
 - `CmdCandidateContextMenu`（上行 0x020F）darwin 专用：候选右键菜单动作, payload=index i32 + actionLen u32 + action(UTF-8); Coordinator.HandleCandidateContextMenu 按 action 派发 move/delete/reset/copy
 - `CmdMenuAction`（上行 0x0210）darwin 专用：统一菜单项被选中, payload=id i32; Coordinator.HandleUnifiedMenuAction 按 id 派发
-- `SharedRenderHeader` 固定 64 字节：前 52 字节有效字段（…/`RectCount`[40:44]/`RectsOffset`[44:48]/`RenderedHoverIndex`[48:52]），后 12 字节保留；后跟 BGRA 像素数据，再跟命中矩形表
+- `SharedRenderHeader` 固定 64 字节：前 56 字节有效字段（…/`RectCount`[40:44]/`RectsOffset`[44:48]/`RenderedHoverIndex`[48:52]/`TargetInstanceID`[52:56]），后 8 字节保留；后跟 BGRA 像素数据，再跟命中矩形表。`TargetInstanceID`=本帧目标实例(bridge clientID)：同进程多实例共用此单块 SHM、各等独立 event，Go signal 全部实例并盖此字段，DLL 渲染线程仅当 `targetInstanceId==_instanceId` 才渲染否则隐藏（修复"两层候选只隐一个"）。darwin 忽略
+- `EncodeHostRenderSetup(instanceID, entries)` 线格式：`instanceID(4)`(=bridge clientID) + `entryCount(4)` + 每条 {windowKind(4)+maxBufferSize(4)+shmNameLen(4)+eventNameLen(4)+shmName+eventName}；DLL 把 instanceID 盖到每个 band 窗口供帧 target 比对
 - `RenderedHoverIndex`（int32 [48:52]）：Go 本帧实际高亮的元素（hover 编码：>=0 候选 / -1 无 / -2 上翻页 / -3 下翻页）。Win host window 每帧把去重基线 `_lastHoverIndex` 同步成它，使打字清空高亮后再次悬停同一候选仍能重新高亮；darwin 忽略此字段
 - `CmdBatchEvents` 是批量事件命令，`bridge` 对其有特殊处理路径
 - `IsAsyncRequest(header)` 判断是否为不需要响应的异步请求（版本字段高位为 `AsyncFlag=0x8000`）

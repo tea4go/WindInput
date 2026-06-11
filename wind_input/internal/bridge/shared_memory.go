@@ -128,8 +128,11 @@ func NewSharedMemory(name string, size uint32) (*SharedMemory, error) {
 // (hover encoding: >=0 candidate, -1 none, -2 page-up, -3 page-down); the DLL syncs its
 // hover-dedup baseline to it so re-hovering the same index after a content change still
 // re-highlights. Does NOT signal any event — the caller wakes the active process's render
-// thread via that process's NamedEvent.
-func (sm *SharedMemory) WriteFrame(img *image.RGBA, screenX, screenY int, rects []ipc.CandidateHitRect, renderedHover int) error {
+// thread via that process's NamedEvent. targetInstanceID stamps which host-render client
+// (bridge clientID) this frame is meant for; a render thread renders only when it matches
+// its own instance ID and hides otherwise, so multiple TextService instances in one process
+// (sharing this one global section) don't all mirror the frame. See SharedRenderHeader.
+func (sm *SharedMemory) WriteFrame(img *image.RGBA, screenX, screenY int, rects []ipc.CandidateHitRect, renderedHover int, targetInstanceID uint32) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -174,7 +177,8 @@ func (sm *SharedMemory) WriteFrame(img *image.RGBA, screenX, screenY int, rects 
 	binary.LittleEndian.PutUint32(headerBuf[40:44], rectCount)
 	binary.LittleEndian.PutUint32(headerBuf[44:48], rectsOffset)
 	binary.LittleEndian.PutUint32(headerBuf[48:52], uint32(int32(renderedHover)))
-	// reserved bytes [52:64] stay zero
+	binary.LittleEndian.PutUint32(headerBuf[52:56], targetInstanceID)
+	// reserved bytes [56:64] stay zero
 
 	dst := unsafe.Slice((*byte)(sm.pView), totalSize)
 
@@ -228,6 +232,10 @@ func (sm *SharedMemory) WriteHide() {
 	// renderedHoverIndex = -1 (nothing highlighted); the DLL hides without reading it,
 	// but keep it consistent so a stale 0 can't read as "candidate 0 highlighted".
 	binary.LittleEndian.PutUint32(headerBuf[48:52], 0xFFFFFFFF) // int32(-1) bit pattern
+	// targetInstanceID [52:56] intentionally left 0: a hide frame is broadcast to ALL
+	// instances of the PID. The DLL hides whenever the frame is not visible REGARDLESS of
+	// target (the !visible gate is checked before the target match), so no real instance ID
+	// is needed here. (Load-bearing: keep the DLL's "!visible || target mismatch → hide".)
 
 	dst := unsafe.Slice((*byte)(sm.pView), ipc.SharedRenderHeaderSize)
 	copy(dst, headerBuf)

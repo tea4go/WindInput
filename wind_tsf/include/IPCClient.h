@@ -83,6 +83,10 @@ struct ServiceResponse
     std::wstring shmName;
     std::wstring eventName;
     uint32_t maxBufferSize = 0;
+    // This connection's instance ID (bridge clientID). Stamped onto every band window so the
+    // render thread can match it against SharedRenderHeader.targetInstanceId — only the
+    // targeted instance renders a frame; siblings in the same process hide. 0 = unset.
+    uint32_t hostRenderInstanceId = 0;
 
     // Error
     std::wstring error;

@@ -22,10 +22,13 @@ public:
     // kind selects the window role: only HOST_WINDOW_CANDIDATE enables mouse interaction;
     // tooltip/status are pure display. ownerOverride (may be NULL) forces the band window's
     // owner — the candidate's hwnd is passed for tooltip/status so they sit above the
-    // candidate in z-order (owned windows always render above their owner).
+    // candidate in z-order (owned windows always render above their owner). instanceId is
+    // this connection's bridge clientID; the render thread renders a frame only when
+    // SharedRenderHeader.targetInstanceId matches it, otherwise it hides (so sibling
+    // instances in the same process — e.g. two Notepad windows — don't all show the frame).
     // Returns TRUE on success.
     BOOL Initialize(const wchar_t* shmName, const wchar_t* eventName, DWORD maxBufferSize,
-                    CIPCClient* ipcClient, HostWindowKind kind, HWND ownerOverride);
+                    uint32_t instanceId, CIPCClient* ipcClient, HostWindowKind kind, HWND ownerOverride);
 
     // The band window handle (NULL until created). Used as the z-order owner for
     // sibling host windows (tooltip/status owned by the candidate).
@@ -120,6 +123,11 @@ private:
     // Window role. Only HOST_WINDOW_CANDIDATE routes mouse events to Go; tooltip/status
     // are pure-display band windows (their occlusion fix is z-order, not interaction).
     HostWindowKind _windowKind;
+    // This window's host-render instance ID (bridge clientID). The render thread renders a
+    // frame only when SharedRenderHeader.targetInstanceId == _instanceId; otherwise it hides.
+    // Lets multiple TextService instances in one process share the global SHM without all
+    // mirroring each other's frames (fixes "two candidate layers, only one hides").
+    uint32_t _instanceId;
     // Forced band-window owner (NULL = derive from foreground). Non-candidate windows are
     // owned by the candidate hwnd so they stay above it in z-order.
     HWND _ownerOverride;

@@ -2185,6 +2185,7 @@ void CTextService::_EnsureHostRenderSetup(const ServiceResponse& response, BOOL 
                         info.shmName.c_str(),
                         info.eventName.c_str(),
                         info.maxBufferSize,
+                        hrResponse.hostRenderInstanceId, // stamp frames' target against this
                         _pIPCClient, // weak ref: candidate routes mouse events back to Go
                         (HostWindowKind)info.windowKind,
                         owner))

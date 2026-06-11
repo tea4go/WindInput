@@ -39,6 +39,7 @@ CHostWindow::CHostWindow()
     , _pfnCreateWindowInBand(nullptr)
     , _pfnGetWindowBand(nullptr)
     , _windowKind(HOST_WINDOW_CANDIDATE)
+    , _instanceId(0)
     , _ownerOverride(NULL)
     , _pIPCClient(nullptr)
     , _frameX(0)
@@ -450,12 +451,13 @@ BOOL CHostWindow::_CreateBandWindow(DWORD band)
 }
 
 BOOL CHostWindow::Initialize(const wchar_t* shmName, const wchar_t* eventName, DWORD maxBufferSize,
-                             CIPCClient* ipcClient, HostWindowKind kind, HWND ownerOverride)
+                             uint32_t instanceId, CIPCClient* ipcClient, HostWindowKind kind, HWND ownerOverride)
 {
-    WIND_LOG_INFO_FMT(L"HostWindow: Initializing, kind=%u, shm=%s, event=%s, maxSize=%u\n",
-        (unsigned)kind, shmName, eventName, maxBufferSize);
+    WIND_LOG_INFO_FMT(L"HostWindow: Initializing, kind=%u, instance=%u, shm=%s, event=%s, maxSize=%u\n",
+        (unsigned)kind, instanceId, shmName, eventName, maxBufferSize);
 
     _windowKind = kind;
+    _instanceId = instanceId;
     _ownerOverride = ownerOverride;
     _pIPCClient = ipcClient; // weak ref for routing mouse events back to Go (candidate only)
 
@@ -661,8 +663,14 @@ void CHostWindow::_RenderLoop()
                 continue;
             _lastSequence = header->sequence;
 
-            // Check visibility flag
-            if (!(header->flags & SHARED_FLAG_VISIBLE))
+            // Frame targeting: multiple TextService instances in this process share the one
+            // global SHM and each was signaled. Render only if the frame is visible AND aimed
+            // at THIS instance; otherwise hide. This is what makes exactly one band window show
+            // while sibling instances (e.g. the other Notepad window) clear — without it, the
+            // shared auto-reset-event design left stale duplicate layers that never hid.
+            BOOL visible = (header->flags & SHARED_FLAG_VISIBLE) != 0;
+            BOOL forMe = (header->targetInstanceId == _instanceId);
+            if (!visible || !forMe)
             {
                 _HideWindow();
                 continue;

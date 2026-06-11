@@ -1350,15 +1350,18 @@ BOOL CIPCClient::_ParseResponse(const IpcHeader& header, const std::vector<uint8
         {
             response.type = ResponseType::HostRenderSetup;
 
-            // Wire: entryCount(4) + entryCount × { HostRenderSetupEntryHeader(16) + shmName + eventName }.
-            if (payload.size() < 4)
+            // Wire: instanceId(4) + entryCount(4) + entryCount × { HostRenderSetupEntryHeader(16) + shmName + eventName }.
+            if (payload.size() < 8)
             {
                 _LogError(L"HostRenderSetup payload too short");
                 return FALSE;
             }
+            uint32_t instanceId = 0;
+            memcpy(&instanceId, payload.data(), 4);
+            response.hostRenderInstanceId = instanceId;
             uint32_t entryCount = 0;
-            memcpy(&entryCount, payload.data(), 4);
-            size_t offset = 4;
+            memcpy(&entryCount, payload.data() + 4, 4);
+            size_t offset = 8;
 
             for (uint32_t i = 0; i < entryCount; ++i)
             {
@@ -1398,8 +1401,8 @@ BOOL CIPCClient::_ParseResponse(const IpcHeader& header, const std::vector<uint8
                 }
             }
 
-            _LogInfo(L"Response: HostRenderSetup entries=%u (candidate shm=%ls)",
-                     entryCount, response.shmName.c_str());
+            _LogInfo(L"Response: HostRenderSetup instance=%u entries=%u (candidate shm=%ls)",
+                     instanceId, entryCount, response.shmName.c_str());
         }
         break;
 

@@ -98,6 +98,12 @@ func (s *Server) processRequest(header *ipc.IpcHeader, payload []byte, clientID 
 				s.logger.Info("Active process updated", "clientID", clientID, "oldProcessID", s.activeProcessID, "newProcessID", processID)
 				s.activeProcessID = processID
 			}
+			// Track the active INSTANCE (this bridge connection). Disambiguates multiple
+			// TextService instances in one process for host render targeting. The most
+			// recent connection to send input/focus is the active one.
+			if s.activeInstanceID != clientID {
+				s.activeInstanceID = clientID
+			}
 			// Extract client token only from IME_ACTIVATED (payload = 8-byte token).
 			// FOCUS_GAINED intentionally excluded: two-process TSF apps (e.g. EverEdit)
 			// use Process A for key events (FOCUS_GAINED) and Process B for push pipe
@@ -607,7 +613,7 @@ func (s *Server) handleHostRenderRequest(clientID int, processID uint32) []byte 
 		return s.codec.EncodeAck()
 	}
 
-	setup, err := s.hostRender.SetupHostRender(processID)
+	setup, err := s.hostRender.SetupHostRender(clientID, processID)
 	if err != nil {
 		s.logger.Error("Failed to setup host render", "clientID", clientID, "processID", processID, "error", err)
 		return s.codec.EncodeAck()
@@ -621,7 +627,7 @@ func (s *Server) handleHostRenderRequest(clientID int, processID uint32) []byte 
 	// (e.g., during first activation when OnSetFocus fires before _DoFullStateSync).
 	s.handler.HandleHostRenderReady()
 
-	return s.codec.EncodeHostRenderSetup(setup)
+	return s.codec.EncodeHostRenderSetup(uint32(clientID), setup)
 }
 
 // handleHostCandidateSelect 处理 host render 宿主窗口的鼠标左键点选（DLL 经 CmdCandidateSelect

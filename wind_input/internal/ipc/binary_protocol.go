@@ -345,7 +345,17 @@ type SharedRenderHeader struct {
 	// re-hovering the same candidate index afterwards still triggers a fresh hover (the DLL
 	// no longer dedups against a stale "still highlighted" assumption). darwin ignores it.
 	RenderedHoverIndex int32 // [48:52]
-	// 52 bytes used, 12 bytes reserved to reach 64
+
+	// TargetInstanceID is the host-render client (bridge clientID) this frame is meant for.
+	// With multiple TextService instances in one host process (e.g. two Notepad windows =
+	// same PID), all their render threads share the one global per-kind SHM section while
+	// each waits on its OWN per-instance event. Go stamps the active instance's ID here and
+	// signals every instance of the PID; a render thread renders the frame only when this
+	// equals its own instance ID, otherwise it hides its band window — so exactly one window
+	// shows the frame and the siblings clear (fixes "two candidate layers, only one hides").
+	// 0 = unset. darwin ignores it.
+	TargetInstanceID uint32 // [52:56]
+	// 56 bytes used, 8 bytes reserved to reach 64
 }
 
 // HostRenderSetupPayload is sent from Go to DLL with shared memory details.
@@ -377,8 +387,8 @@ const HostWindowKindCount = 3
 type HostRenderSetupEntry struct {
 	WindowKind    HostWindowKind // which window this channel feeds
 	MaxBufferSize uint32         // max shared-memory size for this channel
-	ShmName       string         // shared-memory section name
-	EventName     string         // per-PID wake event name
+	ShmName       string         // shared-memory section name (global, shared per kind)
+	EventName     string         // per-instance wake event name
 }
 
 // CalcKeyHash computes the key hash for hotkey matching

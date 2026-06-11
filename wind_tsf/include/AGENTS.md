@@ -23,7 +23,7 @@ Public and internal header files defining interfaces, structures, and protocols 
 | `DisplayAttributeInfo.h` | CDisplayAttributeInfoInput, CDisplayAttributeProvider (composition text styling) |
 | `Register.h` | RegisterServer, UnregisterServer functions (Windows registry integration) |
 | `FileLogger.h` | CFileLogger class (运行时可配置文件日志，单例，支持 none/file/debugstring/all 四种输出模式，5MB 自动轮转，多进程安全) |
-| `HostWindow.h` | CHostWindow 类（开始菜单宿主进程代理渲染窗口，通过 CreateWindowInBand 解决 Win11 z-order 问题，使用共享内存接收 Go 侧渲染帧 + 内嵌命中矩形；`_WndProc` 仅候选 kind 路由鼠标点选/悬停/滚轮经 SendAsync 回传 Go。`Initialize(shmName, eventName, maxBufferSize, ipcClient, kind, ownerOverride)`：`kind` 选窗口角色（候选含交互/ tooltip·状态纯显示），`ownerOverride` 让 tooltip/状态 owned 于候选 hwnd 保证 z-order 在上；`GetHwnd()` 暴露句柄供作 owner。每 kind 一实例，由 `CTextService::_pHostWindow[HOST_WINDOW_KIND_COUNT]` 持有） |
+| `HostWindow.h` | CHostWindow 类（开始菜单宿主进程代理渲染窗口，通过 CreateWindowInBand 解决 Win11 z-order 问题，使用共享内存接收 Go 侧渲染帧 + 内嵌命中矩形；`_WndProc` 仅候选 kind 路由鼠标点选/悬停/滚轮经 SendAsync 回传 Go。`Initialize(shmName, eventName, maxBufferSize, instanceId, ipcClient, kind, ownerOverride)`：`instanceId`=本连接 bridge clientID（存 `_instanceId`，渲染线程仅当帧的 `targetInstanceId==_instanceId` 才渲染否则隐藏，解决同进程多实例共用单 SHM 时"两层候选只隐一个"），`kind` 选窗口角色（候选含交互/ tooltip·状态纯显示），`ownerOverride` 让 tooltip/状态 owned 于候选 hwnd 保证 z-order 在上；`GetHwnd()` 暴露句柄供作 owner。每 kind 一实例，由 `CTextService::_pHostWindow[HOST_WINDOW_KIND_COUNT]` 持有） |
 
 ## Architecture Overview
 

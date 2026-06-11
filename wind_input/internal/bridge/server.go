@@ -96,6 +96,11 @@ type Server struct {
 	activeMu        sync.RWMutex
 	activeProcessID uint32 // Process ID of the client that has focus
 	activeToken     uint64 // Per-instance token of the active TextService (0 if unknown)
+	// activeInstanceID is the bridge clientID of the active TextService instance. Unlike
+	// activeProcessID it disambiguates multiple instances in one process (two Notepad
+	// windows = same PID). Host render stamps it as the SHM frame's TargetInstanceID and
+	// keys its per-instance wake events by it. 0 = unknown.
+	activeInstanceID int
 
 	// focusedClients 记录"当下持有可编辑 TSF 焦点"的客户端（bridge clientID → PID）。
 	// 由 CmdFocusGained / CmdIMEActivated 写入，由 CmdFocusLost / CmdIMEDeactivated
@@ -202,21 +207,23 @@ func (s *Server) GetActiveHostRenderFor(kind ipc.HostWindowKind) (writeFrame fun
 
 	s.activeMu.RLock()
 	pid := s.activeProcessID
+	instanceID := s.activeInstanceID
 	s.activeMu.RUnlock()
 
-	if pid == 0 {
+	if pid == 0 || instanceID == 0 {
 		return nil, nil
 	}
 
-	state := s.hostRender.GetActiveState(pid)
-	if state == nil || state.channels[kind] == nil {
+	// The active instance must hold a channel for this kind (whitelisted + set up).
+	if !s.hostRender.HasChannel(instanceID, kind) {
 		return nil, nil
 	}
 
+	target := uint32(instanceID)
 	return func(img *image.RGBA, x, y int, rects []ipc.CandidateHitRect, renderedHover int) error {
-			return state.WriteFrame(kind, img, x, y, rects, renderedHover)
+			return s.hostRender.WriteFrameForKind(kind, pid, target, img, x, y, rects, renderedHover)
 		}, func() {
-			state.WriteHide(kind)
+			s.hostRender.WriteHideForKind(kind, pid)
 		}
 }
 
@@ -266,7 +273,7 @@ func (s *Server) Start() error {
 		s.logger.Info("C++ Bridge connected", "clientID", clientID)
 
 		go func(c net.Conn, id int) {
-			pid := s.handleClient(c, id)
+			s.handleClient(c, id)
 
 			// Bridge 连接整体断开 → 摘掉该 clientID 在 focusedClients 的记录。
 			// 兜底处理：万一 DLL 进程崩溃没来得及发 FOCUS_LOST / IME_DEACTIVATED，
@@ -274,20 +281,29 @@ func (s *Server) Start() error {
 			// clientID 不受影响。
 			s.markUnfocused(id)
 
-			// Capture the current setup sequence BEFORE acquiring the main lock.
-			// 防止旧连接的 cleanup goroutine 销毁同 PID 新连接的 SharedMemory。
+			// Host render is keyed by clientID (per instance), so cleanup uses id, not pid.
+			// Capture the setup sequence BEFORE acquiring the main lock; the guard prevents
+			// an old connection's cleanup from closing a newer connection's events.
 			var setupSeq uint64
-			if s.hostRender != nil && pid != 0 {
-				setupSeq = s.hostRender.GetSetupSeq(pid)
+			if s.hostRender != nil {
+				setupSeq = s.hostRender.GetSetupSeq(id)
 			}
+
+			// 若断开的正是当前活动实例，清掉 activeInstanceID，避免 GetActiveHostRenderFor
+			// 误用陈旧实例 ID（HasChannel 也会兜底返回 false，这里提前清更干净）。
+			s.activeMu.Lock()
+			if s.activeInstanceID == id {
+				s.activeInstanceID = 0
+			}
+			s.activeMu.Unlock()
 
 			s.mu.Lock()
 			delete(s.activeConns, c)
 			activeCount := len(s.activeConns)
 			s.mu.Unlock()
 
-			if s.hostRender != nil && pid != 0 && setupSeq != 0 {
-				s.hostRender.CleanupClient(pid, setupSeq)
+			if s.hostRender != nil && setupSeq != 0 {
+				s.hostRender.CleanupClient(id, setupSeq)
 			}
 
 			s.handler.HandleClientDisconnected(activeCount)

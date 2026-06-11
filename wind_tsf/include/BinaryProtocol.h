@@ -290,7 +290,13 @@ struct SharedRenderHeader
     // (_lastHoverIndex) to this each frame, so re-hovering the same index after a content
     // change (typing) still re-highlights instead of being deduped against a stale value.
     int32_t  renderedHoverIndex;
-    uint32_t reserved[3];// Padding to 64 bytes
+    // The host-render client (bridge clientID) this frame is meant for. Multiple
+    // TextService instances in one process (e.g. two Notepad windows = same PID) share
+    // this one global SHM section but each waits on its own event; Go signals them all and
+    // stamps the active instance here. A render thread renders only when this matches its
+    // own _instanceId, otherwise it hides — so exactly one band window shows the frame.
+    uint32_t targetInstanceId;
+    uint32_t reserved[2];// Padding to 64 bytes
 };
 static_assert(sizeof(SharedRenderHeader) == 64, "SharedRenderHeader must be 64 bytes");
 
@@ -323,8 +329,11 @@ enum HostWindowKind : uint32_t
 constexpr uint32_t HOST_WINDOW_KIND_COUNT = 3;
 
 // Host render setup payload (from Go, response to CMD_HOST_RENDER_REQUEST).
-// Wire format: entryCount(4) + entryCount × { HostRenderSetupEntryHeader + shmName + eventName }.
-// One entry per active window kind; the DLL creates one band window per entry.
+// Wire format: instanceId(4) + entryCount(4) + entryCount × { HostRenderSetupEntryHeader
+// + shmName + eventName }. instanceId is this connection's bridge clientID (per-instance
+// identity shared by all its kinds); the DLL stamps it on every band window so the render
+// thread can match it against SharedRenderHeader.targetInstanceId. One entry per active
+// window kind; the DLL creates one band window per entry.
 struct HostRenderSetupEntryHeader
 {
     uint32_t windowKind;     // HostWindowKind

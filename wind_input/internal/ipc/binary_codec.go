@@ -687,12 +687,15 @@ func (c *BinaryCodec) EncodeActivationStatusPush(chineseMode, fullWidth, chinese
 }
 
 // EncodeHostRenderSetup encodes a host render setup response (CMD_HOST_RENDER_SETUP).
-// Wire format: entryCount(4) + entryCount × { windowKind(4) + maxBufferSize(4) +
-// shmNameLen(4) + eventNameLen(4) + shmName + eventName }. One entry per host window
-// kind (candidate / tooltip / status); the DLL creates one band window per entry.
-func (c *BinaryCodec) EncodeHostRenderSetup(entries []HostRenderSetupEntry) []byte {
-	// Compute payload length: 4-byte count + per-entry 16-byte header + name bytes.
-	payloadLen := uint32(4)
+// Wire format: instanceID(4) + entryCount(4) + entryCount × { windowKind(4) +
+// maxBufferSize(4) + shmNameLen(4) + eventNameLen(4) + shmName + eventName }. instanceID
+// is the bridge clientID of this connection (per-instance identity, shared by all its
+// kinds): the DLL stamps it on every band window so the render thread can tell whether an
+// incoming frame (SharedRenderHeader.TargetInstanceID) targets it. One entry per host
+// window kind (candidate / tooltip / status); the DLL creates one band window per entry.
+func (c *BinaryCodec) EncodeHostRenderSetup(instanceID uint32, entries []HostRenderSetupEntry) []byte {
+	// Compute payload length: instanceID(4) + count(4) + per-entry 16-byte header + names.
+	payloadLen := uint32(8)
 	for i := range entries {
 		payloadLen += 16 + uint32(len(entries[i].ShmName)) + uint32(len(entries[i].EventName))
 	}
@@ -701,9 +704,10 @@ func (c *BinaryCodec) EncodeHostRenderSetup(entries []HostRenderSetupEntry) []by
 	result := make([]byte, 0, HeaderSize+payloadLen)
 	result = append(result, header...)
 
-	var count [4]byte
-	binary.LittleEndian.PutUint32(count[:], uint32(len(entries)))
-	result = append(result, count[:]...)
+	var prefix [8]byte
+	binary.LittleEndian.PutUint32(prefix[0:4], instanceID)
+	binary.LittleEndian.PutUint32(prefix[4:8], uint32(len(entries)))
+	result = append(result, prefix[:]...)
 
 	for i := range entries {
 		shmBytes := []byte(entries[i].ShmName)
