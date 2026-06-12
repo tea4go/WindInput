@@ -97,6 +97,12 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 	// Use Debug for high-frequency key events to reduce log noise
 	c.logger.Debug("HandleKeyEvent", "key", data.Key, "keycode", data.KeyCode, "modifiers", data.Modifiers, "chineseMode", c.chineseMode, "lockWait", lockTime.String())
 
+	// 第 0b 影子运行：只读地运行新决策器裁决并记日志，与旧路径并行，零行为影响。
+	// 受 WIND_SHADOW_DECIDER 门控（默认关闭）。详见 docs/design/input-processor-pipeline.md。
+	if c.devCfg.DeciderShadow && c.decider != nil {
+		c.decider.shadowLog(data.Key, &data)
+	}
+
 	// 数字后智能标点：保存前一按键的数字状态，然后重置。
 	// 仅在数字直通（无候选词选择）时重新设置为 true。
 	// 对于 modifier-only 按键（Shift/Ctrl/Alt/CapsLock），保持状态不变，

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-08 | Updated: 2026-06-11 -->
+<!-- Generated: 2026-04-08 | Updated: 2026-06-12 -->
 
 # internal/coordinator
 
@@ -45,6 +45,12 @@
 | `cmdbar_context.go` | `cmdbarEvalContext` 实现 `cmdbar.EvalContext`，给求值器提供 input/history/clip/env/services 取值；Sel/App/Title 暂为占位空串（P5 接 Win32）；Clip(n>1) 暂返回空（P5 接剪贴板栈） |
 | `reload_handler.go` | `ReloadHandler` 接口实现，供 `internal/control` 调用配置热重载 |
 | `confirmed_segments_test.go` | 已确认分段逻辑测试 |
+| `pipeline_types.go` / `pipeline_context.go` / `pipeline_processor.go` / `pipeline_keyhandler.go` | **输入处理器流水线（第 0 批骨架，未接主路径）**：统一决策器核心类型与接口。`Verdict`(Pass/Handle/Activate/Release) + `Decision` + `Capability` 位掩码 + `CompositionPhase`(Cold/Hot/Commit/End)；`DecisionCtx` 只读视图（Judge 用，编译期禁写状态）；`Processor`（宿主：迁移裁决 + 模式状态）/ `KeyHandler`（按键处理层：与宿主解耦的责任链）接口。详见 docs/design/input-processor-pipeline.md |
+| `pipeline_engine_default.go` | 兜底宿主 `engineDefaultProcessor`（host 永不为空的默认 host）；`decideEngineDefaultZFallback` 纯函数封装 z 键混合回退判定（可表驱动单测，脱离引擎环境） |
+| `pipeline_decider.go` | 统一决策器 `decider`：host 优先裁决 + 按键处理链遍历（`keyHandlerChain` = 全局分流 + 宿主特有 + 共享导航）+ `registry`（触发激活类宿主）+ `shadowLog`（第 0b 影子）。第 0b 起经 `wind_dev.toml` gated 影子接入 `HandleKeyEvent`，主路径仍走旧逻辑 |
+| `pipeline_temp_pinyin.go` | 临时拼音宿主 `tempPinyinProcessor`（1a：`Judge` 触发键激活裁决 / `Activate` 复用 `setupTempPinyinMode` / `BufferText`=tempPinyinBuffer / `Capabilities`=CapPinyinLayer）；注册 `decider.registry`，**1a 不接管**，真正 CompHot 热切换在 1c |
+| `pipeline_decider_test.go` | 第 0 批表驱动单测：z fallback 判定 / `Verdict`·`CompositionPhase` String / 决策器骨架（host 非空、链为空、不接管）/ 影子运行 smoke |
+| `dev_config.go` | 独立开发/调试配置 `wind_dev.toml`（配置目录下）：`loadDevConfig` 读 `decider_shadow` 等开关；**与主配置完全隔离**——不进 const-gen / 版本迁移桥接 / 前端 UI，避免临时调试开关污染用户主配置流程。启动时加载一次，改文件后重启生效 |
 
 ## For AI Agents
 
@@ -70,6 +76,7 @@
 - **加词模式**（`handle_addword.go`）：激活时设置占位 `inputBuffer = "\x00"` 让 C++ 侧进入 composition 状态以转发后续按键，加词完成/取消后调用 `exitAddWordMode` 清理
 - **候选词操作**（`handle_candidate_action.go`）：`handleDeleteCandidateByKey`/`handlePinCandidateByKey` 内部会 `c.mu.Unlock()` 后执行词库 IO，再 `c.mu.Lock()` 重新获取锁；调用方须在持有锁时调用
 - `inputHistory` 字段（`*InputHistory`）在每次上屏时通过 `inputHistory.Record` 更新，焦点切换时通过 `inputHistory.ClearClient` 清理
+- **输入处理器流水线重构（进行中，2026-06-12）**：正把"显式进入/退出模式"的硬独占状态机（`tempEnglishMode`/`tempPinyinMode`/`quickInputMode`/`specialMode` 四布尔 + 四套 `handleXxxKey`）重构为"统一决策器 + 宿主热切换 + KeyHandler 按键处理层 + 候选 Provider 融合"。三层正交抽象：`Processor`（宿主，任一时刻单一活跃）/ `KeyHandler`（按键处理，责任链，与宿主**解耦**、消除四套 handleXxxKey 导航重复）/ `CandidateProvider`（候选来源，可融合，第二阶段）。`CompositionPhase`(Cold/Hot/Commit/End) 把 composition 生命周期与宿主切换**解耦**以兼容现有全部焦点补丁（pendingFirstShow/pendingReplay/锚点锁定等）；CompHot 是新增「窗口不变」热切换路径。**当前为第 0 批地基 + 第 0b 影子运行**：`pipeline_*.go` 纯新增类型/接口/骨架；影子运行经独立 `wind_dev.toml` 的 `decider_shadow` 开关 gated 接入 `HandleKeyEvent`（只读裁决 + DEBUG 日志，零行为影响，开关默认关、改文件重启生效，见 `dev_config.go`），主路径仍走旧逻辑。关键不变量：host 永不为空(I1)、Judge 纯函数(I2)、引擎副作用决策器单点 diff(I3)、CompHot 不 hideUI/不重 arm(I4)、单键最多一次宿主迁移(I6)、链短路保证按键单一归属(I11)。改这套或推进批次前**必读** docs/design/input-processor-pipeline.md
 
 ### Testing Requirements
 - 协调器依赖 Windows UI 和 Named Pipe，集成测试需 Windows 环境
