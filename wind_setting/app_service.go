@@ -440,6 +440,15 @@ func (a *App) SelectDataDir() (string, error) {
 	})
 }
 
+// GetDefaultConfigDir 返回系统默认配置目录（忽略用户自定义覆盖路径）
+func (a *App) GetDefaultConfigDir() (string, error) {
+	dir, err := config.GetDefaultConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("获取默认配置目录失败: %w", err)
+	}
+	return dir, nil
+}
+
 // DataDirInfo 数据目录信息
 type DataDirInfo struct {
 	CurrentDir string `json:"current_dir"`

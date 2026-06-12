@@ -91,6 +91,17 @@ async function selectTarget() {
   }
 }
 
+async function fillDefaultPath() {
+  try {
+    const path = await wailsApi.getDefaultConfigDir();
+    if (!path) return;
+    targetDir.value = path;
+    await validateTarget();
+  } catch (e: any) {
+    error.value = "获取默认路径失败: " + (e.message || e);
+  }
+}
+
 async function validateTarget() {
   if (!targetDir.value) {
     validation.value = null;
@@ -223,6 +234,9 @@ async function execute() {
               placeholder="请选择或输入目标目录"
               @blur="validateTarget"
             />
+            <Button variant="outline" size="sm" @click="fillDefaultPath">
+              默认路径
+            </Button>
             <Button variant="outline" size="sm" @click="selectTarget">
               浏览...
             </Button>

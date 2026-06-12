@@ -114,6 +114,11 @@ async function onSearchJump(entry: SearchEntry) {
 watch(activeTab, () => {
   if (contentRef.value) contentRef.value.scrollTop = 0;
 });
+
+// 懒挂载：仅在 tab 首次被访问时才挂载对应页面组件，避免启动时 8 个页面同时
+// onMounted 导致的 Wails RPC 并发冲击（约 3 秒卡顿）。
+const mountedTabs = ref(new Set<string>());
+watch(activeTab, (tab) => { mountedTabs.value.add(tab); }, { immediate: true });
 const addWordParams = ref<AddWordParams | null>(null);
 const showAddWordDialog = ref(false);
 const protocolPayload = ref<ProtocolImportPayload | null>(null);
@@ -956,15 +961,21 @@ onUnmounted(() => {
 
       <div v-else class="content" ref="contentRef">
         <GeneralPage
+          v-if="mountedTabs.has('general')"
           ref="generalPageRef"
           v-show="activeTab === 'general'"
           :formData="formData"
           :engines="engines"
         />
 
-        <InputPage v-show="activeTab === 'input'" :formData="formData" />
+        <InputPage
+          v-if="mountedTabs.has('input')"
+          v-show="activeTab === 'input'"
+          :formData="formData"
+        />
 
         <HotkeyPage
+          v-if="mountedTabs.has('hotkey')"
           v-show="activeTab === 'hotkey'"
           :formData="formData"
           :hotkeyConflicts="hotkeyConflicts"
@@ -974,6 +985,7 @@ onUnmounted(() => {
         />
 
         <AppearancePage
+          v-if="mountedTabs.has('appearance')"
           v-show="activeTab === 'appearance'"
           :formData="formData"
           :isWailsEnv="isWailsEnv"
@@ -988,6 +1000,7 @@ onUnmounted(() => {
         />
 
         <DictionaryPage
+          v-if="mountedTabs.has('dictionary')"
           ref="dictPageRef"
           v-show="activeTab === 'dictionary'"
           :isWailsEnv="isWailsEnv"
@@ -995,12 +1008,14 @@ onUnmounted(() => {
         />
 
         <StatsPage
+          v-if="mountedTabs.has('stats')"
           v-show="activeTab === 'stats'"
           :isWailsEnv="isWailsEnv"
           :formData="formData"
         />
 
         <AdvancedPage
+          v-if="mountedTabs.has('advanced')"
           v-show="activeTab === 'advanced'"
           :formData="formData"
           :tsfLogConfig="tsfLogConfig"
@@ -1011,6 +1026,7 @@ onUnmounted(() => {
         />
 
         <AboutPage
+          v-if="mountedTabs.has('about')"
           v-show="activeTab === 'about'"
           :status="status"
           :appIconUrl="appIconUrl"

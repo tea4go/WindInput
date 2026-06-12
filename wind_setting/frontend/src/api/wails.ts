@@ -1162,6 +1162,10 @@ export async function selectDataDir(): Promise<string> {
   return App.SelectDataDir();
 }
 
+export async function getDefaultConfigDir(): Promise<string> {
+  return App.GetDefaultConfigDir();
+}
+
 export interface ChangeDataDirResult {
   success: boolean;
   warnings: string[];

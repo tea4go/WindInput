@@ -127,6 +127,54 @@ func IsPortableMode() bool {
 	return ok
 }
 
+// GetDefaultConfigDir returns the system default config directory, ignoring any
+// user override (datadir.conf). Portable mode still takes priority.
+func GetDefaultConfigDir() (string, error) {
+	exeDir, err := GetExeDir()
+	if err == nil {
+		if root, ok := findPortableRoot(exeDir); ok {
+			return filepath.Join(root, PortableDataDir), nil
+		}
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user config dir: %w", err)
+	}
+	return filepath.Join(configDir, buildvariant.AppName()), nil
+}
+
+// abbreviateWindowsEnvPaths replaces well-known Windows env-var prefixes with
+// their %VAR% notation (e.g. C:\Users\foo\AppData\Roaming → %APPDATA%).
+// Falls back to the original path when no prefix matches.
+func abbreviateWindowsEnvPaths(p string) string {
+	vars := []struct {
+		env    string
+		marker string
+	}{
+		{"APPDATA", "%APPDATA%"},
+		{"LOCALAPPDATA", "%LOCALAPPDATA%"},
+		{"USERPROFILE", "%USERPROFILE%"},
+	}
+	clean := filepath.Clean(p)
+	lower := strings.ToLower(clean)
+	for _, v := range vars {
+		dir := os.Getenv(v.env)
+		if dir == "" {
+			continue
+		}
+		cleanDir := filepath.Clean(dir)
+		lowerDir := strings.ToLower(cleanDir)
+		if lower == lowerDir {
+			return v.marker
+		}
+		prefix := lowerDir + string(filepath.Separator)
+		if strings.HasPrefix(lower, prefix) {
+			return v.marker + `\` + clean[len(cleanDir)+1:]
+		}
+	}
+	return p
+}
+
 // GetConfigDirDisplay returns a user-friendly display string for the config directory.
 func GetConfigDirDisplay() string {
 	exeDir, err := GetExeDir()
@@ -142,6 +190,9 @@ func GetConfigDirDisplay() string {
 	// 检查是否有自定义路径
 	override, err := ReadUserDataDirOverride()
 	if err == nil && override != "" {
+		if runtime.GOOS == "windows" {
+			return abbreviateWindowsEnvPaths(override)
+		}
 		return abbreviateHome(override)
 	}
 
