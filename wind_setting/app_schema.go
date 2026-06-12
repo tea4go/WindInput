@@ -723,11 +723,14 @@ func validateSchemaResourcesMerged(schemaID string, a *App, exeDir, configDir st
 	return ""
 }
 
-// resolveDictFileExists 检查词典文件是否存在（与 wind_input 的 resolvePath 逻辑一致）
+// resolveDictFileExists 检查词典文件是否存在（与 wind_input 的 resolvePath 逻辑一致）。
+// 支持 wdb-only 模式：yaml/toml 不存在时，检查同目录同名 .wdb（发布方只提供预编译词库的场景）。
 func resolveDictFileExists(dictPath, exeDataDir, configDir string) bool {
 	if filepath.IsAbs(dictPath) {
-		_, err := os.Stat(dictPath)
-		return err == nil
+		if _, err := os.Stat(dictPath); err == nil {
+			return true
+		}
+		return dictWdbExists(dictPath)
 	}
 
 	// 按优先级在多个目录中查找
@@ -742,6 +745,23 @@ func resolveDictFileExists(dictPath, exeDataDir, configDir string) bool {
 		candidate := filepath.Join(dir, dictPath)
 		if _, err := os.Stat(candidate); err == nil {
 			return true
+		}
+		if dictWdbExists(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+// dictWdbExists 检查与 dictPath 同目录同名的 .wdb 文件是否存在。
+// foo/bar.dict.yaml → foo/bar.wdb；无已知后缀时返回 false。
+func dictWdbExists(dictPath string) bool {
+	dir := filepath.Dir(dictPath)
+	base := filepath.Base(dictPath)
+	for _, suf := range []string{".dict.yaml", ".dict.toml"} {
+		if stem, ok := strings.CutSuffix(base, suf); ok {
+			_, err := os.Stat(filepath.Join(dir, stem+".wdb"))
+			return err == nil
 		}
 	}
 	return false
