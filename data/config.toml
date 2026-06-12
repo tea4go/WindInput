@@ -4,9 +4,6 @@
 # （%APPDATA%\WindInput\config.toml，Layer 3）。
 # 修改此文件可调整新安装或新版本升级后的默认行为，无需重新编译。
 #
-# 按 §2.3 配套实践，本文件显式列全面向用户的默认值（自文档化、发布后可调）；
-# 与代码默认值的分叉项（available、toggle_toolbar、open_settings、tooltip.delay、
-# highlight_keys）是本层的覆盖意图，不是笔误。
 # 注意：本文件不写 version 键——version 是用户文件的迁移状态锚点。
 
 [general]
@@ -44,7 +41,6 @@ highlight_keys = ["arrows", "tab"]
 select_char_keys = []
 smart_punct_after_digit = true
 smart_punct_list = ".,:"
-# 智能符号模式：同一中文标点在时限内连按两次，自动删除并替换为对应英文符号
 smart_symbol_mode = false
 smart_symbol_timeout_ms = 500
 smart_symbol_chars = "。，？！：；、～￥·……——"
