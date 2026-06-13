@@ -3,6 +3,8 @@
 package coordinator
 
 import (
+	"strings"
+
 	"github.com/huanfeng/wind_input/internal/bridge"
 	"github.com/huanfeng/wind_input/internal/ipc"
 	"github.com/huanfeng/wind_input/pkg/keys"
@@ -189,6 +191,21 @@ func (c *Coordinator) enterModeCommitting(name, triggerKey string, commitIdx int
 	prefix, setupOK := entry.setup(triggerKey)
 	if !setupOK {
 		return nil
+	}
+
+	// 受管宿主（temp_pinyin/quick_input）经 buffer 非空/热键路径进入时，对齐 d.host，使后续
+	// 模式内键走 dispatchManagedHost。onXxxEntered 自带模式真值守卫。
+	if c.devCfg.DeciderEnabled {
+		switch {
+		case name == "temp_pinyin":
+			c.decider.onTempPinyinEntered()
+		case name == "quick_input":
+			c.decider.onQuickInputEntered()
+		case name == "temp_english":
+			c.decider.onTempEnglishEntered()
+		case strings.HasPrefix(name, "special:"):
+			c.decider.onSpecialEntered()
+		}
 	}
 
 	if finalText != "" {

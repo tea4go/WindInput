@@ -31,7 +31,9 @@ func (p *engineDefaultProcessor) Name() string { return "engine_default" }
 //	key:               本次按键（应为单个小写字母）
 //	hasPrefixWithKey:  ctx.HasPrefix(buffer+key) 的结果
 //	isCodeTable:       ctx.EngineIsCodeTable() 的结果
-func decideEngineDefaultZFallback(buffer, key string, hasPrefixWithKey, isCodeTable bool) (residual string, doRelease bool) {
+//	zIsTempPinyinTrigger: z 是否配置为临时拼音触发键/混合模式（isZKeyHybridMode || isTempPinyinZTrigger）。
+//	    这道门禁与旧 zHybridFallback 一致——缺它会让 z 未配触发键时也误回退。
+func decideEngineDefaultZFallback(buffer, key string, hasPrefixWithKey, isCodeTable, zIsTempPinyinTrigger bool) (residual string, doRelease bool) {
 	if len(key) != 1 || key[0] < 'a' || key[0] > 'z' {
 		return "", false
 	}
@@ -39,6 +41,9 @@ func decideEngineDefaultZFallback(buffer, key string, hasPrefixWithKey, isCodeTa
 		return "", false
 	}
 	if !isCodeTable {
+		return "", false
+	}
+	if !zIsTempPinyinTrigger {
 		return "", false
 	}
 	if hasPrefixWithKey {
@@ -51,7 +56,9 @@ func (p *engineDefaultProcessor) Judge(ctx *DecisionCtx, key string, data *bridg
 	// 小写字母：可能触发 z 回退，否则正常码表输入（落按键处理链）。
 	if len(key) == 1 && key[0] >= 'a' && key[0] <= 'z' {
 		buf := ctx.BufferText()
-		if residual, ok := decideEngineDefaultZFallback(buf, key, ctx.HasPrefix(buf+key), ctx.EngineIsCodeTable()); ok {
+		// z 触发键门禁：与旧 zHybridFallback 一致——z 必须配置为临时拼音触发/混合模式。
+		zTrigger := p.c.isZKeyHybridMode() || p.c.isTempPinyinZTrigger()
+		if residual, ok := decideEngineDefaultZFallback(buf, key, ctx.HasPrefix(buf+key), ctx.EngineIsCodeTable(), zTrigger); ok {
 			return decRelease(residual)
 		}
 		return decHandle()

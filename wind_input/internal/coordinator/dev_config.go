@@ -23,6 +23,11 @@ type devConfig struct {
 	// DeciderShadow 输入处理器流水线第 0b 影子运行：只读地并行运行新决策器裁决并记 DEBUG
 	// 日志，零行为影响。用于观测新旧裁决一致性。详见 docs/design/input-processor-pipeline.md。
 	DeciderShadow bool `toml:"decider_shadow"`
+
+	// DeciderEnabled 第 1 批 1c：决策器真正接管 z 键混合回退判定（执行复用现有
+	// enterTempPinyinFromZBuffer = CompHot 原地切换）。默认 false 走旧 zHybridFallback。
+	// 与 DeciderShadow 独立：可单开 shadow 观测、或开 enabled 真实接管对比。
+	DeciderEnabled bool `toml:"decider_enabled"`
 }
 
 // loadDevConfig 从配置目录读取 wind_dev.toml；不存在/解析失败时返回零值（全关）。

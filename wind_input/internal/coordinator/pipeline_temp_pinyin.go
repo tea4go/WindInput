@@ -10,8 +10,11 @@ import (
 	"github.com/huanfeng/wind_input/pkg/config"
 )
 
-// 编译期断言：tempPinyinProcessor 实现 Processor 接口。
-var _ Processor = (*tempPinyinProcessor)(nil)
+// 编译期断言：tempPinyinProcessor 实现 Processor 接口、tempPinyinKeyHandler 实现 KeyHandler。
+var (
+	_ Processor  = (*tempPinyinProcessor)(nil)
+	_ KeyHandler = tempPinyinKeyHandler{}
+)
 
 type tempPinyinProcessor struct {
 	c *Coordinator
@@ -53,7 +56,30 @@ func (p *tempPinyinProcessor) BufferText() string { return p.c.tempPinyinBuffer 
 
 func (p *tempPinyinProcessor) Capabilities() Capability { return CapPinyinLayer }
 
-func (p *tempPinyinProcessor) KeyHandlers() []KeyHandler { return nil }
+// KeyHandlers：temp_pinyin 是自包含模式——成为 host 后**所有**按键归它（旧
+// handleTempPinyinKey 内部已统一处理字母/数字/导航/退出）。本批次先用一个「整模式」薄包装
+// handler 建立 decide() 分发路径，与旧 handleTempPinyinKey 逐条等价；共享导航 handler 的
+// 抽取（翻页/高亮等跨宿主复用）留待后续批次，届时本 handler 退化为只处理特有键。
+func (p *tempPinyinProcessor) KeyHandlers() []KeyHandler {
+	return []KeyHandler{tempPinyinKeyHandler{c: p.c}}
+}
+
+// tempPinyinKeyHandler 把 handleTempPinyinKey 包装成链上的「整模式」处理单元。
+// Judge 恒 Handle（host 为 temp_pinyin 时模式内键全部认领，I11 短路于此）；
+// Apply 委托回 handleTempPinyinKey，行为字节级不变。
+type tempPinyinKeyHandler struct {
+	c *Coordinator
+}
+
+func (h tempPinyinKeyHandler) Name() string { return "temp_pinyin.mode" }
+
+func (h tempPinyinKeyHandler) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
+	return decHandle()
+}
+
+func (h tempPinyinKeyHandler) Apply(c *Coordinator, key string, data *bridge.KeyEventData) *bridge.KeyEventResult {
+	return c.handleTempPinyinKey(key, data)
+}
 
 func (p *tempPinyinProcessor) UsesExtendedPerPage() bool { return true }
 
