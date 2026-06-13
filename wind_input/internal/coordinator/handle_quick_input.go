@@ -322,19 +322,6 @@ func (c *Coordinator) handleQuickInputRepeat() *bridge.KeyEventResult {
 	return c.exitQuickInputMode(true, text)
 }
 
-// dedup 去重并保持顺序
-func dedup(items []string) []string {
-	seen := make(map[string]struct{}, len(items))
-	result := make([]string, 0, len(items))
-	for _, item := range items {
-		if _, ok := seen[item]; !ok {
-			seen[item] = struct{}{}
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
 // updateQuickInputCandidates 更新快捷输入候选（合并多模块候选并去重）
 func (c *Coordinator) updateQuickInputCandidates() {
 	buf := c.quickInputBuffer
@@ -360,49 +347,20 @@ func (c *Coordinator) updateQuickInputCandidates() {
 		return
 	}
 
-	var allTexts []string
+	// date/calc/number 三路结构化候选经 Provider 分段合并（Rank：date < calc < number，
+	// 段位顺序与旧 inline 拼接一致），按 Text 去重保留首现——与旧 dedup(allTexts) 逐条等价。
+	// 序号标签 a/b/c 在此分配（合并器不管序号风格，由宿主负责）。
+	merged := mergeProviderCandidates(buf, c.quickInputBaseProviders())
 
-	// 1. 年月日日期（三段）
-	if isDateExpression(buf) {
-		allTexts = append(allTexts, generateDateCandidates(buf)...)
-	}
-
-	// 2. 年月日期（两段，首段>31）
-	if isYearMonthExpression(buf) {
-		allTexts = append(allTexts, generateYearMonthCandidates(buf)...)
-	}
-
-	// 3. 计算表达式（必须有真实运算符）
-	if isCalcExpression(buf) {
-		decimalPlaces := 6
-		if c.config != nil {
-			decimalPlaces = c.config.Features.QuickInput.DecimalPlaces
-		}
-		if calcs := generateCalcCandidates(buf, decimalPlaces); len(calcs) > 0 {
-			allTexts = append(allTexts, calcs...)
-		}
-	}
-
-	// 4. 数字/小数（整数或小数）
-	if isDecimalNumber(buf) {
-		allTexts = append(allTexts, generateNumberCandidates(buf)...)
-	}
-
-	// 去重
-	texts := dedup(allTexts)
-
-	// 转换为 ui.Candidate，设置 IndexLabel 为 a/b/c...
-	candidates := make([]ui.Candidate, 0, len(texts))
-	for i, t := range texts {
+	candidates := make([]ui.Candidate, 0, len(merged))
+	for i, m := range merged {
 		label := ""
 		if i < 26 {
 			label = string(rune('a' + i))
 		}
-		candidates = append(candidates, ui.Candidate{
-			Text:       t,
-			Index:      i + 1,
-			IndexLabel: label,
-		})
+		m.Index = i + 1
+		m.IndexLabel = label
+		candidates = append(candidates, m)
 	}
 
 	c.candidates = candidates
