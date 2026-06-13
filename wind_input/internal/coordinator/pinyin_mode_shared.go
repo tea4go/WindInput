@@ -143,20 +143,10 @@ func (c *Coordinator) handlePinyinModeKey(ops *pinyinModeOps, key string, data *
 
 	// === 翻页 ===
 	case c.isPageUpKey(key, data.KeyCode, uint32(data.Modifiers)):
-		if c.currentPage > 1 {
-			c.currentPage--
-			c.selectedIndex = 0
-			c.showPinyinModeUI(ops)
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navPageUp(func() { c.showPinyinModeUI(ops) })
 
 	case c.isPageDownKey(key, data.KeyCode, uint32(data.Modifiers)):
-		if c.currentPage < c.totalPages {
-			c.currentPage++
-			c.selectedIndex = 0
-			c.showPinyinModeUI(ops)
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navPageDown(func() { c.showPinyinModeUI(ops) }, nil, false)
 
 	// === 左右方向键：移动光标 ===
 	case vk == ipc.VK_LEFT:
@@ -177,46 +167,11 @@ func (c *Coordinator) handlePinyinModeKey(ops *pinyinModeOps, key string, data *
 
 	// === 高亮上移 ===
 	case c.isHighlightUpKey(vk, uint32(data.Modifiers)):
-		if len(c.candidates) > 0 {
-			if c.selectedIndex > 0 {
-				c.selectedIndex--
-				c.showPinyinModeUI(ops)
-			} else if c.currentPage > 1 {
-				c.currentPage--
-				startIdx := (c.currentPage - 1) * c.candidatesPerPage
-				endIdx := startIdx + c.candidatesPerPage
-				if endIdx > len(c.candidates) {
-					endIdx = len(c.candidates)
-				}
-				c.selectedIndex = endIdx - startIdx - 1
-				c.showPinyinModeUI(ops)
-			}
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navHighlightUp(func() { c.showPinyinModeUI(ops) })
 
-	// === 高亮下移 ===
+	// === 高亮下移（分级加载 expandCandidates 自检 hasMoreCandidates）===
 	case c.isHighlightDownKey(vk, uint32(data.Modifiers)):
-		if len(c.candidates) > 0 {
-			startIdx := (c.currentPage - 1) * c.candidatesPerPage
-			endIdx := startIdx + c.candidatesPerPage
-			if endIdx > len(c.candidates) {
-				endIdx = len(c.candidates)
-			}
-			pageCount := endIdx - startIdx
-			if c.selectedIndex < pageCount-1 {
-				c.selectedIndex++
-				c.showPinyinModeUI(ops)
-			} else if c.currentPage < c.totalPages {
-				c.currentPage++
-				c.selectedIndex = 0
-				// 分级加载：翻到最后 2 页时预加载更多
-				if c.hasMoreCandidates && c.currentPage >= c.totalPages-1 {
-					c.expandCandidates()
-				}
-				c.showPinyinModeUI(ops)
-			}
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navHighlightDown(func() { c.showPinyinModeUI(ops) }, c.expandCandidates)
 
 	// === 二候选选择键（仅有候选时匹配，无候选时让触发键等后续 case 处理） ===
 	case data.Modifiers&ModShift == 0 && c.isSelectKey2(key, data.KeyCode) && len(c.candidates) > 0:

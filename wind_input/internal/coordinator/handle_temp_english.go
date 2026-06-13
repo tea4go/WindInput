@@ -184,9 +184,7 @@ func (c *Coordinator) exitTempEnglishMode(commit bool, text string) *bridge.KeyE
 	c.currentPage = 1
 	c.totalPages = 1
 	c.selectedIndex = 0
-	if c.uiManager != nil {
-		c.uiManager.SetModeLabel("")
-	}
+	c.clearHostUIState() // 修复：原仅清 SetModeLabel，漏 accent/quickInputMode/pairTracker
 	c.hideUI()
 
 	c.logger.Debug("Exited temp English mode", "commit", commit, "textLen", len(text))
@@ -374,26 +372,13 @@ func (c *Coordinator) handleTempEnglishKey(key string, data *bridge.KeyEventData
 		c.tempEnglishInsertAt(key)
 		return c.tempEnglishAfterInsert()
 
-	// === 翻页（使用与正常模式一致的配置键） ===
+	// === 翻页（使用与正常模式一致的配置键；expandTempEnglishCandidates 翻页前于接近末页扩展，
+	// 内部自检 tempEnglishHasMore）。高亮移动因 showUI 无条件刷新 + expand 时序不同，仍内联 ===
 	case c.isPageUpKey(key, int(vk), uint32(data.Modifiers)):
-		if c.currentPage > 1 {
-			c.currentPage--
-			c.selectedIndex = 0
-			c.showTempEnglishUI()
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navPageUp(c.showTempEnglishUI)
 
 	case c.isPageDownKey(key, int(vk), uint32(data.Modifiers)):
-		// 分级加载：接近末页时翻倍扩展词库候选，避免"6+"翻不动后续页
-		if c.tempEnglishHasMore && c.currentPage >= c.totalPages-1 {
-			c.expandTempEnglishCandidates()
-		}
-		if c.currentPage < c.totalPages {
-			c.currentPage++
-			c.selectedIndex = 0
-			c.showTempEnglishUI()
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navPageDown(c.showTempEnglishUI, c.expandTempEnglishCandidates, true)
 
 	// === 高亮移动（使用与正常模式一致的配置键） ===
 	case c.isHighlightUpKey(vk, uint32(data.Modifiers)):

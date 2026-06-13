@@ -242,70 +242,22 @@ func (c *Coordinator) handleSpecialModeKey(key string, data *bridge.KeyEventData
 	case vk == ipc.VK_ESCAPE:
 		return c.exitSpecialMode(false, "")
 
-	// 翻页上：用主翻页判定 isPageUpKey（含默认 -/=），而非 isQuickInputPageUpKey
+	// 翻页：用主翻页判定 isPageUp/DownKey（含默认 -/=），而非 isQuickInputPageUp/DownKey
 	// （后者排除 -/=/[/]，因快捷输入把它们当内容字符）。special 符号模式的内容是字母码，
 	// -/= 应优先作翻页——即使只有一页也消费按键，不落到下方"可打印符号"分支误顶屏上屏。
+	// 分级加载（specialHasMore）由 navPageDown/navHighlightDown 在翻页后于接近末页调
+	// expandSpecialCandidates（其内部自检 specialHasMore）。
 	case c.isPageUpKey(key, int(vk), uint32(data.Modifiers)):
-		if c.currentPage > 1 {
-			c.currentPage--
-			c.selectedIndex = 0
-			c.showSpecialUI()
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navPageUp(c.showSpecialUI)
 
-	// 翻页下：同上，用 isPageDownKey（含默认 =）。
 	case c.isPageDownKey(key, int(vk), uint32(data.Modifiers)):
-		if c.currentPage < c.totalPages {
-			c.currentPage++
-			c.selectedIndex = 0
-			if c.specialHasMore && c.currentPage >= c.totalPages-1 {
-				c.expandSpecialCandidates()
-			}
-			c.showSpecialUI()
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navPageDown(c.showSpecialUI, c.expandSpecialCandidates, false)
 
-	// 高亮上移
 	case c.isHighlightUpKey(vk, uint32(data.Modifiers)):
-		if len(c.candidates) > 0 {
-			if c.selectedIndex > 0 {
-				c.selectedIndex--
-				c.showSpecialUI()
-			} else if c.currentPage > 1 {
-				c.currentPage--
-				startIdx := (c.currentPage - 1) * c.candidatesPerPage
-				endIdx := startIdx + c.candidatesPerPage
-				if endIdx > len(c.candidates) {
-					endIdx = len(c.candidates)
-				}
-				c.selectedIndex = endIdx - startIdx - 1
-				c.showSpecialUI()
-			}
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navHighlightUp(c.showSpecialUI)
 
-	// 高亮下移
 	case c.isHighlightDownKey(vk, uint32(data.Modifiers)):
-		if len(c.candidates) > 0 {
-			startIdx := (c.currentPage - 1) * c.candidatesPerPage
-			endIdx := startIdx + c.candidatesPerPage
-			if endIdx > len(c.candidates) {
-				endIdx = len(c.candidates)
-			}
-			pageCount := endIdx - startIdx
-			if c.selectedIndex < pageCount-1 {
-				c.selectedIndex++
-				c.showSpecialUI()
-			} else if c.currentPage < c.totalPages {
-				c.currentPage++
-				c.selectedIndex = 0
-				if c.specialHasMore && c.currentPage >= c.totalPages-1 {
-					c.expandSpecialCandidates()
-				}
-				c.showSpecialUI()
-			}
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navHighlightDown(c.showSpecialUI, c.expandSpecialCandidates)
 
 	// 二候选键：候选 ≥ 2 选第二候选，否则回落标点顶屏
 	case c.isSelectKey2(key, data.KeyCode):
@@ -510,11 +462,8 @@ func (c *Coordinator) exitSpecialMode(commit bool, text string) *bridge.KeyEvent
 		c.uiManager.SetCandidateLayout(c.specialSavedLayout)
 	}
 
-	// 重置模式标签和光效
-	if c.uiManager != nil {
-		c.uiManager.SetModeLabel("")
-		c.uiManager.SetModeAccentColor(nil)
-	}
+	// 统一卸载 UI/行为状态（标签/光效/快捷输入标志/配对栈）
+	c.clearHostUIState()
 
 	// 重置所有特殊模式字段
 	c.specialMode = false

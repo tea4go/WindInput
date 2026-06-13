@@ -247,57 +247,16 @@ func (c *Coordinator) handleQuickInputKey(key string, data *bridge.KeyEventData)
 	// === 导航键（使用与正常模式一致的配置键） ===
 
 	case c.isQuickInputPageUpKey(key, int(vk), uint32(data.Modifiers)):
-		if c.currentPage > 1 {
-			c.currentPage--
-			c.selectedIndex = 0
-			c.showQuickInputUI()
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navPageUp(c.showQuickInputUI)
 
 	case c.isQuickInputPageDownKey(key, int(vk), uint32(data.Modifiers)):
-		if c.currentPage < c.totalPages {
-			c.currentPage++
-			c.selectedIndex = 0
-			c.showQuickInputUI()
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navPageDown(c.showQuickInputUI, nil, false)
 
 	case c.isHighlightUpKey(vk, uint32(data.Modifiers)):
-		if len(c.candidates) > 0 {
-			if c.selectedIndex > 0 {
-				c.selectedIndex--
-				c.showQuickInputUI()
-			} else if c.currentPage > 1 {
-				c.currentPage--
-				startIdx := (c.currentPage - 1) * c.candidatesPerPage
-				endIdx := startIdx + c.candidatesPerPage
-				if endIdx > len(c.candidates) {
-					endIdx = len(c.candidates)
-				}
-				c.selectedIndex = endIdx - startIdx - 1
-				c.showQuickInputUI()
-			}
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navHighlightUp(c.showQuickInputUI)
 
 	case c.isHighlightDownKey(vk, uint32(data.Modifiers)):
-		if len(c.candidates) > 0 {
-			startIdx := (c.currentPage - 1) * c.candidatesPerPage
-			endIdx := startIdx + c.candidatesPerPage
-			if endIdx > len(c.candidates) {
-				endIdx = len(c.candidates)
-			}
-			pageCount := endIdx - startIdx
-			if c.selectedIndex < pageCount-1 {
-				c.selectedIndex++
-				c.showQuickInputUI()
-			} else if c.currentPage < c.totalPages {
-				c.currentPage++
-				c.selectedIndex = 0
-				c.showQuickInputUI()
-			}
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.navHighlightDown(c.showQuickInputUI, nil)
 
 	// === 再次按触发键且缓冲区为空：上屏触发键字符 ===
 
@@ -499,12 +458,8 @@ func (c *Coordinator) exitQuickInputMode(commit bool, text string) *bridge.KeyEv
 		c.savedLayout = ""
 	}
 
-	// 重置快捷输入模式标志和模式标签
-	if c.uiManager != nil {
-		c.uiManager.SetQuickInputMode(false)
-		c.uiManager.SetModeLabel("")
-		c.uiManager.SetModeAccentColor(nil)
-	}
+	// 统一卸载 UI/行为状态（标签/光效/快捷输入标志/配对栈）
+	c.clearHostUIState()
 
 	c.quickInputMode = false
 	c.quickInputTriggerKey = ""

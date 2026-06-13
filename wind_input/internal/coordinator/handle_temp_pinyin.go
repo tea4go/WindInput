@@ -259,10 +259,7 @@ func (c *Coordinator) exitTempPinyinMode(commit bool, text string) *bridge.KeyEv
 	c.candidates = nil
 	c.currentPage = 1
 	c.totalPages = 1
-	if c.uiManager != nil {
-		c.uiManager.SetModeLabel("")
-		c.uiManager.SetModeAccentColor(nil)
-	}
+	c.clearHostUIState()
 	c.hideUI()
 
 	// 卸载拼音词库层，避免污染五笔引擎的查询结果
