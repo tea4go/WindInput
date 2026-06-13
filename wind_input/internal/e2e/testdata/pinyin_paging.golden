@@ -1,0 +1,140 @@
+>>> type jian
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "jian",
+    "input_cursor_pos": 4,
+    "preedit_display": "jian",
+    "candidates": [
+      {
+        "text": "间",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "见",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "建",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "吉安",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "即按",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "几案",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "集安",
+        "code": "jian",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 2,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> key pagedown
+{
+  "result_type": "consumed",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "jian",
+    "input_cursor_pos": 4,
+    "preedit_display": "jian",
+    "candidates": [
+      {
+        "text": "积案",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "开",
+        "code": "jian",
+        "weight": 0
+      }
+    ],
+    "current_page": 2,
+    "total_pages": 2,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> key pageup
+{
+  "result_type": "consumed",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "jian",
+    "input_cursor_pos": 4,
+    "preedit_display": "jian",
+    "candidates": [
+      {
+        "text": "间",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "见",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "建",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "吉安",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "即按",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "几案",
+        "code": "jian",
+        "weight": 0
+      },
+      {
+        "text": "集安",
+        "code": "jian",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 2,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}

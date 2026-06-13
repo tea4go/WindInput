@@ -1,0 +1,66 @@
+>>> type nihao
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "nihao",
+    "input_cursor_pos": 5,
+    "preedit_display": "ni hao",
+    "candidates": [
+      {
+        "text": "你好",
+        "code": "nihao",
+        "weight": 0
+      },
+      {
+        "text": "拟好",
+        "code": "nihao",
+        "weight": 0
+      },
+      {
+        "text": "你",
+        "code": "ni",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> select 3
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "hao",
+    "input_cursor_pos": 3,
+    "preedit_display": "hao",
+    "candidates": [
+      {
+        "text": "好",
+        "code": "hao",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7,
+    "confirmed_segments": [
+      {
+        "text": "你",
+        "consumed_code": "ni"
+      }
+    ]
+  }
+}
