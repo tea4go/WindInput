@@ -6,7 +6,11 @@
 // 完整核心状态快照。既供 go test 的 golden 回归，也供 cmd/e2e-repl 手动验证。
 package e2e
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"github.com/huanfeng/wind_input/pkg/config"
+)
 
 // Options 控制 harness 的装配。零值可用：自动探测 build_debug/data、临时用户目录、
 // 丢弃日志、默认 pinyin 方案、不开 user_data.db。
@@ -23,6 +27,12 @@ type Options struct {
 	// OpenUserStore 是否打开 user_data.db（词频/学习/造词）。P1 默认 false（纯系统词库，
 	// 结果确定）；P2 词频用例置 true。
 	OpenUserStore bool
+	// SpecialModes 注入引导键特殊模式实例（自定义码表）。非空时 BuildHarness 在装配后
+	// 用 SpecialSchemasDir 解析码表并重建特殊模式注册表。
+	SpecialModes []config.SpecialModeConfig
+	// SpecialSchemasDir 特殊模式码表 fixture 的搜索目录（含 SpecialModes[].Table 文件）。
+	// 仅 SpecialModes 非空时生效；空 = "testdata"。
+	SpecialSchemasDir string
 }
 
 func (o Options) schemaID() string {

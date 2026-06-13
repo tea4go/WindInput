@@ -53,6 +53,10 @@ type State struct {
 	SpecialMode     bool `json:"special_mode,omitempty"`
 	AddWordActive   bool `json:"add_word_active,omitempty"`
 	AddWordLen      int  `json:"add_word_len,omitempty"`
+
+	// 特殊模式输入（独立于 InputBuffer/PreeditDisplay；仅 special 模式下非空）
+	SpecialActiveID string `json:"special_active_id,omitempty"`
+	SpecialBuffer   string `json:"special_buffer,omitempty"`
 }
 
 // ExportState 返回当前 Coordinator 核心状态的快照。线程安全。
@@ -101,6 +105,8 @@ func (c *Coordinator) ExportState() State {
 		SpecialMode:        c.specialMode,
 		AddWordActive:      c.addWordActive,
 		AddWordLen:         c.addWordLen,
+		SpecialActiveID:    c.specialActiveID,
+		SpecialBuffer:      c.specialBuffer,
 	}
 }
 

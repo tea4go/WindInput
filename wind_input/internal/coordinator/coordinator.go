@@ -320,6 +320,9 @@ type Coordinator struct {
 	// 引导键特殊模式（自定义码表）
 	specialModeState
 	specialModeReg *specialModeRegistry
+	// specialSchemasDirsOverride 非空时覆盖 schemasDirs() 的特殊模式码表搜索目录，
+	// 供 in-process 测试（internal/e2e）注入 fixture 码表目录用；生产路径置空。
+	specialSchemasDirsOverride []string
 
 	// 输入统计采集器
 	statCollector *store.StatCollector

@@ -1,0 +1,12 @@
+---
+name: e2e_special
+sort: by_order
+columns:
+  - code
+  - text
+...
+a	★
+a	☆
+a	●
+aa	◆
+b	▲

@@ -152,6 +152,19 @@ func BuildHarness(opts Options) (*Harness, error) {
 	appCompat := config.LoadAppCompat()
 	coord := coordinator.NewCoordinator(engineMgr, uiManager, cfg, appCompat, logger)
 
+	// 引导键特殊模式（自定义码表）：注入测试 fixture 目录并重建注册表。
+	// 码表懒加载，仅首次激活时读盘。
+	if len(opts.SpecialModes) > 0 {
+		dir := opts.SpecialSchemasDir
+		if dir == "" {
+			dir = "testdata"
+		}
+		if abs, err := filepath.Abs(dir); err == nil {
+			dir = abs
+		}
+		coord.ConfigureSpecialModes(opts.SpecialModes, []string{dir})
+	}
+
 	return &Harness{
 		Coord:         coord,
 		EngineMgr:     engineMgr,

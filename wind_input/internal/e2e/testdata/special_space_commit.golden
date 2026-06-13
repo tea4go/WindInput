@@ -1,0 +1,84 @@
+>>> key `
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7,
+    "special_mode": true,
+    "special_active_id": "e2e_sym"
+  }
+}
+>>> type a
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [
+      {
+        "text": "★",
+        "code": "a",
+        "weight": 0
+      },
+      {
+        "text": "☆",
+        "code": "a",
+        "weight": 0
+      },
+      {
+        "text": "●",
+        "code": "a",
+        "weight": 0
+      },
+      {
+        "text": "◆",
+        "code": "aa",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7,
+    "special_mode": true,
+    "special_active_id": "e2e_sym",
+    "special_buffer": "a"
+  }
+}
+>>> key space
+{
+  "result_type": "insert_text",
+  "commit_text": "★",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}

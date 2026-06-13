@@ -18,6 +18,10 @@ import (
 // 与 schema.DiscoverSchemas 同源：用户配置目录/schemas（覆盖）+ 内置 dataRoot/schemas。
 // 其中 dataRoot = GetDataDir(exeDir) = exeDir/data（内置方案/词库根目录）。
 func (c *Coordinator) schemasDirs() []string {
+	// 测试注入的覆盖目录优先（internal/e2e 注入 fixture 码表目录）。
+	if len(c.specialSchemasDirsOverride) > 0 {
+		return c.specialSchemasDirsOverride
+	}
 	var dirs []string
 	if cfgDir, err := config.GetConfigDir(); err == nil {
 		dirs = append(dirs, filepath.Join(cfgDir, "schemas"))
@@ -29,6 +33,20 @@ func (c *Coordinator) schemasDirs() []string {
 		dirs = append(dirs, "schemas")
 	}
 	return dirs
+}
+
+// ConfigureSpecialModes 用给定实例配置与码表搜索目录（按优先级，靠前者覆盖）原子重建
+// 特殊模式注册表。dirs 非空时覆盖默认的 exe/配置目录解析——仅供 in-process 测试
+// （internal/e2e）注入 fixture 码表目录；生产热重载走 UpdateFeaturesConfig。
+// 码表懒加载，仅首次激活时才真正读盘。
+func (c *Coordinator) ConfigureSpecialModes(cfgs []config.SpecialModeConfig, dirs []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.specialSchemasDirsOverride = dirs
+	if c.config != nil {
+		c.config.Features.SpecialModes = cfgs
+	}
+	c.specialModeReg = newSpecialModeRegistry(cfgs, c.schemasDirs(), c.logger)
 }
 
 // matchSpecialTrigger 检查 (key, keyCode) 是否匹配指定 id 的触发键，返回匹配的触发键字符串。
