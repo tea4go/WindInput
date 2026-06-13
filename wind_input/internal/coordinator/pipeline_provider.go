@@ -12,6 +12,9 @@ package coordinator
 
 import "github.com/huanfeng/wind_input/internal/candidate"
 
+// ProviderID 是候选来源标识，用于合并段位排序与准入白名单（Processor.AcceptedProviders）。
+type ProviderID string
+
 // Provider 标识。Rank 决定合并段位顺序（见各 provider 的 Rank()）。
 const (
 	ProviderDate   ProviderID = "date"   // 日期/年月（年月日三段 + 年月两段）

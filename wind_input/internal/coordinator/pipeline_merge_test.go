@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/huanfeng/wind_input/internal/candidate"
@@ -35,18 +36,6 @@ func textsOf(cs []candidate.Candidate) []string {
 	return out
 }
 
-func eqStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func TestMergeProviderCandidates(t *testing.T) {
 	high := fakeProvider{id: ProviderPinyin, rank: 40, byBuf: map[string][]candidate.Candidate{
 		"ni": cands("你", "尼", "泥"),
@@ -76,7 +65,7 @@ func TestMergeProviderCandidates(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := mergeProviderCandidates(tc.buffer, tc.providers)
-			if !eqStrings(textsOf(got), tc.want) {
+			if !slices.Equal(textsOf(got), tc.want) {
 				t.Errorf("%s: got %v, want %v", tc.name, textsOf(got), tc.want)
 			}
 		})

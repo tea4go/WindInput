@@ -16,6 +16,9 @@ import (
 // 去重保留首次出现者，与旧 updateQuickInputCandidates 的 dedup 语义一致（date→
 // yearMonth→calc→number 先到先留）。buffer 为空时直接返回 nil（空 buffer 的历史
 // 重复候选由宿主单独处理，不经 provider）。
+//
+// candidate.Candidate 是值类型，append 为值拷贝——合并结果与 provider 内部存储独立，
+// 调用方修改返回 slice 不影响 provider；血缘字段（Source/ConsumedLength）随值拷贝保真。
 func mergeProviderCandidates(buffer string, providers []CandidateProvider) []candidate.Candidate {
 	if buffer == "" || len(providers) == 0 {
 		return nil

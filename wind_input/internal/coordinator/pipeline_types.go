@@ -101,6 +101,3 @@ func (p CompositionPhase) String() string {
 		return "Unknown"
 	}
 }
-
-// ProviderID 是候选来源标识（第二阶段融合用，此处预留）。
-type ProviderID string
