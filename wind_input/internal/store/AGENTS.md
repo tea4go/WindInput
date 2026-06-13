@@ -29,7 +29,7 @@
 - **初始化**：`initBuckets(db)` 创建必要 bucket 并初始化 Meta 默认值（版本=1、设备 ID=UUID）；由 `Open` 和持写锁的 `Resume` 直接调用（不经 view/update，避免自死锁）
 - **事务语义**：所有写操作通过 `s.update()`、读操作通过 `s.view()` 保证原子性；二者在 `dbMu` 读锁下执行，暂停期间返回 `ErrPaused`。**新增读写方法必须走这两个辅助方法，不要直接访问 `s.db`**（会重新引入 Pause 竞争）
 - **schema 隔离**：不同方案的词典、频率、规则独立存储在各自的 bucket 下，切换方案时通过 `schemaBucket(schemaID, create=true)` 导航
-- **批量写入**：大批量导入用 `BatchAddUserWords`（单事务），避免逐条 fsync；词频走 `IncrementFreqAsync`（内存累积 + 定时/按量 flush）
+- **批量写入**：大批量导入用 `BatchAddUserWords`（单事务），避免逐条 fsync；词频走 `IncrementFreqAsync`（内存累积 + 定时/按量 flush），公开 `FlushFreq()` 可强制同步落盘（测试/即时生效场景）
 - **清理操作**：
   - `ClearSchema(schemaID)` 删除后重建空 bucket（保持结构）
   - `DeleteSchema(schemaID)` 完全删除 bucket（无重建）

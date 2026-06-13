@@ -50,6 +50,10 @@ func (r *Recorder) Backspace() *Recorder            { r.h.Backspace(); r.snap();
 func (r *Recorder) PageDown() *Recorder             { r.h.PageDown(); r.snap(); return r }
 func (r *Recorder) PageUp() *Recorder               { r.h.PageUp(); r.snap(); return r }
 
+// FlushLearning 同步 flush 词频增量（不产生快照步）：让前面选词记录的频次对随后
+// Type/Key 的候选查询立即可见，用于词频重排回归。链式调用。
+func (r *Recorder) FlushLearning() *Recorder { r.h.FlushLearning(); return r }
+
 // renderStep 是 golden 中每步序列化的结构（command 走 ">>> " 行，不进 JSON）。
 type renderStep struct {
 	ResultType string            `json:"result_type"`

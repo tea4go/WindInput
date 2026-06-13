@@ -17,7 +17,7 @@
 ## Key Files
 | File | Description |
 |------|-------------|
-| `manager.go` | `DictManager`：管理 `CompositeDict`、`ShadowLayer`、`UserDict`、`PhraseLayer` 的生命周期；`RegisterSystemLayer`/`UnregisterSystemLayer` 供引擎热插拔词库层；`SwitchSchema` 切换方案时切换用户数据文件 |
+| `manager.go` | `DictManager`：管理 `CompositeDict`、`ShadowLayer`、`UserDict`、`PhraseLayer` 的生命周期；`RegisterSystemLayer`/`UnregisterSystemLayer` 供引擎热插拔词库层；`SwitchSchema` 切换方案时切换用户数据文件；`SetFreqProfile`/`ClearFreqScorer` 配置词频评分器，`FlushFreq()` 同步落盘词频增量（封装 `Store.FlushFreq`，测试/即时生效用） |
 | `layer.go` | `DictLayer` 接口（`Name`/`Type`/`Search`），`LayerType` 常量，`ShadowProvider` 接口 |
 | `composite.go` | `CompositeDict`：按 LayerType 优先级聚合多层查询结果，持有 `ShadowProvider` 在搜索后应用 pin/delete 规则；`Search`/`SearchPrefix` 接受 `SearchOptions{Limit, SortMode}`，排序模式不再由 dict 层持有，由引擎每次调用时传入（避免跨方案污染）；`SearchSystemOnly` 仅查 `LayerTypeCell+LayerTypeSystem`，供 ProtectTopN 等"只看系统码表原始顺序"的语义使用；`HasLongerCode(input)` 短路检查任一层是否存在 `code != input` 且以 input 为前缀的条目（供 codetable 引擎全码自动顶屏判定） |
 | `pinyin_dict.go` | 拼音词库实现（基于 binformat 的 mmap 读取） |

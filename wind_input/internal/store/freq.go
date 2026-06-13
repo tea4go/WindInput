@@ -386,3 +386,10 @@ func (s *Store) flushFreqDeltas() error {
 	}
 	return err
 }
+
+// FlushFreq 同步 flush 所有累积的词频增量到 BoltDB。生产路径靠后台
+// freqFlushLoop（按量 50 / 定时 30s）批量写；测试 / 立即落盘场景调用此方法强制 flush，
+// 使刚记录的选词频次对随后的查询（StoreFreqScorer）立即可见。
+func (s *Store) FlushFreq() error {
+	return s.flushFreqDeltas()
+}

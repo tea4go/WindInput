@@ -24,9 +24,6 @@ type Options struct {
 	DataDir string
 	// Logger 日志器。nil = slog.New(slog.DiscardHandler)。
 	Logger *slog.Logger
-	// OpenUserStore 是否打开 user_data.db（词频/学习/造词）。P1 默认 false（纯系统词库，
-	// 结果确定）；P2 词频用例置 true。
-	OpenUserStore bool
 	// SpecialModes 注入引导键特殊模式实例（自定义码表）。非空时 BuildHarness 在装配后
 	// 用 SpecialSchemasDir 解析码表并重建特殊模式注册表。
 	SpecialModes []config.SpecialModeConfig

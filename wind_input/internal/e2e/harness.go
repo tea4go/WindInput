@@ -92,8 +92,8 @@ func BuildHarness(opts Options) (*Harness, error) {
 	// 词库管理器（main.go:288-308）。
 	// 注意：必须先 OpenStore 再 Initialize —— Initialize 内部 PhraseLayer.LoadFromStore
 	// 会访问 store，store 为 nil 时崩溃（与 main.go 总是先 OpenStore 一致）。
-	// P1 用临时空 db，等价于"无词频/学习历史"，结果确定；OpenUserStore 预留给 P2
-	// 接入预置词频数据（届时改为复制种子 db 到 dataDir）。
+	// 用临时空 db：初始等价于"无词频/学习历史"，结果确定；词频/学习用例在运行中通过
+	// 选词 + Harness.FlushLearning 在该 db 内累积频次（选词异步批量写，须显式 flush）。
 	dictManager := dict.NewDictManager(dataDir, dataRoot, logger)
 	if err := dictManager.OpenStore(filepath.Join(dataDir, "user_data.db")); err != nil {
 		logger.Warn("e2e: 打开 user_data.db 失败", "err", err)
@@ -227,6 +227,17 @@ func (h *Harness) Enter() *bridge.KeyEventResult     { return h.Key("enter") }
 func (h *Harness) Backspace() *bridge.KeyEventResult { return h.Key("backspace") }
 func (h *Harness) PageDown() *bridge.KeyEventResult  { return h.Key("pagedown") }
 func (h *Harness) PageUp() *bridge.KeyEventResult    { return h.Key("pageup") }
+
+// FlushLearning 同步 flush 词频增量到 store，使前面选词记录的频次对随后查询立即生效。
+// 选词的词频写入是异步批量的（生产靠后台 50 条/30s flush），测试需显式调用此方法
+// 才能在同一次运行内观察到词频重排。
+func (h *Harness) FlushLearning() {
+	if h.DictMgr != nil {
+		if err := h.DictMgr.FlushFreq(); err != nil {
+			panic(fmt.Sprintf("e2e: flush 词频失败: %v", err))
+		}
+	}
+}
 
 // Snapshot 返回当前完整状态 + 上一次按键的响应类型/上屏文本。
 func (h *Harness) Snapshot() StepSnapshot {

@@ -400,6 +400,18 @@ func (dm *DictManager) ExistsInSystemDict(code, text string) bool {
 	return false
 }
 
+// FlushFreq 同步 flush 词频增量到底层 Store，使刚记录的选词频次对随后查询立即可见。
+// 生产路径靠 Store 后台批量写；测试 / 需即时生效场景调用此方法。store 为 nil 时为空操作。
+func (dm *DictManager) FlushFreq() error {
+	dm.mu.Lock()
+	s := dm.store
+	dm.mu.Unlock()
+	if s == nil {
+		return nil
+	}
+	return s.FlushFreq()
+}
+
 // ClearFreqScorer 清除 CompositeDict 上的词频评分器（调频关闭时调用）
 func (dm *DictManager) ClearFreqScorer() {
 	dm.mu.Lock()
