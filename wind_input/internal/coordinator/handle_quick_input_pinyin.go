@@ -9,13 +9,27 @@ import (
 	"github.com/huanfeng/wind_input/internal/schema"
 )
 
-// enterQuickInputPinyinMode 在快捷输入模式下进入临时拼音子模式
-func (c *Coordinator) enterQuickInputPinyinMode(firstKey string) *bridge.KeyEventResult {
-	// 加载拼音引擎
-	if c.engineMgr != nil {
-		if err := c.engineMgr.EnsurePinyinLoaded(); err != nil {
-			c.logger.Warn("Failed to load pinyin engine for quick input pinyin", "error", err)
-			return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+// quickInputPinyinActive 判定快捷输入当前是否处于「拼音上下文」。
+//
+// 取代旧 quickInputPinyinMode 布尔：拼音上下文由 buffer 内容派生——结构化候选
+// （date/calc/number）靠数字/运算符进入、buffer 永不以字母打头；拼音靠字母进入、
+// buffer 永远以字母打头（分段上屏后 buffer[ConsumedLength:] 仍以字母打头，分隔符
+// "xi'an" 亦然）。故 buffer 首字符是 a-z 即拼音上下文，二者从不共存。
+//
+// 仅判小写 a-z：拼音 buffer 首字母由调用方（engageQuickInputPinyin 传入 string(lower)、
+// handlePinyinModeKey 插入前小写化）保证已小写，大写首字节不视为拼音上下文。
+func (c *Coordinator) quickInputPinyinActive() bool {
+	return c.quickInputMode && len(c.quickInputBuffer) > 0 &&
+		c.quickInputBuffer[0] >= 'a' && c.quickInputBuffer[0] <= 'z'
+}
+
+// setQuickInputPinyinLayer 幂等地挂/卸快捷输入拼音上下文的引擎词库层。
+// 仅码表引擎需要交换（移码表层、挂拼音层），混输引擎 Activate/Deactivate 为 no-op。
+// quickInputPinyinDictSwapped 跟踪是否真正交换过，保证对称卸载（防重复卸载）。
+func (c *Coordinator) setQuickInputPinyinLayer(engaged bool) {
+	if engaged {
+		if c.quickInputPinyinDictSwapped || c.engineMgr == nil {
+			return
 		}
 		// 码表引擎下需要交换词库层，避免码表候选污染拼音查询
 		// 混输引擎已包含拼音层，无需交换（否则退出时会错误移除混输所需的拼音层）
@@ -23,16 +37,34 @@ func (c *Coordinator) enterQuickInputPinyinMode(firstKey string) *bridge.KeyEven
 			c.engineMgr.ActivateTempPinyin()
 			c.quickInputPinyinDictSwapped = true
 		}
+		return
 	}
+	if c.quickInputPinyinDictSwapped && c.engineMgr != nil {
+		c.engineMgr.DeactivateTempPinyin()
+	}
+	c.quickInputPinyinDictSwapped = false
+}
 
-	c.quickInputPinyinMode = true
-	c.quickInputPinyinBuffer = firstKey
+// engageQuickInputPinyin 在快捷输入空 buffer 下首次输入字母时切入拼音上下文。
+// 不再有独立的子模式布尔/缓冲——状态进统一的 quickInputBuffer，上下文由
+// quickInputPinyinActive() 派生。
+func (c *Coordinator) engageQuickInputPinyin(firstKey string) *bridge.KeyEventResult {
+	// 加载拼音引擎（所有引擎类型都需要），再按引擎类型决定是否交换词库层
+	if c.engineMgr != nil {
+		if err := c.engineMgr.EnsurePinyinLoaded(); err != nil {
+			c.logger.Warn("Failed to load pinyin engine for quick input pinyin", "error", err)
+			return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		}
+	}
+	c.setQuickInputPinyinLayer(true)
+
+	c.quickInputBuffer = firstKey
 	c.quickInputPinyinCursorPos = len(firstKey)
 	c.quickInputPinyinCommitted = ""
 	c.currentPage = 1
 	c.selectedIndex = 0
 
-	c.logger.Debug("Entered quick input pinyin mode", "firstKey", firstKey)
+	c.logger.Debug("Engaged quick input pinyin context", "firstKeyLen", len(firstKey))
 
 	ops := c.quickInputPinyinOps()
 	c.updatePinyinModeCandidates(ops)
@@ -46,17 +78,14 @@ func (c *Coordinator) handleQuickInputPinyinKey(key string, data *bridge.KeyEven
 	return c.handlePinyinModeKey(c.quickInputPinyinOps(), key, data)
 }
 
-// exitQuickInputPinyinToBase 退出拼音子模式，返回快捷输入基础模式
+// exitQuickInputPinyinToBase 退出拼音上下文，buffer 清空回到快捷输入基础（空 buffer）状态。
+// 由 ops.exitOnBackspaceEmpty 在退格删空 buffer 时调用。
 func (c *Coordinator) exitQuickInputPinyinToBase() *bridge.KeyEventResult {
-	// 仅在实际交换过词库层时才恢复（码表引擎下）
-	if c.quickInputPinyinDictSwapped && c.engineMgr != nil {
-		c.engineMgr.DeactivateTempPinyin()
-	}
+	c.setQuickInputPinyinLayer(false)
 
-	c.quickInputPinyinMode = false
-	c.quickInputPinyinBuffer = ""
+	c.quickInputBuffer = ""
 	c.quickInputPinyinCommitted = ""
-	c.quickInputPinyinDictSwapped = false
+	c.quickInputPinyinCursorPos = 0
 	c.preeditDisplay = ""
 	c.currentPage = 1
 	c.selectedIndex = 0
@@ -71,29 +100,23 @@ func (c *Coordinator) exitQuickInputPinyinToBase() *bridge.KeyEventResult {
 	return c.modeCompositionResult(preedit, len(preedit))
 }
 
-// exitQuickInputPinyinMode 退出拼音子模式并退出快捷输入
+// exitQuickInputPinyinMode 从拼音上下文整体退出快捷输入（上屏 text）。由 ops.exitMode 调用。
 func (c *Coordinator) exitQuickInputPinyinMode(commit bool, text string) *bridge.KeyEventResult {
-	// 仅在实际交换过词库层时才恢复
-	if c.quickInputPinyinDictSwapped && c.engineMgr != nil {
-		c.engineMgr.DeactivateTempPinyin()
-	}
-
-	c.quickInputPinyinMode = false
-	c.quickInputPinyinBuffer = ""
-	c.quickInputPinyinDictSwapped = false
+	c.setQuickInputPinyinLayer(false)
 	c.preeditDisplay = ""
 
 	// 输入历史在候选最终化点（selectPinyinModeXxx）统一记录, 此处不再记录,
 	// 以避免把拼音码、触发键、标点等非候选文本误记
 	c.quickInputPinyinCommitted = ""
+	c.quickInputPinyinCursorPos = 0
 
 	return c.exitQuickInputMode(commit, text)
 }
 
-// quickInputPinyinOps 创建快捷输入拼音子模式的操作回调
+// quickInputPinyinOps 创建快捷输入拼音上下文的操作回调（buffer 即统一的 quickInputBuffer）
 func (c *Coordinator) quickInputPinyinOps() *pinyinModeOps {
 	return &pinyinModeOps{
-		buffer:    &c.quickInputPinyinBuffer,
+		buffer:    &c.quickInputBuffer,
 		cursorPos: &c.quickInputPinyinCursorPos,
 		committed: &c.quickInputPinyinCommitted,
 		prefix:    c.quickInputPrefix,
@@ -104,7 +127,7 @@ func (c *Coordinator) quickInputPinyinOps() *pinyinModeOps {
 			return c.exitQuickInputPinyinToBase()
 		},
 		separator: func(key string, keyCode int) bool {
-			return c.isPinyinSeparatorForBuffer(c.quickInputPinyinBuffer, key, keyCode)
+			return c.isPinyinSeparatorForBuffer(c.quickInputBuffer, key, keyCode)
 		},
 		triggerKey: func(key string, keyCode int) bool {
 			return c.isQuickInputTriggerKey(key, keyCode)

@@ -69,7 +69,8 @@ func (d *decider) modeActive(p Processor) bool {
 
 // reconcileHost 在受管宿主的一次 Apply 之后，据模式真值源回填 d.host：当前 host 的模式已退出
 // （mode→false）即回落 engine_default。注意查的是**外层**模式标志——如 quick_input 的拼音
-// 子模式退出只清 quickInputPinyinMode 不清 quickInputMode，host 应保持 quick_input。
+// 上下文（buffer 以字母打头，由 quickInputPinyinActive 派生）退出回基础时 quickInputMode 仍为
+// true，host 应保持 quick_input。
 func (d *decider) reconcileHost() {
 	if d.host == d.engineDefault {
 		return

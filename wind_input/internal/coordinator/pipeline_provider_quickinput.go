@@ -72,8 +72,9 @@ func textsToCandidates(texts []string) []candidate.Candidate {
 	return out
 }
 
-// quickInputBaseProviders 返回快捷输入基础候选源（date/calc/number）。
-// 拼音 Provider 在后续切片（消灭 quickInputPinyinMode）接入。
+// quickInputBaseProviders 返回快捷输入「结构化」候选源（date/calc/number），用于非拼音上下文。
+// 拼音上下文（quickInputPinyinActive）走共享的 updatePinyinModeCandidates（内部经 pinyinProvider
+// 取源），与结构化候选 XOR——二者由 buffer 内容互斥，不在同一列表合并。
 func (c *Coordinator) quickInputBaseProviders() []CandidateProvider {
 	return []CandidateProvider{
 		dateProvider{},

@@ -61,7 +61,7 @@ func (c *Coordinator) armPendingFirstShowWithTimeout(d time.Duration) {
 		case c.tempPinyinMode:
 			c.logger.Debug("pendingFirstShow timeout: forcing showPinyinModeUI (temp pinyin)")
 			c.showPinyinModeUI(c.tempPinyinOps())
-		case c.quickInputPinyinMode:
+		case c.quickInputPinyinActive():
 			c.logger.Debug("pendingFirstShow timeout: forcing showPinyinModeUI (quick input pinyin)")
 			c.showPinyinModeUI(c.quickInputPinyinOps())
 		case c.quickInputMode:
@@ -195,7 +195,7 @@ func (c *Coordinator) HandleCaretUpdate(data bridge.CaretData) error {
 	// 但 preedit 含触发键 prefix，仍需 show 候选窗。
 	hasTempEnglish := c.tempEnglishMode
 	hasTempPinyin := c.tempPinyinMode
-	hasQuickInputPinyin := c.quickInputPinyinMode
+	hasQuickInputPinyin := c.quickInputPinyinActive()
 	hasQuickInput := c.quickInputMode
 	hasSpecial := c.specialMode
 	hasInput := hasMainInput || hasTempEnglish || hasTempPinyin || hasQuickInput || hasSpecial
@@ -528,9 +528,6 @@ func (c *Coordinator) replayBufferLen() int {
 	}
 	if c.quickInputMode {
 		prefix := c.quickInputPrefix()
-		if len(c.quickInputPinyinBuffer) > 0 {
-			return len(prefix) + len(c.quickInputPinyinBuffer)
-		}
 		return len(prefix) + len(c.quickInputBuffer)
 	}
 	if c.specialMode {
@@ -748,11 +745,9 @@ func (c *Coordinator) HandleFocusGained(processID uint32, inputScopeMask uint64)
 					replayCaretPos = utf8.RuneCountInString(replayText)
 				case c.quickInputMode:
 					prefix := c.quickInputPrefix()
-					if len(c.quickInputPinyinBuffer) > 0 {
-						replayText = prefix + c.quickInputPinyinBuffer
-					} else {
-						replayText = prefix + c.quickInputBuffer
-					}
+					// 不含 quickInputPinyinCommitted（分段上屏已确认字），与 tempPinyinMode 的
+					// replay 保持对称——已知局限：焦点切换时 partial commit 中间态丢失，非本次重构引入。
+					replayText = prefix + c.quickInputBuffer
 					replayCaretPos = utf8.RuneCountInString(replayText)
 				case c.specialMode:
 					replayText = c.specialPrefix() + c.specialBuffer

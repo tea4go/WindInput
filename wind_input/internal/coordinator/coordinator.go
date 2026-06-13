@@ -171,11 +171,9 @@ type addWordState struct {
 type quickInputState struct {
 	quickInputMode              bool                   // 是否处于快捷输入模式
 	quickInputTriggerKey        string                 // 当前使用的触发键类型（如 "semicolon"）
-	quickInputBuffer            string                 // 触发键后的输入缓冲区（不含触发键本身）
-	quickInputPinyinMode        bool                   // 是否处于快捷输入的临时拼音子模式
-	quickInputPinyinBuffer      string                 // 快捷输入临时拼音缓冲区
-	quickInputPinyinCursorPos   int                    // 快捷输入拼音光标位置
-	quickInputPinyinCommitted   string                 // 快捷输入拼音部分上屏累积文本
+	quickInputBuffer            string                 // 触发键后的输入缓冲区（不含触发键本身）；拼音上下文下即拼音码
+	quickInputPinyinCursorPos   int                    // 拼音上下文光标位置（在 quickInputBuffer 中）
+	quickInputPinyinCommitted   string                 // 拼音上下文部分上屏累积文本
 	quickInputPinyinDictSwapped bool                   // 是否已交换词库层（仅码表引擎下为 true）
 	savedLayout                 config.CandidateLayout // 进入快捷输入前的布局（用于退出时恢复）
 }
@@ -1026,8 +1024,6 @@ func (c *Coordinator) getPendingBufferText() string {
 		if c.tempPinyinTriggerKey == "z" && c.config != nil && c.config.Input.TempPinyin.ZIncludeOnCommit {
 			text = "z" + text
 		}
-	case c.quickInputMode && len(c.quickInputPinyinBuffer) > 0:
-		text = c.quickInputPinyinBuffer
 	case c.quickInputMode && len(c.quickInputBuffer) > 0:
 		text = c.quickInputBuffer
 	case c.specialMode:
@@ -1072,11 +1068,10 @@ func (c *Coordinator) clearState() {
 	c.addWordLen = 0
 	c.addWordCode = ""
 	// 清理快捷输入模式状态（恢复布局需在重置标志前执行）
+	// 拼音上下文的词库层卸载无条件执行（幂等，dictSwapped 守护）——不依赖 quickInputMode
+	// 布尔，防其已被其他路径置 false 时词库层泄漏。
+	c.setQuickInputPinyinLayer(false)
 	if c.quickInputMode {
-		// 如果处于快捷输入的临时拼音子模式且已交换词库层，先恢复
-		if c.quickInputPinyinDictSwapped && c.engineMgr != nil {
-			c.engineMgr.DeactivateTempPinyin()
-		}
 		if c.savedLayout != "" && c.uiManager != nil {
 			c.uiManager.SetCandidateLayout(c.savedLayout)
 		}
@@ -1090,10 +1085,8 @@ func (c *Coordinator) clearState() {
 	}
 	c.quickInputMode = false
 	c.quickInputBuffer = ""
-	c.quickInputPinyinMode = false
-	c.quickInputPinyinBuffer = ""
 	c.quickInputPinyinCommitted = ""
-	c.quickInputPinyinDictSwapped = false
+	c.quickInputPinyinCursorPos = 0
 	c.savedLayout = ""
 
 	// 清理特殊模式状态（恢复布局需在重置标志前执行）

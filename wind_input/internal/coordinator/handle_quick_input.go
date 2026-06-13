@@ -193,8 +193,8 @@ func (c *Coordinator) enterQuickInputMode(triggerKey string) *bridge.KeyEventRes
 const maxQuickInputBufferLen = 20
 
 func (c *Coordinator) handleQuickInputKey(key string, data *bridge.KeyEventData) *bridge.KeyEventResult {
-	// 如果处于临时拼音子模式，委托给拼音按键处理
-	if c.quickInputPinyinMode {
+	// 如果处于拼音上下文（buffer 以字母打头），委托给共享拼音按键处理
+	if c.quickInputPinyinActive() {
 		return c.handleQuickInputPinyinKey(key, data)
 	}
 
@@ -275,10 +275,10 @@ func (c *Coordinator) handleQuickInputKey(key string, data *bridge.KeyEventData)
 		if lower >= 'A' && lower <= 'Z' {
 			lower = lower - 'A' + 'a'
 		}
-		// 缓冲区为空时：进入临时拼音子模式（字母作为拼音首字母）
-		// z 键也进入拼音模式（重复上屏功能通过空格实现）
+		// 缓冲区为空时：切入拼音上下文（字母作为拼音首字母）
+		// z 键也切入拼音（重复上屏功能通过空格实现）
 		if len(c.quickInputBuffer) == 0 {
-			return c.enterQuickInputPinyinMode(string(lower))
+			return c.engageQuickInputPinyin(string(lower))
 		}
 		idx := int(lower - 'a')
 		pageStart := (c.currentPage - 1) * c.candidatesPerPage
@@ -325,6 +325,14 @@ func (c *Coordinator) handleQuickInputRepeat() *bridge.KeyEventResult {
 // updateQuickInputCandidates 更新快捷输入候选（合并多模块候选并去重）
 func (c *Coordinator) updateQuickInputCandidates() {
 	buf := c.quickInputBuffer
+	// 拼音上下文（buffer 以字母打头）：候选走共享拼音查询（经 pinyinProvider），
+	// 而非结构化 date/calc/number 合并。正常路径下拼音键已由 handlePinyinModeKey 直接
+	// 调 updatePinyinModeCandidates；此守卫保证任何入口下 updateQuickInputCandidates
+	// 都按上下文产出正确候选。
+	if c.quickInputPinyinActive() {
+		c.updatePinyinModeCandidates(c.quickInputPinyinOps())
+		return
+	}
 	if len(buf) == 0 {
 		// 缓冲区为空：显示上次上屏内容作为重复候选
 		if c.inputHistory != nil {
@@ -402,13 +410,10 @@ func (c *Coordinator) selectQuickInputCandidate(index int) *bridge.KeyEventResul
 
 // exitQuickInputMode 退出快捷输入模式
 func (c *Coordinator) exitQuickInputMode(commit bool, text string) *bridge.KeyEventResult {
-	// 清理临时拼音子模式状态（防御性：正常路径由 exitQuickInputPinyinMode 提前清理）
-	if c.quickInputPinyinDictSwapped && c.engineMgr != nil {
-		c.engineMgr.DeactivateTempPinyin()
-	}
-	c.quickInputPinyinMode = false
-	c.quickInputPinyinBuffer = ""
-	c.quickInputPinyinDictSwapped = false
+	// 清理拼音上下文的引擎词库层（防御性：正常路径由 exitQuickInputPinyinMode 提前清理）
+	c.setQuickInputPinyinLayer(false)
+	c.quickInputPinyinCursorPos = 0
+	c.quickInputPinyinCommitted = ""
 
 	// 恢复布局（如果之前保存了）
 	if c.savedLayout != "" && c.uiManager != nil {

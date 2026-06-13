@@ -279,15 +279,16 @@ func (c *Coordinator) updatePinyinModeCandidates(ops *pinyinModeOps) {
 		return
 	}
 
-	maxCandidates := 100
-	result := c.engineMgr.ConvertWithPinyin(*ops.buffer, maxCandidates)
+	// 拼音候选统一经 pinyinProvider 取源（query 返回候选 + 分段显示串）；它内部即
+	// engineMgr.ConvertWithPinyin(buffer, 100) 的包装，与旧逻辑字节级等价。
+	cands, preedit := pinyinProvider{c: c}.query(*ops.buffer)
 
-	for i := range result.Candidates {
-		result.Candidates[i].Index = i + 1
+	for i := range cands {
+		cands[i].Index = i + 1
 	}
 
-	c.candidates = result.Candidates
-	c.preeditDisplay = result.PreeditDisplay
+	c.candidates = cands
+	c.preeditDisplay = preedit
 
 	// 物化生效每页候选数（临时拼音 tempPinyinMode 已置位 → 切扩展档）
 	c.refreshEffectivePerPage()
