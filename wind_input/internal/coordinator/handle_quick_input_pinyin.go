@@ -6,6 +6,7 @@ package coordinator
 
 import (
 	"github.com/huanfeng/wind_input/internal/bridge"
+	"github.com/huanfeng/wind_input/internal/candidate"
 	"github.com/huanfeng/wind_input/internal/schema"
 )
 
@@ -43,6 +44,39 @@ func (c *Coordinator) setQuickInputPinyinLayer(engaged bool) {
 		c.engineMgr.DeactivateTempPinyin()
 	}
 	c.quickInputPinyinDictSwapped = false
+}
+
+// quickInputAlphaPinyinEnabled 快捷模式字母上下文是否启用拼音源（默认 true）。
+// 预留给 F7「拼音可关」场景：Pinyin=false 时字母输入不走 engageQuickInputPinyin 拼音路径，
+// 改由通用驱动 + 纯 extras 融合。F3 默认拼音常开，暂未接入调用。
+func (c *Coordinator) quickInputAlphaPinyinEnabled() bool {
+	return c.config == nil || c.config.Features.QuickInput.AlphaProviders.Pinyin
+}
+
+// quickInputRareCharEnabled 生僻字源是否启用（需开关 + 有效实例 id + registry 就绪）。
+func (c *Coordinator) quickInputRareCharEnabled() bool {
+	return c.config != nil &&
+		c.config.Features.QuickInput.AlphaProviders.RareChar &&
+		c.config.Features.QuickInput.AlphaProviders.RareCharID != "" &&
+		c.specialModeReg != nil
+}
+
+// quickInputEnglishEnabled 英文源是否启用。
+func (c *Coordinator) quickInputEnglishEnabled() bool {
+	return c.config != nil && c.config.Features.QuickInput.AlphaProviders.English
+}
+
+// quickInputAlphaExtraProviders 返回字母上下文中「拼音以外」的启用融合源（生僻字/英文）。
+// 拼音走有状态主路径(updatePinyinModeCandidates)，故不在此列；二者经 extraCandidates 钩子拼接。
+func (c *Coordinator) quickInputAlphaExtraProviders() []CandidateProvider {
+	var ps []CandidateProvider
+	if c.quickInputRareCharEnabled() {
+		ps = append(ps, rareCharProvider{c: c, id: c.config.Features.QuickInput.AlphaProviders.RareCharID})
+	}
+	if c.quickInputEnglishEnabled() {
+		ps = append(ps, englishProvider{c: c})
+	}
+	return ps
 }
 
 // engageQuickInputPinyin 在快捷输入空 buffer 下首次输入字母时切入拼音上下文。
@@ -133,5 +167,9 @@ func (c *Coordinator) quickInputPinyinOps() *pinyinModeOps {
 			return c.isQuickInputTriggerKey(key, keyCode)
 		},
 		consumeSpaceEmpty: true,
+		// 融合：拼音候选后追加生僻字/英文等启用源（默认全关 → 返回空 → 行为不变）
+		extraCandidates: func() []candidate.Candidate {
+			return mergeProviderCandidates(c.quickInputBuffer, c.quickInputAlphaExtraProviders())
+		},
 	}
 }

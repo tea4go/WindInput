@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/huanfeng/wind_input/internal/bridge"
+	"github.com/huanfeng/wind_input/internal/candidate"
 	"github.com/huanfeng/wind_input/internal/ipc"
 	"github.com/huanfeng/wind_input/internal/transform"
 	"github.com/huanfeng/wind_input/internal/ui"
@@ -25,6 +26,9 @@ type pinyinModeOps struct {
 	separator            func(string, int) bool                    // 分隔符判断
 	triggerKey           func(string, int) bool                    // 触发键判断
 	consumeSpaceEmpty    bool                                      // 无候选时空格是否仅消费（true）或退出（false）
+	// extraCandidates 融合追加：拼音候选填充后，追加其它启用源（生僻字/英文）的候选。
+	// 快捷模式融合用——nil 表示不融合（临时拼音 temp_pinyin 即 nil，行为不变）。
+	extraCandidates func() []candidate.Candidate
 }
 
 // handlePinyinModeKey 拼音模式通用按键处理
@@ -282,6 +286,13 @@ func (c *Coordinator) updatePinyinModeCandidates(ops *pinyinModeOps) {
 	// 拼音候选统一经 pinyinProvider 取源（query 返回候选 + 分段显示串）；它内部即
 	// engineMgr.ConvertWithPinyin(buffer, 100) 的包装，与旧逻辑字节级等价。
 	cands, preedit := pinyinProvider{c: c}.query(*ops.buffer)
+
+	// 融合追加其它启用源候选（快捷模式生僻字/英文）；temp_pinyin 的 ops 无此钩子，行为不变。
+	// 拼音段与 extras 段之间**不做跨段去重**（分段语义）：极端情形（拼音与英文/生僻字返回同
+	// Text）可能出现重复条目，概率极低，F5/F6 接入后按真机反馈再决定是否加全局去重过滤。
+	if ops.extraCandidates != nil {
+		cands = append(cands, ops.extraCandidates()...)
+	}
 
 	for i := range cands {
 		cands[i].Index = i + 1
