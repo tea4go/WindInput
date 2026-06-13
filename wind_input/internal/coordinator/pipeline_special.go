@@ -1,12 +1,13 @@
 // pipeline_special.go — 引导键特殊模式宿主（Processor）。
 //
 // special 运行时是**单例**（一个 c.specialMode 标志 + 一个 handleSpecialModeKey），尽管配置上
-// 有 N 个触发实例（specialModeReg.instances）。故用单个 specialProcessor 承载，内部键全接管。
+// 有 N 个触发实例（specialModeReg.instances）。故用单个 specialProcessor 承载，模式内键 + 触发
+// + host 状态机全接管。
 //
-// **触发仍走旧路径**（不入 decider.registry）：special 触发是动态 2 步匹配——
-// specialModeReg.match(key)→id、再 matchSpecialTrigger(id)→tk、setupSpecialMode(id, tk)——
-// 其中 id 无法塞进现有 Processor.Activate(triggerKey, residual) 签名（需扩 Decision/接口，
-// 留后续批次）。本宿主只接管 host 状态机 + 模式内键，故 Judge/Activate 为占位实现。
+// 触发的动态 2 步匹配（specialModeReg.match→id、matchSpecialTrigger→tk）在 Judge 内完成，
+// 命中实例 id 经 Decision.ActivateID 交给 Activate=setupSpecialMode。由 decider.tryActivateSpecial
+// 在旧 special 触发位置（getXxxTriggerKey 之后）调用，保持 special-last 优先级——故**不混入
+// tryActivateFromEmpty 的 registry**（那会把 special 提到 z 首触发之前，改变优先级）。
 package coordinator
 
 import (
@@ -29,15 +30,29 @@ func newSpecialProcessor(c *Coordinator) *specialProcessor {
 
 func (p *specialProcessor) Name() string { return "special" }
 
-// Judge：special 不入 registry，激活裁决不经决策器（触发走旧 2 步匹配）。占位 Pass——
-// 作为 host 时 shadowLog 会调它，返回 Pass 无副作用。
+// Judge：buffer 空 + 无候选时做 2 步动态匹配（specialModeReg.match→id + matchSpecialTrigger→tk），
+// 命中则 Activate 带实例 id。供 decider.tryActivateSpecial 在旧 special 触发位置（getXxxTriggerKey
+// 之后，保持 special-last 优先级）接管。specialModeReg==nil 安全返回 Pass。
 func (p *specialProcessor) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
+	if ctx.BufferLen() != 0 || ctx.CandidateCount() != 0 {
+		return decPass()
+	}
+	if p.c.specialModeReg == nil {
+		return decPass()
+	}
+	id := p.c.specialModeReg.match(key, data.KeyCode)
+	if id == "" {
+		return decPass()
+	}
+	if tk := p.c.matchSpecialTrigger(id, key, data.KeyCode); tk != "" {
+		return decActivateID(tk, id, -1)
+	}
 	return decPass()
 }
 
-// Activate：占位，不被调用（special 不在 registry，进入经旧 setupSpecialMode 直接调）。
-func (p *specialProcessor) Activate(triggerKey, residual string) (string, bool) {
-	return "", false
+// Activate：复用 setupSpecialMode（ActivateID = 命中的码表实例 id）。
+func (p *specialProcessor) Activate(dec Decision) (string, bool) {
+	return p.c.setupSpecialMode(dec.ActivateID, dec.TriggerKey)
 }
 
 func (p *specialProcessor) Release() {}

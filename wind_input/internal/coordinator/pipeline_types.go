@@ -39,6 +39,7 @@ type Decision struct {
 	Verdict    Verdict
 	CommitIdx  int    // VerdictActivate：顶码上屏候选索引，-1=不顶
 	TriggerKey string // VerdictActivate：触发键标识
+	ActivateID string // VerdictActivate：宿主实例标识（special 引导键多实例的 id；其余空）
 	Residual   string // VerdictRelease：放弃宿主时残留待重判的 buffer
 }
 
@@ -48,6 +49,11 @@ func decHandle() Decision { return Decision{Verdict: VerdictHandle} }
 
 func decActivate(triggerKey string, commitIdx int) Decision {
 	return Decision{Verdict: VerdictActivate, TriggerKey: triggerKey, CommitIdx: commitIdx}
+}
+
+// decActivateID 带实例 id 的激活裁决（special 引导键：id 区分多个码表实例）。
+func decActivateID(triggerKey, id string, commitIdx int) Decision {
+	return Decision{Verdict: VerdictActivate, TriggerKey: triggerKey, ActivateID: id, CommitIdx: commitIdx}
 }
 
 func decRelease(residual string) Decision {

@@ -41,8 +41,8 @@ func (p *tempPinyinProcessor) Judge(ctx *DecisionCtx, key string, data *bridge.K
 // Activate：复用现有 setupTempPinyinMode（含拼音词库层激活）。
 // residual（z fallback 拼音码）在 1c 接管时注入；1a 暂忽略。
 // 1c 起引擎副作用改由决策器 applyEngineDiff 统一管（I3），届时 setup 内的层激活调用上移。
-func (p *tempPinyinProcessor) Activate(triggerKey, residual string) (string, bool) {
-	return p.c.setupTempPinyinMode(triggerKey)
+func (p *tempPinyinProcessor) Activate(dec Decision) (string, bool) {
+	return p.c.setupTempPinyinMode(dec.TriggerKey)
 }
 
 // Release：1c 接管时由决策器在 CompEnd/CompHot 调用；引擎副作用走 applyEngineDiff（I3），

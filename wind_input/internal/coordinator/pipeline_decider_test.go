@@ -177,6 +177,31 @@ func TestTryActivateFromEmptyNoMatch(t *testing.T) {
 	}
 }
 
+// TestDecActivateID 验证带实例 id 的激活裁决构造。
+func TestDecActivateID(t *testing.T) {
+	d := decActivateID("backslash", "quick_symbols", -1)
+	if d.Verdict != VerdictActivate || d.TriggerKey != "backslash" || d.ActivateID != "quick_symbols" || d.CommitIdx != -1 {
+		t.Errorf("decActivateID mismatch: %+v", d)
+	}
+}
+
+// TestSpecialJudgeNilRegistry 验证 specialModeReg==nil 时 Judge 安全 Pass（不 panic）。
+// 真实 2 步匹配 + 激活需构造码表实例，留集成/真机测试。
+func TestSpecialJudgeNilRegistry(t *testing.T) {
+	c := &Coordinator{}
+	d := newDecider(c)
+	ctx := newDecisionCtx(c, d.special)
+	if got := d.special.Judge(ctx, "\\", &bridge.KeyEventData{Key: "\\", KeyCode: 220}); got.Verdict != VerdictPass {
+		t.Errorf("nil specialModeReg: Judge=%v, want Pass", got.Verdict)
+	}
+	// specialBuffer 非空（host=special 时 BufferText 路由到 specialBuffer）：buffer 门禁先于
+	// registry 检查命中，Pass。
+	c.specialBuffer = "ar"
+	if got := d.special.Judge(ctx, "\\", &bridge.KeyEventData{Key: "\\", KeyCode: 220}); got.Verdict != VerdictPass {
+		t.Errorf("specialBuffer 非空: Judge=%v, want Pass", got.Verdict)
+	}
+}
+
 // TestDeciderManagedHosts 验证受管宿主集合：temp_pinyin + quick_input + temp_english + special
 // 均被 decide() 全接管（special 模式内键受管但触发不在 registry）；engine_default 不算受管。
 func TestDeciderManagedHosts(t *testing.T) {

@@ -18,9 +18,10 @@ type Processor interface {
 	// 约束（I2）：极轻量——只做长度检查 / 前缀字符比对，禁止锁竞争、IO、复杂正则。
 	Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision
 
-	// Activate 成为宿主。residual 为上一宿主 Release 交接的 buffer（可空）。
+	// Activate 成为宿主。dec 为触发本激活的裁决：TriggerKey（触发键）、Residual（上一宿主
+	// Release 交接的 buffer，可空）、ActivateID（special 多实例 id）。
 	// 必须原子（I10）：失败返回 ok=false 时不得遗留任何副作用。
-	Activate(triggerKey, residual string) (prefix string, ok bool)
+	Activate(dec Decision) (prefix string, ok bool)
 
 	// Release 卸下宿主身份。引擎资源（Capabilities）由决策器统一 diff（I3），此处不自行卸。
 	Release()

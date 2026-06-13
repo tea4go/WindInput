@@ -34,8 +34,8 @@ func (p *tempEnglishProcessor) Judge(ctx *DecisionCtx, key string, data *bridge.
 	return decPass()
 }
 
-func (p *tempEnglishProcessor) Activate(triggerKey, residual string) (string, bool) {
-	return p.c.setupTempEnglishMode(triggerKey)
+func (p *tempEnglishProcessor) Activate(dec Decision) (string, bool) {
+	return p.c.setupTempEnglishMode(dec.TriggerKey)
 }
 
 func (p *tempEnglishProcessor) Release() {}

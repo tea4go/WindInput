@@ -34,8 +34,8 @@ func (p *quickInputProcessor) Judge(ctx *DecisionCtx, key string, data *bridge.K
 	return decPass()
 }
 
-func (p *quickInputProcessor) Activate(triggerKey, residual string) (string, bool) {
-	return p.c.setupQuickInputMode(triggerKey)
+func (p *quickInputProcessor) Activate(dec Decision) (string, bool) {
+	return p.c.setupQuickInputMode(dec.TriggerKey)
 }
 
 func (p *quickInputProcessor) Release() {}

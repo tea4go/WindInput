@@ -69,7 +69,7 @@ func (p *engineDefaultProcessor) Judge(ctx *DecisionCtx, key string, data *bridg
 
 // Activate engine_default 作为默认 host，Activate 用于从其他宿主回落（带 residual）。
 // 第 0 批占位：不接主路径，真正的 buffer 重建在第 1 批落地。
-func (p *engineDefaultProcessor) Activate(triggerKey, residual string) (string, bool) {
+func (p *engineDefaultProcessor) Activate(dec Decision) (string, bool) {
 	return "", true
 }
 

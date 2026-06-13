@@ -160,6 +160,17 @@ func (d *decider) judgeZFallback(key string, data *bridge.KeyEventData) (string,
 	return "", false
 }
 
+// tryActivateSpecial 在旧 special 触发位置（getXxxTriggerKey 之后，保持 special-last 优先级，
+// 不混入 tryActivateFromEmpty 的 registry 以免被提到 z 首触发之前）走决策器接管 special 激活。
+// 返回 (result, true) 已接管；(nil, false) 交旧路径。
+func (d *decider) tryActivateSpecial(key string, data *bridge.KeyEventData) (*bridge.KeyEventResult, bool) {
+	ctx := newDecisionCtx(d.c, d.host)
+	if dec := d.special.Judge(ctx, key, data); dec.Verdict == VerdictActivate {
+		return d.executeActivate(d.special, dec)
+	}
+	return nil, false
+}
+
 // tryActivateFromEmpty 在 buffer 空/无候选时遍历 registry（按优先级），第一个判 Activate 的
 // 宿主接管激活。返回 (result, true) 表示已接管；(nil, false) 交旧路径（如 z 首次触发、special）。
 // 供主路径在 decider_enabled 时接管旧三段 getXxxTriggerKey。
@@ -176,11 +187,11 @@ func (d *decider) tryActivateFromEmpty(key string, data *bridge.KeyEventData) (*
 // executeActivate 执行宿主激活（触发键路径，buffer 空 → 无候选，preedit=prefix），等价旧
 // enterXxxMode（setupXxxMode + modeCompositionResult）。
 //
-// 受管宿主（isManaged：temp_pinyin/quick_input）激活后经 markEntered 设 d.host=p，使模式内键
-// 经 dispatchManagedHost 走 decide()。非受管宿主（temp_english）**不**设 host——其模式内键仍走旧
-// if c.xxxMode，且 judgeZFallback 需 engine_default 视角的 inputBuffer，切 host 会让两者错乱。
+// 受管宿主（isManaged：temp_pinyin/quick_input/temp_english/special）激活后经 markEntered 设
+// d.host=p，使模式内键经 dispatchManagedHost 走 decide()。markEntered 自带 modeActive 守卫，
+// 仅在模式真置位时设 host；非受管宿主（仅 engine_default）不会进 registry/此路径。
 func (d *decider) executeActivate(p Processor, dec Decision) (*bridge.KeyEventResult, bool) {
-	prefix, ok := p.Activate(dec.TriggerKey, dec.Residual)
+	prefix, ok := p.Activate(dec)
 	if !ok {
 		return nil, false
 	}

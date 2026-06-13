@@ -590,16 +590,20 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		}
 		return res
 	}
-	// 特殊模式（自定义码表）：buffer 为空时触发
-	if !hasShift && c.specialModeReg != nil {
-		if id := c.specialModeReg.match(key, data.KeyCode); id != "" {
-			if tk := c.matchSpecialTrigger(id, key, data.KeyCode); tk != "" {
-				if prefix, ok := c.setupSpecialMode(id, tk); ok {
-					// 进入 special 后对齐受管宿主 host（onSpecialEntered 自带模式守卫）。
-					if c.devCfg.DeciderEnabled {
-						c.decider.onSpecialEntered()
+	// 特殊模式（自定义码表）：buffer 为空时触发。decider_enabled 时由 tryActivateSpecial 接管
+	// （在此位置调用，保持 special-last 优先级——getXxxTriggerKey 之后），执行经 specialProcessor
+	// Judge/Activate + markEntered，等价旧 setupSpecialMode + modeCompositionResult。
+	if !hasShift {
+		if c.devCfg.DeciderEnabled {
+			if res, ok := c.decider.tryActivateSpecial(key, &data); ok {
+				return res
+			}
+		} else if c.specialModeReg != nil {
+			if id := c.specialModeReg.match(key, data.KeyCode); id != "" {
+				if tk := c.matchSpecialTrigger(id, key, data.KeyCode); tk != "" {
+					if prefix, ok := c.setupSpecialMode(id, tk); ok {
+						return c.modeCompositionResult(prefix, len(prefix))
 					}
-					return c.modeCompositionResult(prefix, len(prefix))
 				}
 			}
 		}
