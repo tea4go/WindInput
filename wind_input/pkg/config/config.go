@@ -170,6 +170,18 @@ type QuickInputConfig struct {
 	ForceVertical bool     `yaml:"force_vertical" json:"force_vertical"` // 强制竖排显示候选（默认 true）
 	DecimalPlaces int      `yaml:"decimal_places" json:"decimal_places"` // 计算结果小数保留位数（默认 6，0 表示取整）
 	AccentColor   string   `yaml:"accent_color" json:"accent_color"`     // 模式内发光边框颜色（十六进制），空=内置默认色
+
+	// AlphaProviders 字母上下文的融合候选源开关（除主码表外的通用模式）。各源独立开关，
+	// 字母输入时按启用项融合候选；详见 docs/design/input-processor-pipeline.md。
+	AlphaProviders QuickInputAlphaProvidersConfig `yaml:"alpha_providers" json:"alpha_providers"`
+}
+
+// QuickInputAlphaProvidersConfig 快捷输入「字母上下文」的融合源开关。
+type QuickInputAlphaProvidersConfig struct {
+	Pinyin     bool   `yaml:"pinyin" json:"pinyin"`             // 拼音候选（默认 true）
+	RareChar   bool   `yaml:"rare_char" json:"rare_char"`       // 生僻字候选（默认 false），来源为某个特殊模式码表
+	RareCharID string `yaml:"rare_char_id" json:"rare_char_id"` // RareChar=true 时引用的特殊模式实例 id（来自 input.special_modes）
+	English    bool   `yaml:"english" json:"english"`           // 英文词库候选（默认 false）
 }
 
 // PunctCustomConfig 自定义标点映射配置
@@ -570,6 +582,12 @@ func DefaultConfig() *Config {
 				ForceVertical: true,
 				DecimalPlaces: 6,
 				AccentColor:   "",
+				AlphaProviders: QuickInputAlphaProvidersConfig{
+					Pinyin:     true,
+					RareChar:   false,
+					RareCharID: "",
+					English:    false,
+				},
 			},
 			Cmdbar: CmdbarConfig{
 				CandidatePrefix: "⚡",

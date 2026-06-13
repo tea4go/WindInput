@@ -167,6 +167,12 @@ force_vertical = true
 decimal_places = 6
 accent_color = ""
 
+[features.quick_input.alpha_providers]
+pinyin = true
+rare_char = false
+rare_char_id = ""
+english = false
+
 [features.cmdbar]
 candidate_prefix = "⚡"
 
