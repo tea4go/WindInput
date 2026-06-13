@@ -1,0 +1,75 @@
+>>> type wgkg
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "mixed",
+    "input_buffer": "wgkg",
+    "input_cursor_pos": 4,
+    "preedit_display": "",
+    "candidates": [
+      {
+        "text": "鸽",
+        "code": "wgkg",
+        "weight": 0
+      },
+      {
+        "text": "俉",
+        "code": "wgkg",
+        "weight": 0
+      },
+      {
+        "text": "哇",
+        "code": "wa",
+        "weight": 0
+      },
+      {
+        "text": "外",
+        "code": "wai",
+        "weight": 0
+      },
+      {
+        "text": "万",
+        "code": "wan",
+        "weight": 0
+      },
+      {
+        "text": "往",
+        "code": "wang",
+        "weight": 0
+      },
+      {
+        "text": "为",
+        "code": "wei",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 4,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> select 2
+{
+  "result_type": "insert_text",
+  "commit_text": "俉",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "mixed",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}

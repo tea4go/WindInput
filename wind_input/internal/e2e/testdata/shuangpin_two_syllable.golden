@@ -1,0 +1,56 @@
+>>> type nihk
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "nihk",
+    "input_cursor_pos": 4,
+    "preedit_display": "ni hk",
+    "candidates": [
+      {
+        "text": "你",
+        "code": "ni",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> key space
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "hk",
+    "input_cursor_pos": 2,
+    "preedit_display": "hk",
+    "candidates": [
+      {
+        "text": "互爱",
+        "code": "huai",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7,
+    "confirmed_segments": [
+      {
+        "text": "你",
+        "consumed_code": "ni"
+      }
+    ]
+  }
+}
