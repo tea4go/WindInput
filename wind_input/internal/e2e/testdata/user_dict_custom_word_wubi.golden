@@ -1,0 +1,55 @@
+>>> type aaaa
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "aaaa",
+    "input_cursor_pos": 4,
+    "preedit_display": "",
+    "candidates": [
+      {
+        "text": "恭恭敬敬",
+        "code": "aaaa",
+        "weight": 0
+      },
+      {
+        "text": "测试词",
+        "code": "aaaa",
+        "weight": 0
+      },
+      {
+        "text": "工",
+        "code": "aaaa",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> select 2
+{
+  "result_type": "insert_text",
+  "commit_text": "测试词",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}

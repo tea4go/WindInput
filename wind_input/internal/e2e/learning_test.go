@@ -58,3 +58,29 @@ func TestLearningFreqIsolatedPerHarness(t *testing.T) {
 		t.Errorf("新建 harness 词频应为空，但 拟好 Count = %d", rec.Count)
 	}
 }
+
+// TestUserDictCustomWordPinyin 验证用户词库自定义词可被查询为候选（用户层经 CompositeDict
+// 参与候选生成）：拼音方案加自定义词 你好呀(nihaoya)，输入该编码后应出现该候选并可选中上屏。
+func TestUserDictCustomWordPinyin(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	if err := h.DictMgr.AddUserWord("nihaoya", "你好呀", 1200); err != nil {
+		t.Fatalf("AddUserWord: %v", err)
+	}
+	rec := NewRecorder(h).
+		Type("nihaoya").
+		SelectCandidate(1)
+	AssertGolden(t, "user_dict_custom_word_pinyin", rec.Render())
+}
+
+// TestUserDictCustomWordWubi 验证码表方案用户词库自定义词：wubi86 加自定义词 测试词(aaaa)，
+// 输入编码后融合系统候选与用户词，数字 2 选中用户自定义词上屏。
+func TestUserDictCustomWordWubi(t *testing.T) {
+	h := mustHarness(t, "wubi86")
+	if err := h.DictMgr.AddUserWord("aaaa", "测试词", 1200); err != nil {
+		t.Fatalf("AddUserWord: %v", err)
+	}
+	rec := NewRecorder(h).
+		Type("aaaa").
+		SelectCandidate(2)
+	AssertGolden(t, "user_dict_custom_word_wubi", rec.Render())
+}
