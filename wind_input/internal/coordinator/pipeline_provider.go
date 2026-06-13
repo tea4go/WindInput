@@ -17,10 +17,12 @@ type ProviderID string
 
 // Provider 标识。Rank 决定合并段位顺序（见各 provider 的 Rank()）。
 const (
-	ProviderDate   ProviderID = "date"   // 日期/年月（年月日三段 + 年月两段）
-	ProviderCalc   ProviderID = "calc"   // 计算表达式
-	ProviderNumber ProviderID = "number" // 数字/小数
-	ProviderPinyin ProviderID = "pinyin" // 临时拼音候选
+	ProviderDate     ProviderID = "date"      // 日期/年月（年月日三段 + 年月两段）
+	ProviderCalc     ProviderID = "calc"      // 计算表达式
+	ProviderNumber   ProviderID = "number"    // 数字/小数
+	ProviderPinyin   ProviderID = "pinyin"    // 临时拼音候选
+	ProviderRareChar ProviderID = "rare_char" // 生僻字（特殊模式码表）候选
+	ProviderEnglish  ProviderID = "english"   // 英文词库候选
 )
 
 // CandidateProvider 是候选来源抽象。Query 是纯查询：给定 buffer 产出候选，
