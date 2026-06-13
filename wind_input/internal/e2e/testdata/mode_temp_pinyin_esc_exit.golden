@@ -1,0 +1,121 @@
+>>> type wg
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "wg",
+    "input_cursor_pos": 2,
+    "preedit_display": "",
+    "candidates": [
+      {
+        "text": "全",
+        "code": "wg",
+        "weight": 0
+      },
+      {
+        "text": "倒",
+        "code": "wgc",
+        "weight": 0
+      },
+      {
+        "text": "癸",
+        "code": "wgd",
+        "weight": 0
+      },
+      {
+        "text": "傅",
+        "code": "wge",
+        "weight": 0
+      },
+      {
+        "text": "伍",
+        "code": "wgg",
+        "weight": 0
+      },
+      {
+        "text": "剑",
+        "code": "wgi",
+        "weight": 0
+      },
+      {
+        "text": "便",
+        "code": "wgj",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 43,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> key `
+{
+  "result_type": "insert_text",
+  "commit_text": "全",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7,
+    "temp_pinyin_mode": true
+  }
+}
+>>> type hao
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "hao",
+    "candidates": [
+      {
+        "text": "好",
+        "code": "hao",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7,
+    "temp_pinyin_mode": true
+  }
+}
+>>> key esc
+{
+  "result_type": "clear_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}

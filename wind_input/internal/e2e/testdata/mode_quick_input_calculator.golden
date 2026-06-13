@@ -1,0 +1,91 @@
+>>> key ;
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7,
+    "quick_input_mode": true
+  }
+}
+>>> type 1+2
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [
+      {
+        "text": "1+2=3",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "3",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "叁元整",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "三元整",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "三",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "叁",
+        "code": "",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7,
+    "quick_input_mode": true
+  }
+}
+>>> key space
+{
+  "result_type": "insert_text",
+  "commit_text": "1+2=3",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}

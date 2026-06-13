@@ -35,6 +35,10 @@ var namedKeys = map[string]int{
 	"down":      0x28, // VK_DOWN
 	"delete":    0x2E, // VK_DELETE
 	"del":       0x2E,
+	"lshift":    0xA0, // VK_LSHIFT（默认中英切换键之一）
+	"rshift":    0xA1, // VK_RSHIFT
+	"lctrl":     0xA2, // VK_LCONTROL
+	"rctrl":     0xA3, // VK_RCONTROL
 }
 
 // symbolVK 把 US 键盘上"无需 Shift 即可输入"的符号映射到对应的 OEM VK 码。

@@ -51,3 +51,111 @@ func TestTempPinyinLifecycle(t *testing.T) {
 		Space()
 	AssertGolden(t, "mode_temp_pinyin_lifecycle", rec.Render())
 }
+
+// ── 基础中英文切换（核心模式，非接管子模式）────────────────────────────────────
+
+// TestModeChineseEnglishToggle 验证 lshift 切换中英文：拼音方案下按 lshift 切到英文
+// （chinese_mode=false，字母透传不消费），再按 lshift 切回中文，打 "ni" 恢复候选输入。
+func TestModeChineseEnglishToggle(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Key("lshift").
+		Type("a").
+		Key("lshift").
+		Type("ni")
+	AssertGolden(t, "mode_chinese_english_toggle", rec.Render())
+}
+
+// ── quick_input 补充场景 ──────────────────────────────────────────────────────
+
+// TestQuickInputCalculator 验证快捷输入计算器：';' 进入，打算式 "1+2"，空格上屏首选
+// 计算结果 "1+2=3"。
+func TestQuickInputCalculator(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Key(";").
+		Type("1+2").
+		Space()
+	AssertGolden(t, "mode_quick_input_calculator", rec.Render())
+}
+
+// TestQuickInputPinyinSubmode 验证快捷输入拼音子模式：';' 进入后打字母 "rq" 进入拼音
+// 子模式得候选，空格上屏首选 "人群"。
+func TestQuickInputPinyinSubmode(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Key(";").
+		Type("rq").
+		Space()
+	AssertGolden(t, "mode_quick_input_pinyin_submode", rec.Render())
+}
+
+// ── temp_english 补充场景 ─────────────────────────────────────────────────────
+
+// TestTempEnglishDigitSelect 验证临时英文数字选词：打 "Hello" 进入，数字 2 选第二候选
+// （小写变体 "hello"）上屏。
+func TestTempEnglishDigitSelect(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Type("Hello").
+		SelectCandidate(2)
+	AssertGolden(t, "mode_temp_english_digit_select", rec.Render())
+}
+
+// TestTempEnglishEnterRaw 验证临时英文回车上屏原文：打 "Hello" 进入，回车上屏缓冲原文
+// "Hello"（而非候选）。
+func TestTempEnglishEnterRaw(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Type("Hello").
+		Enter()
+	AssertGolden(t, "mode_temp_english_enter_raw", rec.Render())
+}
+
+// TestTempEnglishBackspace 验证临时英文退格编辑：打 "Hello" 进入，退格回 "Hell"，候选
+// 按截短后的输入重新派生，仍在临时英文模式。
+func TestTempEnglishBackspace(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Type("Hello").
+		Backspace()
+	AssertGolden(t, "mode_temp_english_backspace", rec.Render())
+}
+
+// ── temp_pinyin 补充场景 ──────────────────────────────────────────────────────
+
+// TestTempPinyinEnterRaw 验证临时拼音回车上屏原文：wg+'`' 进入后打 "hao"，回车上屏拼音
+// 原文 "hao"（而非候选 好）。
+func TestTempPinyinEnterRaw(t *testing.T) {
+	h := mustHarness(t, "wubi86")
+	rec := NewRecorder(h).
+		Type("wg").
+		Key("`").
+		Type("hao").
+		Enter()
+	AssertGolden(t, "mode_temp_pinyin_enter_raw", rec.Render())
+}
+
+// TestTempPinyinDigitSelect 验证临时拼音数字选词：wg+'`' 进入后打 "de"（多候选），数字 2
+// 选第二候选上屏。
+func TestTempPinyinDigitSelect(t *testing.T) {
+	h := mustHarness(t, "wubi86")
+	rec := NewRecorder(h).
+		Type("wg").
+		Key("`").
+		Type("de").
+		SelectCandidate(2)
+	AssertGolden(t, "mode_temp_pinyin_digit_select", rec.Render())
+}
+
+// TestTempPinyinEscExit 验证临时拼音 ESC 退出：wg+'`' 进入后打 "hao"，ESC 清空退出、
+// 不上屏，回到普通中文态。
+func TestTempPinyinEscExit(t *testing.T) {
+	h := mustHarness(t, "wubi86")
+	rec := NewRecorder(h).
+		Type("wg").
+		Key("`").
+		Type("hao").
+		Key("esc")
+	AssertGolden(t, "mode_temp_pinyin_esc_exit", rec.Render())
+}
