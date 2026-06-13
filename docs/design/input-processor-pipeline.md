@@ -440,9 +440,11 @@ type Candidate struct {
 
 `AcceptedProviders()`：URL 宿主拒绝一切（=独占），快捷输入接纳 pinyin/date/calc。
 
-### 9.5 首个融合靶子
+### 9.5 首个融合靶子 ✅（已落地，见第 12 节第 4 批 S1-S4）
 
-快捷输入 + 拼音：消灭 `quickInputPinyinMode`，把拼音降为 Provider。
+快捷输入 + 拼音：已消灭 `quickInputPinyinMode`，拼音候选经 `pinyinProvider` 取源。
+实证：快捷输入候选是 XOR（拼音 vs 结构化由 buffer 内容互斥），故未触发真正的"多源同列表合并"——
+真正的多源融合靶子留待 url_english/emoji 等共存宿主。
 
 ---
 
@@ -529,8 +531,19 @@ func TestEngineDefaultJudge(t *testing.T) {
 - 迁余下两模式，各自 `KeyHandlers()` 完成抽取。统一分级加载状态为宿主单份。
 
 ### 第 4 批：融合（第二阶段）
-- 候选血缘 + 合并器 + 准入白名单 + 默认仲裁。快捷输入+拼音融合，消灭 `quickInputPinyinMode`。
-- 新增 url_english（悲观/全匹配）。全局分流 handler 按需填充。
+
+按切片实施（S1-S4 已落地，逐片单测+审查+真机手测后提交）：
+- **S1 ✅** `CandidateProvider` 接口（`ID`/`Rank`/`Query` 纯查询）+ `mergeProviderCandidates`（Rank 分段拼接 + Text 去重）。**候选血缘复用既有 `candidate.Source`/`ConsumedLength`，不另造平行类型**（commit 归属靠 `Source` 区分：拼音 `SourcePinyin && ConsumedLength>0` 分段上屏 / 结构化 `Source` 空整条上屏）。
+- **S2 ✅** date/calc/number 抽成 `dateProvider`/`calcProvider`/`numberProvider`，`updateQuickInputCandidates` 改走 `mergeProviderCandidates`（字节对拍测试锁等价）。
+- **S3 ✅** `pinyinProvider`（Rank 40），`Query` 委托 `ConvertWithPinyin`；具体方法 `query()` 兼返 `PreeditDisplay`。
+- **S4 ✅** 消灭 `quickInputPinyinMode` 布尔 + 独立 buffer：拼音上下文由 `quickInputPinyinActive()` 从 buffer 内容派生（首字母 a-z ⟺ 拼音）；共享 `updatePinyinModeCandidates` 内部经 `pinyinProvider.query()` 取源（temp_pinyin + quick_input 统一）；`setQuickInputPinyinLayer` 幂等挂卸词库层。
+
+> **实现校准（重要）**：快捷输入的候选实为 **XOR**——拼音上下文 vs 结构化（date/calc/number）由 buffer 内容互斥，**从不同时呈现**。故 §9.2 的"分段合并"对本宿主退化为"结构化段合并 + 拼音段单独路由"，§9.3 的"数字键仲裁"由**上下文路由天然解决**（拼音上下文数字选候选、结构化上下文数字追加 buffer），**无需独立仲裁层**；§9.4 的 `AcceptedProviders` 白名单"拒绝"语义只在引入 url_english 等**真正多源共存**宿主时才有意义。
+
+**推迟（待真正多源融合宿主出现时一并做）**：
+- `AcceptedProviders` 白名单驱动 merge（当前各宿主返回 nil，候选源由宿主按上下文硬路由）。
+- url_english（悲观/全匹配，经 `Residual`→`Release`→`Activate` 复用 z fallback）。
+- `applyEngineDiff` 统一引擎副作用 diff（当前 `setQuickInputPinyinLayer` / `setup`/`exit`/`clearState` 既有路径管，对称性经真机日志验证 22/22）。
 
 > 加词模式（`addWordActive`）是功能模式，**不参与**。命令直通车是候选选中后的解析/动作层，
 > **不是**处理器。

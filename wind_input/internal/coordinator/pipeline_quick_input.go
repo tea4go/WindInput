@@ -72,4 +72,8 @@ func (p *quickInputProcessor) UsesExtendedPerPage() bool { return true }
 
 func (p *quickInputProcessor) PreferredLayout() config.CandidateLayout { return "" }
 
+// AcceptedProviders 返回 nil：快捷输入的候选源（date/calc/number 经
+// quickInputBaseProviders；拼音经 pinyinProvider）由 updateQuickInputCandidates 按
+// 上下文**硬路由**（拼音 vs 结构化 XOR 互斥），不经白名单驱动 merge。白名单的"拒绝/接纳"
+// 语义留待真正多源共存的宿主（url_english/emoji），见 docs/design 第 12 节第 4 批校准。
 func (p *quickInputProcessor) AcceptedProviders() []ProviderID { return nil }
