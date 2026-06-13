@@ -207,9 +207,11 @@ func (c *Coordinator) handleSpecialModeKey(key string, data *bridge.KeyEventData
 	vk := uint32(data.KeyCode)
 
 	switch {
-	// 空格：缓冲区非空 → 选当前高亮；空 → 上屏触发符
+	// 空格：有候选 → 选当前高亮（含 ShowAllOnEntry 空 buffer 列全表的情形）；
+	// 无候选 → 上屏触发符。原条件多了 `specialBuffer > 0`，导致快符等进入即列候选的模式
+	// 空 buffer 按空格误上屏触发符而非选首候选（顶码上屏）。
 	case vk == ipc.VK_SPACE:
-		if len(c.specialBuffer) > 0 && len(c.candidates) > 0 {
+		if len(c.candidates) > 0 {
 			index := (c.currentPage-1)*c.candidatesPerPage + c.selectedIndex
 			return c.selectSpecialCandidate(index)
 		}
@@ -240,8 +242,10 @@ func (c *Coordinator) handleSpecialModeKey(key string, data *bridge.KeyEventData
 	case vk == ipc.VK_ESCAPE:
 		return c.exitSpecialMode(false, "")
 
-	// 翻页上
-	case c.isQuickInputPageUpKey(key, int(vk), uint32(data.Modifiers)):
+	// 翻页上：用主翻页判定 isPageUpKey（含默认 -/=），而非 isQuickInputPageUpKey
+	// （后者排除 -/=/[/]，因快捷输入把它们当内容字符）。special 符号模式的内容是字母码，
+	// -/= 应优先作翻页——即使只有一页也消费按键，不落到下方"可打印符号"分支误顶屏上屏。
+	case c.isPageUpKey(key, int(vk), uint32(data.Modifiers)):
 		if c.currentPage > 1 {
 			c.currentPage--
 			c.selectedIndex = 0
@@ -249,8 +253,8 @@ func (c *Coordinator) handleSpecialModeKey(key string, data *bridge.KeyEventData
 		}
 		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
 
-	// 翻页下
-	case c.isQuickInputPageDownKey(key, int(vk), uint32(data.Modifiers)):
+	// 翻页下：同上，用 isPageDownKey（含默认 =）。
+	case c.isPageDownKey(key, int(vk), uint32(data.Modifiers)):
 		if c.currentPage < c.totalPages {
 			c.currentPage++
 			c.selectedIndex = 0
