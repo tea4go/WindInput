@@ -287,6 +287,14 @@ func (c *Coordinator) updatePinyinModeCandidates(ops *pinyinModeOps) {
 	// engineMgr.ConvertWithPinyin(buffer, 100) 的包装，与旧逻辑字节级等价。
 	cands, preedit := pinyinProvider{c: c}.query(*ops.buffer)
 
+	// 无拼音候选（输入不构成有效拼音，如英文 "hello"）：preedit 合并为原始 buffer，不显示
+	// 引擎破碎的音节拆分（"he l l o"）。此处仅在「无候选」时回落原始 buffer——有候选时的
+	// 自动分段（空格）/ 手动分隔（'）显示语义完全不变。showPinyinModeUI 在 preeditDisplay
+	// 为空时自动用 prefix+committed+buffer 显示。
+	if len(cands) == 0 {
+		preedit = ""
+	}
+
 	// 融合追加其它启用源候选（快捷模式生僻字/英文）；temp_pinyin 的 ops 无此钩子，行为不变。
 	// 拼音段与 extras 段之间**不做跨段去重**（分段语义）：极端情形（拼音与英文/生僻字返回同
 	// Text）可能出现重复条目，概率极低，F5/F6 接入后按真机反馈再决定是否加全局去重过滤。
