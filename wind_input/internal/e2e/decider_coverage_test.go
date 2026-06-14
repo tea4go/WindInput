@@ -22,6 +22,11 @@ func TestTempPinyinZFallback(t *testing.T) {
 	AssertGolden(t, "mode_temp_pinyin_z_fallback", rec.Render())
 }
 
+// 注：z 键混合回退（zHybridFallback）的「首次退格撤销夺取」由 coordinator 的 z_rewind_test
+// 单测覆盖（直接 decider.armRewind + 驱动 HandleKeyEvent，不依赖真实 wubi 前缀结构能否构造出
+// fallback 场景）；统一回退机制的端到端已由 mode_url_rewind golden 覆盖。两者共用同一
+// decider.armRewind/rewindHijack 路径，故此处不再单设 z fallback 回退 golden。
+
 // TestTempPinyinPaging 覆盖 temp_pinyin 的候选导航——验证 KeyHandler 链分解后导航键经
 // 链上 navKeyHandler 分发（决策器开），与旧 handlePinyinModeKey switch（决策器关）逐字节
 // 等价（A/B 经 WIND_E2E_DECIDER=1 验证）。backtick 进临时拼音、shi 得多候选；PageDown/PageUp

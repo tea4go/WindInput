@@ -35,10 +35,14 @@ func (c *Coordinator) urlActivationResidual(key string) (string, bool) {
 }
 
 // activeHijackBuffer 返回当前活跃的「夺取式」模式的 buffer（供统一回退判定）。
-// 夺取式 = 从正常输入推断进入、可能误判的模式：当前为 URL；z 键混合回退迁入统一机制后加入。
+// 夺取式 = 从正常输入推断进入、可能误判的模式：URL 前缀夺取 / z 键混合切入临时拼音。
+// 注意：临时拼音经触发键（如反引号）进入时未 armRewind，canRewind 自然返回 false，故此处无差别返回。
 func (c *Coordinator) activeHijackBuffer() (string, bool) {
 	if c.urlMode {
 		return c.urlBuffer, true
+	}
+	if c.tempPinyinMode {
+		return c.tempPinyinBuffer, true
 	}
 	return "", false
 }

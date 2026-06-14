@@ -773,13 +773,13 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		// 见 pipeline_engine_default.go）。
 		if c.devCfg.DeciderEnabled {
 			if buf, ok := c.decider.judgeZFallback(lowerKey, &data); ok {
-				res := c.enterTempPinyinFromZBuffer(buf, c.inputBuffer, lowerKey)
+				res := c.enterTempPinyinFromZBuffer(buf, c.inputBuffer)
 				// CompHot 进入 temp_pinyin：对齐受管宿主 host，后续模式内键走 dispatchManagedHost。
 				c.decider.onTempPinyinEntered()
 				return res
 			}
 		} else if buf, ok := c.zHybridFallback(lowerKey); ok {
-			return c.enterTempPinyinFromZBuffer(buf, c.inputBuffer, lowerKey)
+			return c.enterTempPinyinFromZBuffer(buf, c.inputBuffer)
 		}
 		// Chinese mode: convert to lowercase for pinyin
 		return c.handleAlphaKey(lowerKey)

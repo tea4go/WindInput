@@ -253,8 +253,9 @@ func (c *Coordinator) exitTempPinyinMode(commit bool, text string) *bridge.KeyEv
 	c.tempPinyinMode = false
 	c.tempPinyinBuffer = ""
 	c.tempPinyinTriggerKey = ""
-	c.tempPinyinRewindBuffer = ""
-	c.tempPinyinRewindKey = ""
+	if c.decider != nil {
+		c.decider.clearRewind() // 防御：正常退出时作废夺取回退登记
+	}
 	c.preeditDisplay = ""
 	c.candidates = nil
 	c.currentPage = 1
@@ -372,9 +373,9 @@ func (c *Coordinator) zHybridFallback(lowerKey string) (pinyinBuffer string, ok 
 
 // enterTempPinyinFromZBuffer 从 z 键正常输入路径回退到临时拼音模式。
 // initialBuffer 为剩余作为拼音 buffer 的字符（即 inputBuffer 去掉首 z 后再追加新键）。
-// rewindBuffer / rewindKey 是切入瞬间被抛弃的 inputBuffer 和触发键, 用于让用户
-// 在切入后未做任何编辑时通过 backspace 一键回退到正常输入流.
-func (c *Coordinator) enterTempPinyinFromZBuffer(initialBuffer, rewindBuffer, rewindKey string) *bridge.KeyEventResult {
+// rewindBuffer 是切入瞬间被抛弃的 inputBuffer，登记给决策器**统一夺取回退**：切入后未做任何
+// 编辑时第一次 backspace 一键回退到正常输入流（见 pipeline_decider.go 的 armRewind/rewindHijack）。
+func (c *Coordinator) enterTempPinyinFromZBuffer(initialBuffer, rewindBuffer string) *bridge.KeyEventResult {
 	// 清除当前 z 前缀的输入状态；不调用 hideUI，避免候选窗在切换瞬间闪烁——
 	// showPinyinModeUI 会原地更新候选窗内容。
 	c.clearState()
@@ -393,9 +394,11 @@ func (c *Coordinator) enterTempPinyinFromZBuffer(initialBuffer, rewindBuffer, re
 	c.tempPinyinBuffer = initialBuffer
 	c.tempPinyinCursorPos = len(initialBuffer)
 	c.tempPinyinCommitted = ""
-	// 记录回退缓存; 任何新字符插入都会在 pinyin_mode_shared.go 里清掉
-	c.tempPinyinRewindBuffer = rewindBuffer
-	c.tempPinyinRewindKey = rewindKey
+
+	// 登记统一夺取回退（快照=切入前 inputBuffer，hostText=进入后的拼音 buffer）。
+	if c.decider != nil {
+		c.decider.armRewind(rewindBuffer, initialBuffer, c.clearTempPinyinModeStateForRewind)
+	}
 
 	c.logger.Debug("Entered temp pinyin from z fallback", "bufferLen", len(initialBuffer))
 
@@ -409,41 +412,18 @@ func (c *Coordinator) enterTempPinyinFromZBuffer(initialBuffer, rewindBuffer, re
 	return c.modeCompositionResult(preedit, len(preedit))
 }
 
-// rewindTempPinyinToNormal 在 z 键混合切入后第一次 backspace 时被调用,
-// 把状态精确还原到切入前的"正常输入路径", 让用户感觉切入与回退是对称的.
-//
-// 调用前提: c.tempPinyinMode==true 且 c.tempPinyinRewindBuffer 非空且
-// c.tempPinyinBuffer 仍是切入瞬间的样子 (即 == rewindBuffer[1:] + rewindKey).
-// 调用方 (pinyin_mode_shared.go) 已校验, 此处不再判断.
-func (c *Coordinator) rewindTempPinyinToNormal() *bridge.KeyEventResult {
-	pre := c.tempPinyinRewindBuffer
-
-	// 拆掉临时拼音状态, 不上屏任何内容
+// clearTempPinyinModeStateForRewind 仅清临时拼音模式状态 + 卸载拼音词库层，供统一夺取回退
+// rewindHijack 的 cleanup 调用——不还原 inputBuffer、不重渲染（由 rewindHijack 统一做）。
+func (c *Coordinator) clearTempPinyinModeStateForRewind() {
 	c.tempPinyinMode = false
 	c.tempPinyinBuffer = ""
 	c.tempPinyinCursorPos = 0
 	c.tempPinyinCommitted = ""
 	c.tempPinyinTriggerKey = ""
-	c.tempPinyinRewindBuffer = ""
-	c.tempPinyinRewindKey = ""
+	c.preeditDisplay = ""
 	if c.engineMgr != nil {
 		c.engineMgr.DeactivateTempPinyin()
 	}
-	if c.uiManager != nil {
-		c.uiManager.SetModeLabel("")
-		c.uiManager.SetModeAccentColor(nil)
-	}
-
-	// 还原正常输入路径: inputBuffer = 切入前的内容, 刷新候选 + UI
-	c.inputBuffer = pre
-	c.inputCursorPos = len(pre)
-	c.preeditDisplay = ""
-	c.updateCandidates()
-	c.showUI()
-
-	c.logger.Debug("Rewound from temp pinyin back to normal input", "buffer", pre)
-
-	return c.compositionUpdateResult()
 }
 
 // tempPinyinOps 创建临时拼音模式的操作回调

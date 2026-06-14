@@ -70,6 +70,9 @@ func newTestCoordinator(t *testing.T, opts ...testOption) *testCoordinator {
 	for _, opt := range opts {
 		opt(c)
 	}
+	// 决策器在生产由 NewCoordinator 构造；测试里也构造一个，使夺取回退（armRewind/
+	// rewindHijack）与 HandleKeyEvent 模式分发前的回退触发可用（与生产一致）。
+	c.decider = newDecider(c)
 	return &testCoordinator{Coordinator: c, t: t}
 }
 

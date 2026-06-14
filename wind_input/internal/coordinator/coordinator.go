@@ -151,12 +151,8 @@ type tempModeState struct {
 	tempPinyinCursorPos  int    // 临时拼音光标位置
 	tempPinyinCommitted  string // 临时拼音部分上屏累积文本
 	tempPinyinTriggerKey string // 临时拼音触发键类型（"backtick"/"semicolon"/"z"）
-
-	// z 键混合模式回退缓存: 仅在从 zHybridFallback 切入临时拼音时记录,
-	// 让用户的下一次 backspace 在"什么都还没敲"的状态下能回到正常输入流.
-	// 任何新字符插入都会清空这两个字段, 使回退仅对"切入即误判"场景有效.
-	tempPinyinRewindBuffer string // 切入前的 inputBuffer (例如 "zzh")
-	tempPinyinRewindKey    string // 触发切入的小写字母 (例如 "a")
+	// z 键混合切入的回退已统一到决策器的夺取回退机制（decider.armRewind/rewindHijack），
+	// 不再用模式私有字段，见 pipeline_decider.go 与 handle_temp_pinyin.go。
 }
 
 // addWordState 快捷加词模式状态
@@ -1068,8 +1064,9 @@ func (c *Coordinator) clearState() {
 	c.tempPinyinMode = false
 	c.tempPinyinBuffer = ""
 	c.tempPinyinCommitted = ""
-	c.tempPinyinRewindBuffer = ""
-	c.tempPinyinRewindKey = ""
+	if c.decider != nil {
+		c.decider.clearRewind() // 夺取回退登记随状态重置一并作废
+	}
 	c.candidates = nil
 	c.currentPage = 1
 	c.totalPages = 1
