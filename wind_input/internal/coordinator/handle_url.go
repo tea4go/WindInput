@@ -34,13 +34,37 @@ func (c *Coordinator) urlActivationResidual(key string) (string, bool) {
 	return "", false
 }
 
+// activeHijackBuffer 返回当前活跃的「夺取式」模式的 buffer（供统一回退判定）。
+// 夺取式 = 从正常输入推断进入、可能误判的模式：当前为 URL；z 键混合回退迁入统一机制后加入。
+func (c *Coordinator) activeHijackBuffer() (string, bool) {
+	if c.urlMode {
+		return c.urlBuffer, true
+	}
+	return "", false
+}
+
+// clearUrlModeState 仅清 URL 模式状态（供统一回退 cleanup 调用：不上屏、不 teardown UI，
+// 由 rewindHijack 统一还原正常输入并重渲染）。
+func (c *Coordinator) clearUrlModeState() {
+	c.urlMode = false
+	c.urlBuffer = ""
+	c.urlCursorPos = 0
+	c.preeditDisplay = ""
+}
+
 // enterUrlMode 从正常输入夺取进入 URL 模式，residual 为完整前缀（作初始 buffer）。
 // 清理当前正常输入状态（前缀字符不单独上屏，转为 URL buffer），进入后原地显示。
 func (c *Coordinator) enterUrlMode(residual string) *bridge.KeyEventResult {
+	pre := c.inputBuffer // 夺取前的正常输入 buffer（如打 "http" 时为 "htt"），供首次退格回退
 	c.clearState()
 	c.urlMode = true
 	c.urlBuffer = residual
 	c.urlCursorPos = len(residual)
+
+	// 登记统一回退：刚夺取、未编辑时第一次退格撤销夺取、回 "pre" 正常输入流。
+	if c.decider != nil {
+		c.decider.armRewind(pre, residual, c.clearUrlModeState)
+	}
 
 	c.logger.Debug("Entered URL mode", "prefixLen", len(residual))
 
@@ -114,6 +138,9 @@ func (c *Coordinator) exitUrlMode(commit bool, text string) *bridge.KeyEventResu
 	c.urlBuffer = ""
 	c.urlCursorPos = 0
 	c.preeditDisplay = ""
+	if c.decider != nil {
+		c.decider.clearRewind() // 防御：正常退出（上屏/ESC）时作废回退登记
+	}
 	c.clearHostUIState()
 	c.hideUI()
 

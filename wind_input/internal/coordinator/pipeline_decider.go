@@ -22,6 +22,15 @@ type decider struct {
 	registry  []Processor  // 触发激活类宿主，按优先级（高→低）
 	sharedNav []KeyHandler // 共享导航 handler（翻页/选候选/导航/删空）
 	global    []KeyHandler // 全局分流 handler（预留，第 4 批按需填充）
+
+	// ── 夺取回退（统一）─────────────────────────────────────────────
+	// "夺取式激活"（z 键混合回退、URL 前缀夺取）是从正常输入推断进入的，可能误判，故需一个
+	// 对称的"一键撤销"出口：刚夺取、未编辑时第一次退格 → Release 当前 host、还原夺取前的正常
+	// 输入流（本质是夺取 Release→Activate 的逆，见设计文档第八节）。状态与执行由决策器统一持有，
+	// 各夺取 host 在进入 funnel 调 armRewind 登记；触发在 handleKeyEvent 模式分发前（两路一致）。
+	rewindBuffer   string // 夺取前的正常输入 inputBuffer 快照（回退时还原）
+	rewindHostText string // 夺取瞬间的 host buffer（判定"未编辑"：当前 host buffer 与此一致才可回退）
+	rewindCleanup  func() // 清当前夺取 host 的模式状态 + 引擎层（各 host 注入）
 }
 
 func newDecider(c *Coordinator) *decider {
@@ -227,6 +236,56 @@ func (d *decider) dispatchManagedHost(key string, data *bridge.KeyEventData) *br
 	}
 	d.reconcileHost()
 	return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+}
+
+// armRewind 夺取进入时登记回退。snapshot=夺取前的正常输入 inputBuffer（回退时还原），
+// hostText=进入后的 host buffer（用于判定"未编辑"），cleanup=清该 host 模式状态 + 引擎层。
+func (d *decider) armRewind(snapshot, hostText string, cleanup func()) {
+	d.rewindBuffer = snapshot
+	d.rewindHostText = hostText
+	d.rewindCleanup = cleanup
+}
+
+// clearRewind 作废回退登记（用户确认要用该模式 / 模式退出 / 回退执行后）。
+func (d *decider) clearRewind() {
+	d.rewindBuffer = ""
+	d.rewindHostText = ""
+	d.rewindCleanup = nil
+}
+
+// rewindArmed 是否已登记回退（夺取进入后、尚未作废）。
+func (d *decider) rewindArmed() bool { return d.rewindCleanup != nil }
+
+// canRewind 当前是否可回退：已登记，且当前 host buffer 与登记时一致（即未做任何编辑）。
+func (d *decider) canRewind(currentHostText string) bool {
+	return d.rewindCleanup != nil && currentHostText == d.rewindHostText
+}
+
+// rewindHijack 执行夺取回退：清当前夺取 host 状态（cleanup，含引擎层）→ 还原夺取前的正常
+// 输入流 → host 回落 engine_default（decider 开时）。本质是夺取 Release→Activate 的逆。
+// 全程在 c.mu 内（调用方 HandleKeyEvent 已持锁，I7）。
+func (d *decider) rewindHijack() *bridge.KeyEventResult {
+	c := d.c
+	pre := d.rewindBuffer
+	cleanup := d.rewindCleanup
+	d.clearRewind()
+	if cleanup != nil {
+		cleanup() // 清模式状态 + 引擎层（如 DeactivateTempPinyin）
+	}
+	// 还原正常输入流
+	c.inputBuffer = pre
+	c.inputCursorPos = len(pre)
+	c.preeditDisplay = ""
+	if c.uiManager != nil {
+		c.uiManager.SetModeLabel("")
+		c.uiManager.SetModeAccentColor(nil)
+	}
+	c.updateCandidates()
+	c.showUI()
+	if c.devCfg.DeciderEnabled {
+		d.reconcileHost() // 模式标志已被 cleanup 清零 → 回落 engine_default
+	}
+	return c.compositionUpdateResult()
 }
 
 // logSwitch 在宿主切换边界记 DEBUG 遥测：宿主名 + 容量 diff（应挂载/卸载的引擎资源）+

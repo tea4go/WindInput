@@ -58,14 +58,24 @@ func TestUrlModeEscExit(t *testing.T) {
 	AssertGolden(t, "mode_url_esc", rec.Render())
 }
 
-// TestUrlModeBackspaceExit 验证退格删空退出：进入后逐字删空前缀应退出 URL 模式。
-func TestUrlModeBackspaceExit(t *testing.T) {
+// TestUrlModeRewind 验证「夺取后首次退格撤销夺取」（统一回退机制）：打 "http" 夺取进 URL 模式后，
+// 未编辑时第一次退格撤销夺取、回到正常输入流 "htt"（而非在 URL buffer 内删字符）。
+func TestUrlModeRewind(t *testing.T) {
 	h := urlHarness(t)
 	rec := NewRecorder(h).
-		Type("ftp.").
-		Backspace().
-		Backspace().
+		Type("http").
+		Backspace()
+	AssertGolden(t, "mode_url_rewind", rec.Render())
+}
+
+// TestUrlModeBackspaceAfterEdit 验证编辑后退格不再回退：打 "http" 夺取后续打 "x"（确认要用
+// URL 模式、作废回退登记），此后退格在 URL buffer 内删字符（"httpx" → "http"），删空退出。
+func TestUrlModeBackspaceAfterEdit(t *testing.T) {
+	h := urlHarness(t)
+	rec := NewRecorder(h).
+		Type("http").
+		Type("x").
 		Backspace().
 		Backspace()
-	AssertGolden(t, "mode_url_backspace_exit", rec.Render())
+	AssertGolden(t, "mode_url_backspace_after_edit", rec.Render())
 }

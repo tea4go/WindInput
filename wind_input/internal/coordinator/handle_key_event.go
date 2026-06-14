@@ -501,6 +501,16 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		}
 	}
 
+	// 通用「夺取后首次退格回退」：z 键混合回退 / URL 前缀夺取等推断式进入的模式，刚夺取、未编辑
+	// 时第一次退格撤销夺取、回正常输入流（decider 开/关一致，状态由决策器统一持有）。任何其它键
+	// 作废登记（视为用户确认要用该模式）。必须在下方各模式分发之前。
+	if c.decider != nil && c.decider.rewindArmed() {
+		if buf, ok := c.activeHijackBuffer(); ok && uint32(data.KeyCode) == ipc.VK_BACK && c.decider.canRewind(buf) {
+			return c.decider.rewindHijack()
+		}
+		c.decider.clearRewind()
+	}
+
 	// 检查是否处于临时英文模式
 	if c.tempEnglishMode {
 		// decider_enabled：temp_english 全接管——模式内键经 decide() 链分发（host 状态机维护、
