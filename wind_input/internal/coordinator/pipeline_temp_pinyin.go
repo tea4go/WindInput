@@ -69,9 +69,16 @@ func (p *tempPinyinProcessor) Capabilities() Capability { return CapPinyinLayer 
 // tempPinyinKeyHandler 认领。pinyinNavKeyHandler 用 tempPinyinOps 提供候选窗刷新回调，
 // 与旧 handlePinyinModeKey 的导航 case 逐字节等价。其余三模式的同类分解后续批次推进。
 func (p *tempPinyinProcessor) KeyHandlers() []KeyHandler {
+	ops := p.c.tempPinyinOps()
 	return []KeyHandler{
 		tempPinyinKeyHandler{c: p.c},
-		pinyinNavKeyHandler{c: p.c, ops: p.c.tempPinyinOps()},
+		navKeyHandler{
+			c:              p.c,
+			name:           "temp_pinyin.nav",
+			showUI:         func() { p.c.showPinyinModeUI(ops) },
+			pageDownExpand: nil, // 拼音翻页不分级加载（与旧 navPageDown(show, nil, false) 一致）
+			hiDownExpand:   p.c.expandCandidates,
+		},
 	}
 }
 
@@ -86,7 +93,7 @@ type tempPinyinKeyHandler struct {
 func (h tempPinyinKeyHandler) Name() string { return "temp_pinyin.mode" }
 
 func (h tempPinyinKeyHandler) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
-	if h.c.isPinyinModeNavKey(key, data) {
+	if h.c.isStandardNavKey(key, data) {
 		return decPass()
 	}
 	return decHandle()

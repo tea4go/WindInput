@@ -63,10 +63,21 @@ func (p *specialProcessor) BufferText() string { return p.c.specialBuffer }
 // 布局切换由 setup/exit 既有路径管。故返回 0（不参与 applyEngineDiff/容量 diff）。
 func (p *specialProcessor) Capabilities() Capability { return 0 }
 
-// KeyHandlers：special 自包含模式——成为 host 后所有按键归它。整模式薄包装 handler，
-// Apply=handleSpecialModeKey，与旧逐条等价。
+// KeyHandlers：special 的链 = 模式特有 handler + 共享导航 handler（KeyHandler 链分解）。
+// 导航键（翻页/高亮，与 pinyin 同谓词 isStandardNavKey）由复用的 navKeyHandler 认领，showUI/
+// expand 走 special 的 showSpecialUI/expandSpecialCandidates；其余模式特有键由 specialKeyHandler
+// 认领。与旧 handleSpecialModeKey 的导航 case 逐字节等价。
 func (p *specialProcessor) KeyHandlers() []KeyHandler {
-	return []KeyHandler{specialKeyHandler{c: p.c}}
+	return []KeyHandler{
+		specialKeyHandler{c: p.c},
+		navKeyHandler{
+			c:              p.c,
+			name:           "special.nav",
+			showUI:         p.c.showSpecialUI,
+			pageDownExpand: p.c.expandSpecialCandidates, // special 翻页后于接近末页分级加载
+			hiDownExpand:   p.c.expandSpecialCandidates,
+		},
+	}
 }
 
 func (p *specialProcessor) UsesExtendedPerPage() bool { return true }
@@ -75,9 +86,10 @@ func (p *specialProcessor) PreferredLayout() config.CandidateLayout { return "" 
 
 func (p *specialProcessor) AcceptedProviders() []ProviderID { return nil }
 
-// specialKeyHandler 把 handleSpecialModeKey 包装成链上的「整模式」处理单元。
-// Judge 恒 Handle（host 为 special 时模式内键全部认领，I11 短路于此）；Apply 委托回
-// handleSpecialModeKey，行为字节级不变。
+// specialKeyHandler 把 handleSpecialModeKey 包装成链上的模式特有处理单元。
+// Judge 对导航键 Pass（让位链上居后的 navKeyHandler），其余键 Handle（I11 短路于此）；
+// Apply 委托回 handleSpecialModeKey——其 switch 仍含导航 case，但导航键已被链上 nav handler
+// 在 Apply 前认领，故那些 case 对 special 不再被触达（仍供 decider 关闭时的旧路径复用）。
 type specialKeyHandler struct {
 	c *Coordinator
 }
@@ -85,6 +97,9 @@ type specialKeyHandler struct {
 func (h specialKeyHandler) Name() string { return "special.mode" }
 
 func (h specialKeyHandler) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
+	if h.c.isStandardNavKey(key, data) {
+		return decPass()
+	}
 	return decHandle()
 }
 

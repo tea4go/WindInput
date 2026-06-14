@@ -23,8 +23,14 @@ func TestPinyinNavKeyHandlerDispatch(t *testing.T) {
 	h.totalPages = 2
 	h.selectedIndex = 0
 
+	ops := h.tempPinyinOps()
 	mode := tempPinyinKeyHandler{c: h.Coordinator}
-	nav := pinyinNavKeyHandler{c: h.Coordinator, ops: h.tempPinyinOps()}
+	nav := navKeyHandler{
+		c:            h.Coordinator,
+		name:         "temp_pinyin.nav",
+		showUI:       func() { h.showPinyinModeUI(ops) },
+		hiDownExpand: h.expandCandidates,
+	}
 	ctx := newDecisionCtx(h.Coordinator, newTempPinyinProcessor(h.Coordinator))
 
 	// 翻页下键：模式 handler Pass、nav handler Handle、Apply 推进到第 2 页。

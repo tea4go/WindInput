@@ -186,3 +186,171 @@
     "temp_pinyin_mode": true
   }
 }
+>>> key down
+{
+  "result_type": "consumed",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "shi",
+    "candidates": [
+      {
+        "text": "是",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "时",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "事",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "使",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "十",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "实",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "什",
+        "code": "shi",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 1,
+    "candidates_per_page": 7,
+    "temp_pinyin_mode": true
+  }
+}
+>>> key down
+{
+  "result_type": "consumed",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "shi",
+    "candidates": [
+      {
+        "text": "是",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "时",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "事",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "使",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "十",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "实",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "什",
+        "code": "shi",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 2,
+    "candidates_per_page": 7,
+    "temp_pinyin_mode": true
+  }
+}
+>>> key up
+{
+  "result_type": "consumed",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "codetable",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "shi",
+    "candidates": [
+      {
+        "text": "是",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "时",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "事",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "使",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "十",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "实",
+        "code": "shi",
+        "weight": 0
+      },
+      {
+        "text": "什",
+        "code": "shi",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 1,
+    "candidates_per_page": 7,
+    "temp_pinyin_mode": true
+  }
+}

@@ -22,10 +22,10 @@ func TestTempPinyinZFallback(t *testing.T) {
 	AssertGolden(t, "mode_temp_pinyin_z_fallback", rec.Render())
 }
 
-// TestTempPinyinPaging 覆盖 temp_pinyin 的候选翻页——验证 KeyHandler 链分解后导航键经
-// 链上 pinyinNavKeyHandler 分发（决策器开），与旧 handlePinyinModeKey switch（决策器关）
-// 逐字节等价（A/B 经 WIND_E2E_DECIDER=1 验证）。backtick 进临时拼音，shi 候选跨多页，
-// PageDown 进下一页、PageUp 回上一页。
+// TestTempPinyinPaging 覆盖 temp_pinyin 的候选导航——验证 KeyHandler 链分解后导航键经
+// 链上 navKeyHandler 分发（决策器开），与旧 handlePinyinModeKey switch（决策器关）逐字节
+// 等价（A/B 经 WIND_E2E_DECIDER=1 验证）。backtick 进临时拼音、shi 得多候选；PageDown/PageUp
+// 走翻页路径，方向下/上键走高亮移动（页内 selectedIndex 真状态变化）。
 func TestTempPinyinPaging(t *testing.T) {
 	h, err := BuildHarness(Options{
 		SchemaID:              "wubi86",
@@ -39,6 +39,9 @@ func TestTempPinyinPaging(t *testing.T) {
 		Key("`").
 		Type("shi").
 		PageDown().
-		PageUp()
+		PageUp().
+		Key("down").
+		Key("down").
+		Key("up")
 	AssertGolden(t, "mode_temp_pinyin_paging", rec.Render())
 }
