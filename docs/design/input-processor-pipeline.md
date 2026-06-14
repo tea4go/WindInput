@@ -505,6 +505,13 @@ func TestEngineDefaultJudge(t *testing.T) {
 > 直接复用旧 `getTempPinyinTriggerKey` 的判定，保证逐字节等价（A/B golden + `z_first_trigger_test.go`）。
 > z 混合回退（②，`judgeZFallback`）此前已收编。**仍留旧路径**：z 重复上屏的选词上屏（`handle_candidates.go`，
 > 属正常码表选词，待 KeyHandler 链分解批次）；z 临时拼音**不融合**英文/生僻字（按需求保持）。
+>
+> **KeyHandler 链分解起步（2026-06-14，temp_pinyin 试点）**：把翻页/高亮从「整模式」handler 抽成链上
+> 独立 `pinyinNavKeyHandler`（`pipeline_nav_handler.go`）——`tempPinyinKeyHandler.Judge` 对导航键 **Pass**
+> 让位、nav handler **Handle**，二者用同一谓词 `isPinyinModeNavKey` 保证「Pass ⟺ Handle」同步、I11 单一归属。
+> 导航逻辑复用 `pipeline_nav.go` 的 navXxx 函数，showUI 经 `ops` 注入（同一 handler 类型可多宿主复用，
+> true sharedNav 雏形）。A/B golden（新增 `mode_temp_pinyin_paging`）+ 单测验证逐字节等价。**待办**：
+> quick_input/temp_english/special 同样分解；模式特有键进一步细分；引擎副作用 `applyEngineDiff` 单点化（I3）。
 
 **贯穿全程：开关控制，可回退旧 `HandleKeyEvent`。** 第 0b 影子运行的开关放在独立开发
 配置 `wind_dev.toml`（`decider_shadow`，见 `internal/coordinator/dev_config.go`），**不进主配置

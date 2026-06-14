@@ -64,17 +64,21 @@ func (p *tempPinyinProcessor) BufferText() string { return p.c.tempPinyinBuffer 
 
 func (p *tempPinyinProcessor) Capabilities() Capability { return CapPinyinLayer }
 
-// KeyHandlers：temp_pinyin 是自包含模式——成为 host 后**所有**按键归它（旧
-// handleTempPinyinKey 内部已统一处理字母/数字/导航/退出）。本批次先用一个「整模式」薄包装
-// handler 建立 decide() 分发路径，与旧 handleTempPinyinKey 逐条等价；共享导航 handler 的
-// 抽取（翻页/高亮等跨宿主复用）留待后续批次，届时本 handler 退化为只处理特有键。
+// KeyHandlers：temp_pinyin 的链 = 模式特有 handler + 共享导航 handler（KeyHandler 链分解试点）。
+// 导航键（翻页/高亮）由 pinyinNavKeyHandler 认领（链上居后）；其余模式特有键由
+// tempPinyinKeyHandler 认领。pinyinNavKeyHandler 用 tempPinyinOps 提供候选窗刷新回调，
+// 与旧 handlePinyinModeKey 的导航 case 逐字节等价。其余三模式的同类分解后续批次推进。
 func (p *tempPinyinProcessor) KeyHandlers() []KeyHandler {
-	return []KeyHandler{tempPinyinKeyHandler{c: p.c}}
+	return []KeyHandler{
+		tempPinyinKeyHandler{c: p.c},
+		pinyinNavKeyHandler{c: p.c, ops: p.c.tempPinyinOps()},
+	}
 }
 
-// tempPinyinKeyHandler 把 handleTempPinyinKey 包装成链上的「整模式」处理单元。
-// Judge 恒 Handle（host 为 temp_pinyin 时模式内键全部认领，I11 短路于此）；
-// Apply 委托回 handleTempPinyinKey，行为字节级不变。
+// tempPinyinKeyHandler 把 handleTempPinyinKey 包装成链上的模式特有处理单元。
+// Judge 对导航键 Pass（让位 pinyinNavKeyHandler），其余键 Handle（I11 短路于此）；
+// Apply 委托回 handleTempPinyinKey——其 switch 仍含导航 case，但导航键已被链上 nav handler
+// 在 Apply 前认领，故那些 case 对 temp_pinyin 不再被触达（仍供 quick_input 整模式复用）。
 type tempPinyinKeyHandler struct {
 	c *Coordinator
 }
@@ -82,6 +86,9 @@ type tempPinyinKeyHandler struct {
 func (h tempPinyinKeyHandler) Name() string { return "temp_pinyin.mode" }
 
 func (h tempPinyinKeyHandler) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
+	if h.c.isPinyinModeNavKey(key, data) {
+		return decPass()
+	}
 	return decHandle()
 }
 

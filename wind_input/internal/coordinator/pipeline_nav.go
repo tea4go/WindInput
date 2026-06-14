@@ -6,9 +6,9 @@
 //   - showUI：各模式自己的候选窗刷新（showPinyinModeUI / showQuickInputUI / ...）
 //   - expand：分级加载扩展（nil=无；内部自检 hasMore；special 翻页后、temp_english 翻页前）
 //
-// 本批为**辅助函数抽取**（各 handler 调用，字节级等价），不改分发架构；包成决策器链上的
-// 真 sharedNav KeyHandler 是后续架构步骤（需从 handleXxxKey 移除导航 + 整模式 handler 对导航
-// 键 Pass）。
+// 这些是**导航辅助函数**（字节级等价的纯状态推进）。链上分发由 pipeline_nav_handler.go 的
+// pinyinNavKeyHandler 调用它们——temp_pinyin 已试点（整模式 handler 对导航键 Pass、nav handler
+// Handle）；quick_input/temp_english/special 仍内联调用，待后续批次接入链。
 package coordinator
 
 import "github.com/huanfeng/wind_input/internal/bridge"
