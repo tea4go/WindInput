@@ -514,8 +514,12 @@ func TestEngineDefaultJudge(t *testing.T) {
 > （true sharedNav）。quick_input **双上下文**：拼音上下文用标准翻页谓词 + showPinyinModeUI，基础上下文用专用
 > `isQuickInputPageUpKey`（排除 -/= 输入字符）+ showQuickInputUI，按 `quickInputPinyinActive` 选用。A/B golden
 > （`mode_temp_pinyin_paging`/`special_highlight_nav`/`mode_quick_input_pinyin_highlight`/`mode_quick_input_base_highlight`，
-> 含高亮真状态变化）+ 单测验证逐字节等价。**待办**：temp_english（highlight 内联，需先统一其 highlight 走 navXxx）
-> 接入链；模式特有键进一步细分；引擎副作用 `applyEngineDiff` 单点化（I3）。
+> 含高亮真状态变化）+ 单测验证逐字节等价。**temp_english（2026-06-14，四模式收官）**：其导航语义不同（翻页
+> expandBefore=true、高亮 expand 在移动前 + showUI 无条件刷新），故高亮抽成 `tempEnglishHighlightUp/Down` 方法、
+> 用**专用** `tempEnglishNavKeyHandler` 包装精确逻辑（不复用通用 navKeyHandler），行为字节级不变；mode handler Judge
+> 对 allow_symbols 符号字符 Handle 优先（保旧 switch 顺序）。golden `mode_temp_english_highlight`。**至此四模式
+> （temp_pinyin/special/quick_input/temp_english）导航全部从整模式 handler 移入决策器链。** **后续待办**：模式特有键
+> 进一步细分（字母/数字/选词等拆为独立 handler）；引擎副作用 `applyEngineDiff` 单点化（I3）；url_english 处理器。
 
 **贯穿全程：开关控制，可回退旧 `HandleKeyEvent`。** 第 0b 影子运行的开关放在独立开发
 配置 `wind_dev.toml`（`decider_shadow`，见 `internal/coordinator/dev_config.go`），**不进主配置

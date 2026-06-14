@@ -120,6 +120,20 @@ func TestQuickInputBaseHighlightNav(t *testing.T) {
 
 // ── temp_english 补充场景 ─────────────────────────────────────────────────────
 
+// TestTempEnglishHighlightNav 验证临时英文的候选高亮导航——KeyHandler 链分解后导航键经链上
+// 专用 tempEnglishNavKeyHandler 分发（决策器开），与旧 handleTempEnglishKey switch（决策器关）
+// 逐字节等价（A/B 经 WIND_E2E_DECIDER=1 验证）。打 "Hello" 进入得大小写变体候选，方向下键
+// 高亮下移、上键回移（temp_english 高亮特有时序经 tempEnglishHighlightUp/Down 保留）。
+func TestTempEnglishHighlightNav(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Type("Hello").
+		Key("down").
+		Key("down").
+		Key("up")
+	AssertGolden(t, "mode_temp_english_highlight", rec.Render())
+}
+
 // TestTempEnglishDigitSelect 验证临时英文数字选词：打 "Hello" 进入，数字 2 选第二候选
 // （小写变体 "hello"）上屏。
 func TestTempEnglishDigitSelect(t *testing.T) {

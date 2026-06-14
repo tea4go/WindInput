@@ -382,37 +382,10 @@ func (c *Coordinator) handleTempEnglishKey(key string, data *bridge.KeyEventData
 
 	// === 高亮移动（使用与正常模式一致的配置键） ===
 	case c.isHighlightUpKey(vk, uint32(data.Modifiers)):
-		if len(c.candidates) > 0 {
-			if c.selectedIndex > 0 {
-				c.selectedIndex--
-			} else if c.currentPage > 1 {
-				c.currentPage--
-				startIdx := (c.currentPage - 1) * c.candidatesPerPage
-				endIdx := min(startIdx+c.candidatesPerPage, len(c.candidates))
-				c.selectedIndex = endIdx - startIdx - 1
-			}
-			c.showTempEnglishUI()
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.tempEnglishHighlightUp()
 
 	case c.isHighlightDownKey(vk, uint32(data.Modifiers)):
-		if len(c.candidates) > 0 {
-			// 分级加载：高亮即将跨出末页时翻倍扩展词库候选
-			if c.tempEnglishHasMore && c.currentPage >= c.totalPages-1 {
-				c.expandTempEnglishCandidates()
-			}
-			startIdx := (c.currentPage - 1) * c.candidatesPerPage
-			endIdx := min(startIdx+c.candidatesPerPage, len(c.candidates))
-			pageCount := endIdx - startIdx
-			if c.selectedIndex < pageCount-1 {
-				c.selectedIndex++
-			} else if c.currentPage < c.totalPages {
-				c.currentPage++
-				c.selectedIndex = 0
-			}
-			c.showTempEnglishUI()
-		}
-		return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+		return c.tempEnglishHighlightDown()
 
 	// === 二候选选择键（仅有候选时匹配；allow_symbols 开启时禁用，让其落到符号 fallback） ===
 	case !allowSymbols && data.Modifiers&ModShift == 0 && c.isSelectKey2(key, data.KeyCode) && len(c.candidates) > 0:
@@ -589,6 +562,45 @@ func (c *Coordinator) handleTempEnglishKey(key string, data *bridge.KeyEventData
 }
 
 // ─── 候选更新 ───
+
+// tempEnglishHighlightUp 高亮上移（从 handleTempEnglishKey 的内联 case 抽出，原样保留
+// temp_english 特有的「showUI 无条件刷新」语义）。供旧 switch 与 decider 链上 nav handler 复用。
+func (c *Coordinator) tempEnglishHighlightUp() *bridge.KeyEventResult {
+	if len(c.candidates) > 0 {
+		if c.selectedIndex > 0 {
+			c.selectedIndex--
+		} else if c.currentPage > 1 {
+			c.currentPage--
+			startIdx := (c.currentPage - 1) * c.candidatesPerPage
+			endIdx := min(startIdx+c.candidatesPerPage, len(c.candidates))
+			c.selectedIndex = endIdx - startIdx - 1
+		}
+		c.showTempEnglishUI()
+	}
+	return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+}
+
+// tempEnglishHighlightDown 高亮下移（从内联 case 抽出，保留 temp_english 特有的
+// 「expand 在移动前 + showUI 无条件刷新」语义，与共享 navHighlightDown 的时序不同）。
+func (c *Coordinator) tempEnglishHighlightDown() *bridge.KeyEventResult {
+	if len(c.candidates) > 0 {
+		// 分级加载：高亮即将跨出末页时翻倍扩展词库候选
+		if c.tempEnglishHasMore && c.currentPage >= c.totalPages-1 {
+			c.expandTempEnglishCandidates()
+		}
+		startIdx := (c.currentPage - 1) * c.candidatesPerPage
+		endIdx := min(startIdx+c.candidatesPerPage, len(c.candidates))
+		pageCount := endIdx - startIdx
+		if c.selectedIndex < pageCount-1 {
+			c.selectedIndex++
+		} else if c.currentPage < c.totalPages {
+			c.currentPage++
+			c.selectedIndex = 0
+		}
+		c.showTempEnglishUI()
+	}
+	return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
+}
 
 // updateTempEnglishCandidates 更新临时英文模式的候选列表
 // 逻辑：
