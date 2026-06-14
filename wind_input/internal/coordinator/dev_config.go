@@ -24,23 +24,25 @@ type devConfig struct {
 	// 日志，零行为影响。用于观测新旧裁决一致性。详见 docs/design/input-processor-pipeline.md。
 	DeciderShadow bool `toml:"decider_shadow"`
 
-	// DeciderEnabled 第 1 批 1c：决策器真正接管 z 键混合回退判定（执行复用现有
-	// enterTempPinyinFromZBuffer = CompHot 原地切换）。默认 false 走旧 zHybridFallback。
-	// 与 DeciderShadow 独立：可单开 shadow 观测、或开 enabled 真实接管对比。
+	// DeciderEnabled 决策器接管主路径（统一决策器 + 宿主热切换 + 四模式内部键 + z 回退 +
+	// buffer 空触发激活）。**默认 true**（生产路径，经 E2E golden A/B 验证与旧逻辑逐字节等价）。
+	// 保留开关：wind_dev.toml 设 `decider_enabled = false` 可一键回退旧显式模式逻辑。
 	DeciderEnabled bool `toml:"decider_enabled"`
 }
 
-// loadDevConfig 从配置目录读取 wind_dev.toml；不存在/解析失败时返回零值（全关）。
+// loadDevConfig 从配置目录读取 wind_dev.toml；不存在/解析失败时返回默认值。
+// 默认 DeciderEnabled=true（决策器为生产路径），DeciderShadow=false；wind_dev.toml
+// 中的显式键覆盖默认（如 decider_enabled = false 可回退旧逻辑）。
 func loadDevConfig() devConfig {
-	var dc devConfig
+	dc := devConfig{DeciderEnabled: true} // 决策器默认接管；显式置 false 可回退
 	dir, err := config.GetConfigDir()
 	if err != nil {
 		return dc
 	}
 	data, err := os.ReadFile(filepath.Join(dir, devConfigFileName))
 	if err != nil {
-		return dc // 文件不存在（最常见）→ 全默认
+		return dc // 文件不存在（最常见）→ 取默认
 	}
-	_ = toml.Unmarshal(data, &dc) // 解析失败 → 保持零值，不阻断启动
+	_ = toml.Unmarshal(data, &dc) // 解析失败 → 保持默认，不阻断启动；存在的键覆盖默认
 	return dc
 }

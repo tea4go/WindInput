@@ -494,6 +494,11 @@ func TestEngineDefaultJudge(t *testing.T) {
 
 ## 十二、分批实施计划（feature flag + 影子运行）
 
+> **发布状态（2026-06）✅ 决策器已翻默认**：`decider_enabled` 默认 `true`（决策器接管为生产路径），
+> 经 **E2E golden A/B**（`internal/e2e`，`WIND_E2E_DECIDER=1` 复跑全套 golden）验证与旧逻辑逐字节
+> 等价。`wind_dev.toml` 设 `decider_enabled = false` 可一键回退旧逻辑。旧 `handleXxxKey` 仍作为
+> 决策器链上 `Apply` 的被调实现保留（删除待 KeyHandler 链分解，目标③）。
+
 **贯穿全程：开关控制，可回退旧 `HandleKeyEvent`。** 第 0b 影子运行的开关放在独立开发
 配置 `wind_dev.toml`（`decider_shadow`，见 `internal/coordinator/dev_config.go`），**不进主配置
 流程**（无 const-gen / 前端 / 版本迁移桥接），避免临时调试开关污染用户主配置；第 1 批起真正
