@@ -61,60 +61,6 @@ func (c *Coordinator) isQuickInputTriggerKey(key string, keyCode int) bool {
 	return false
 }
 
-// getQuickInputTriggerKey 检查按键是否应触发快捷输入模式，返回匹配的触发键类型，空串表示不触发
-func (c *Coordinator) getQuickInputTriggerKey(key string, keyCode int) string {
-	if c.config == nil || len(c.config.Features.QuickInput.TriggerKeys) == 0 {
-		return ""
-	}
-	// 仅输入缓冲区为空且无候选时触发
-	if len(c.inputBuffer) > 0 || len(c.candidates) > 0 {
-		return ""
-	}
-	parsedKey, _ := keys.ParseKey(key)
-	for _, tk := range c.config.Features.QuickInput.TriggerKeys {
-		tkKey, _ := keys.ParseKey(tk)
-		switch tkKey {
-		case keys.KeySemicolon:
-			if parsedKey == keys.KeySemicolon || uint32(keyCode) == ipc.VK_OEM_1 {
-				return tk
-			}
-		case keys.KeyGrave:
-			if parsedKey == keys.KeyGrave || uint32(keyCode) == ipc.VK_OEM_3 {
-				return tk
-			}
-		case keys.KeyQuote:
-			if parsedKey == keys.KeyQuote || uint32(keyCode) == ipc.VK_OEM_7 {
-				return tk
-			}
-		case keys.KeyComma:
-			if parsedKey == keys.KeyComma || uint32(keyCode) == ipc.VK_OEM_COMMA {
-				return tk
-			}
-		case keys.KeyPeriod:
-			if parsedKey == keys.KeyPeriod || uint32(keyCode) == ipc.VK_OEM_PERIOD {
-				return tk
-			}
-		case keys.KeySlash:
-			if parsedKey == keys.KeySlash || uint32(keyCode) == ipc.VK_OEM_2 {
-				return tk
-			}
-		case keys.KeyBackslash:
-			if parsedKey == keys.KeyBackslash || uint32(keyCode) == ipc.VK_OEM_5 {
-				return tk
-			}
-		case keys.KeyLBracket:
-			if parsedKey == keys.KeyLBracket || uint32(keyCode) == ipc.VK_OEM_4 {
-				return tk
-			}
-		case keys.KeyRBracket:
-			if parsedKey == keys.KeyRBracket || uint32(keyCode) == ipc.VK_OEM_6 {
-				return tk
-			}
-		}
-	}
-	return ""
-}
-
 // matchQuickInputTrigger 纯触发键匹配 + enabled 门禁，不含 buffer/candidates 状态门禁。
 // 状态优先级由 decideBufferedTrigger 统一裁决。
 func (c *Coordinator) matchQuickInputTrigger(key string, keyCode int) string {
@@ -180,12 +126,6 @@ func (c *Coordinator) setupQuickInputMode(triggerKey string) (string, bool) {
 	c.armPendingFirstShow()
 
 	return c.quickInputPrefix(), true
-}
-
-// enterQuickInputMode 空 buffer 进入快捷输入模式（薄封装）。triggerKey 标识触发键类型
-func (c *Coordinator) enterQuickInputMode(triggerKey string) *bridge.KeyEventResult {
-	prefix, _ := c.setupQuickInputMode(triggerKey)
-	return c.modeCompositionResult(prefix, len(prefix))
 }
 
 // handleQuickInputKey 处理快捷输入模式下的按键

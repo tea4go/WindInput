@@ -1,13 +1,18 @@
 // z_decision_test.go — z 键混合模式回退决策的核心用例.
 //
-// 覆盖 zHybridFallback 的 8 种典型场景, 这是 fix(temp-pinyin) 渐进决策修复
-// 的回归测试. 用例命中条件:
+// 覆盖 z 回退判定（决策器 engine_default 宿主裁决，经 decider.judgeZFallback 入口，
+// 内部为纯函数 decideEngineDefaultZFallback）的 8 种典型场景, 这是 fix(temp-pinyin)
+// 渐进决策修复的回归测试. 用例命中条件:
 //   - 是否处于 z 触发模式
 //   - inputBuffer 是否以 z 开头
 //   - inputBuffer+新键 是否还能扩展出码表/短语前缀
 package coordinator
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/huanfeng/wind_input/internal/bridge"
+)
 
 func TestZHybridFallback(t *testing.T) {
 	type entry struct{ code, text string }
@@ -122,7 +127,7 @@ func TestZHybridFallback(t *testing.T) {
 			h := newTestCoordinator(t, opts...)
 			h.inputBuffer = tc.inputBuffer
 
-			gotBuf, gotOk := h.zHybridFallback(tc.key)
+			gotBuf, gotOk := h.decider.judgeZFallback(tc.key, &bridge.KeyEventData{Key: tc.key})
 			if gotOk != tc.wantOk {
 				t.Errorf("ok = %v, want %v", gotOk, tc.wantOk)
 			}
@@ -150,7 +155,7 @@ func TestZHybridFallback_MixedEngineNeverTriggers(t *testing.T) {
 	// 模拟混输下输入 "zh": inputBuffer="z" + 新键 'h', 即便码表层无 "zh" 前缀,
 	// 也不应回退到临时拼音。
 	h.inputBuffer = "z"
-	if buf, ok := h.zHybridFallback("h"); ok {
-		t.Errorf("zHybridFallback triggered in mixed engine: buf=%q", buf)
+	if buf, ok := h.decider.judgeZFallback("h", &bridge.KeyEventData{Key: "h"}); ok {
+		t.Errorf("judgeZFallback triggered in mixed engine: buf=%q", buf)
 	}
 }

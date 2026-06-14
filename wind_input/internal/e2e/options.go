@@ -30,10 +30,6 @@ type Options struct {
 	// SpecialSchemasDir 特殊模式码表 fixture 的搜索目录（含 SpecialModes[].Table 文件）。
 	// 仅 SpecialModes 非空时生效；空 = "testdata"。
 	SpecialSchemasDir string
-	// DeciderEnabled 开启输入处理器流水线决策器接管（等价 wind_dev.toml 的 decider_enabled）。
-	// 用于 golden A/B：同一用例在决策器关/开下跑，验证新决策器逻辑与旧逻辑逐字节等价。
-	// 也可经环境变量 WIND_E2E_DECIDER=1 对整套用例统一开启。
-	DeciderEnabled bool
 	// TempPinyinTriggerKeys 覆盖 config.Input.TempPinyin.TriggerKeys（nil = 默认 ["backtick"]）。
 	// 用于覆盖 z 键临时拼音回退（z-fallback）等需要特定触发键配置的场景。
 	TempPinyinTriggerKeys []string

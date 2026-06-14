@@ -9,15 +9,6 @@
 //     这样 REPL 能看到全部候选。
 package coordinator
 
-// SetDeciderEnabledForTest 供 E2E 测试在装配后开启/关闭决策器接管（等价 wind_dev.toml
-// 的 decider_enabled）。生产路径不调用——决策器开关只经 loadDevConfig。用途：golden A/B
-// 校验，同一用例在决策器关/开下分别跑，证明新决策器逻辑与旧逻辑逐字节等价。
-func (c *Coordinator) SetDeciderEnabledForTest(enabled bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.devCfg.DeciderEnabled = enabled
-}
-
 // CandidateView 是候选的可序列化精简视图（仅保留 E2E 断言关心的字段）。
 type CandidateView struct {
 	Text   string `json:"text"`

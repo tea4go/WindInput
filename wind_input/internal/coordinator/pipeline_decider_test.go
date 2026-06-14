@@ -112,19 +112,6 @@ func TestDeciderSkeleton(t *testing.T) {
 	}
 }
 
-// TestShadowLogSmoke 验证第 0b 影子运行入口纯只读、不 panic（host.Judge + DEBUG 日志）。
-func TestShadowLogSmoke(t *testing.T) {
-	c := &Coordinator{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	d := newDecider(c)
-	// 普通字母 / z 键 / 非字母，均不应 panic 且不改变状态。
-	d.shadowLog("a", &bridge.KeyEventData{Key: "a"})
-	d.shadowLog("z", &bridge.KeyEventData{Key: "z"})
-	d.shadowLog(";", &bridge.KeyEventData{Key: ";"})
-	if c.inputBuffer != "" || len(c.candidates) != 0 {
-		t.Errorf("shadowLog must be read-only, but state changed: buffer=%q cands=%d", c.inputBuffer, len(c.candidates))
-	}
-}
-
 // TestDecisionCtxBufferByHost 验证 buffer 访问器按 host 路由（修正第 0b 影子暴露的失真）：
 // engine_default 读 inputBuffer、temp_pinyin 读 tempPinyinBuffer，而非固定读 inputBuffer。
 func TestDecisionCtxBufferByHost(t *testing.T) {

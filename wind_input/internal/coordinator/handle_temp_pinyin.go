@@ -200,16 +200,6 @@ func (c *Coordinator) setupTempPinyinMode(triggerKey string) (string, bool) {
 	return c.tempPinyinPrefix(), true
 }
 
-// enterTempPinyinMode 空 buffer 进入临时拼音模式（薄封装）。
-// triggerKey 标识触发键类型（"backtick"/"semicolon"/"z"）
-func (c *Coordinator) enterTempPinyinMode(triggerKey string) *bridge.KeyEventResult {
-	prefix, ok := c.setupTempPinyinMode(triggerKey)
-	if !ok {
-		return nil
-	}
-	return c.modeCompositionResult(prefix, len(prefix))
-}
-
 // tempPinyinPrefix 返回临时拼音模式的前缀显示字符（使用实际触发键字符）。
 // triggerKey 为 "hotkey" 时表示通过热键进入，无前缀字符，返回空串。
 func (c *Coordinator) tempPinyinPrefix() string {
@@ -336,39 +326,6 @@ func (c *Coordinator) isZKeyHybridMode() bool {
 		}
 	}
 	return false
-}
-
-// zHybridFallback 判定 z 键混合模式下当前按键是否应该回退到临时拼音.
-// 返回 ok=true 时 pinyinBuffer 是切入临时拼音时的初始 buffer
-// (即 inputBuffer 去掉首 z 后再追加新键).
-//
-// 触发条件 (全部满足):
-//   - inputBuffer 非空且以 'z' 开头
-//   - z 键被配置为临时拼音触发键或处于 Z 键混合模式
-//   - engineMgr 非空
-//   - inputBuffer + 新键 在码表/短语层中已无前缀匹配
-//
-// 抽出独立方法是为了让 z 决策核心可单测, 不必构造完整的 HandleKeyEvent 链路.
-func (c *Coordinator) zHybridFallback(lowerKey string) (pinyinBuffer string, ok bool) {
-	if len(c.inputBuffer) == 0 || c.inputBuffer[0] != 'z' {
-		return "", false
-	}
-	if c.engineMgr == nil {
-		return "", false
-	}
-	// 权威门禁：临时拼音回退只对码表引擎有意义。混输引擎自带拼音层, 绝不回退。
-	// 与 getTempPinyinTriggerKey 的引擎类型门禁保持一致, 作为唯一入口的兜底,
-	// 不依赖 isZKeyHybridMode / isTempPinyinZTrigger 各自的内部判定。
-	if !c.engineMgr.IsCurrentEngineType(schema.EngineTypeCodeTable) {
-		return "", false
-	}
-	if !c.isZKeyHybridMode() && !c.isTempPinyinZTrigger() {
-		return "", false
-	}
-	if c.engineMgr.HasPrefix(c.inputBuffer + lowerKey) {
-		return "", false
-	}
-	return c.inputBuffer[1:] + lowerKey, true
 }
 
 // enterTempPinyinFromZBuffer 从 z 键正常输入路径回退到临时拼音模式。

@@ -494,10 +494,18 @@ func TestEngineDefaultJudge(t *testing.T) {
 
 ## 十二、分批实施计划（feature flag + 影子运行）
 
-> **发布状态（2026-06）✅ 决策器已翻默认**：`decider_enabled` 默认 `true`（决策器接管为生产路径），
-> 经 **E2E golden A/B**（`internal/e2e`，`WIND_E2E_DECIDER=1` 复跑全套 golden）验证与旧逻辑逐字节
-> 等价。`wind_dev.toml` 设 `decider_enabled = false` 可一键回退旧逻辑。旧 `handleXxxKey` 仍作为
-> 决策器链上 `Apply` 的被调实现保留（删除待 KeyHandler 链分解，目标③）。
+> **发布状态（2026-06-14）✅ 决策器已成唯一路径，decider-off 退役**：决策器在 `NewCoordinator` 内
+> **无条件构造并接管** `HandleKeyEvent`，已无 `decider_enabled` 回退开关。退役前经 **E2E golden A/B**
+> （`WIND_E2E_DECIDER=1` 复跑全套 golden）+ 真机长期验证与旧逻辑逐字节等价后，删除了：`wind_dev.toml`
+> 双开关（`decider_enabled`/`decider_shadow`）、`dev_config.go`、影子运行 `shadowLog`、E2E 的
+> `SetDeciderEnabledForTest`/`WIND_E2E_DECIDER` A/B 脚手架，以及旧并行旁路 `getQuickInputTriggerKey`/
+> `getTempEnglishTriggerKey`/`enterQuickInputMode`/`enterTempEnglishModeWithTrigger`/`enterTempPinyinMode`/
+> `zHybridFallback`（z 回退判定改由 `engineDefaultProcessor` 的纯函数 `decideEngineDefaultZFallback`
+> 单点承载，`z_decision_test.go` 经 `judgeZFallback` 入口回归）。旧 `handleXxxKey` 仍作为决策器链上
+> `Apply` 的被调实现保留（删除待 KeyHandler 链分解，目标③）。E2E 不再 A/B——单跑即决策器路径。
+>
+> **退役理由（alpha 阶段决策）**：双路并存让"主路径进决策器"等后续重构反而更难（须同时维护两套 +
+> A/B parity 约束）；alpha 阶段尽早让决策器成为唯一路径、尽早暴露问题，优于长期保留回退分支。
 >
 > **z 首次触发收编（2026-06-14）**：原散落在 `getTempPinyinTriggerKey` KeyZ 分支的「重复上屏历史 /
 > z 码表前缀 / 否则进临时拼音」渐进仲裁，已经 `tempPinyinProcessor.Judge`→`judgeZFirstTrigger` 收编进

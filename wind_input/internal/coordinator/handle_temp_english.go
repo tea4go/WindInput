@@ -167,12 +167,6 @@ func (c *Coordinator) setupTempEnglishMode(triggerKey string) (string, bool) {
 	return c.tempEnglishTriggerPrefix(), true
 }
 
-// enterTempEnglishModeWithTrigger 通过触发键进入临时英文模式（薄封装）
-func (c *Coordinator) enterTempEnglishModeWithTrigger(triggerKey string) *bridge.KeyEventResult {
-	prefix, _ := c.setupTempEnglishMode(triggerKey)
-	return c.modeCompositionResult(prefix, len(prefix))
-}
-
 // exitTempEnglishMode 退出临时英文模式
 func (c *Coordinator) exitTempEnglishMode(commit bool, text string) *bridge.KeyEventResult {
 	c.tempEnglishMode = false
@@ -899,63 +893,4 @@ func (c *Coordinator) matchTempEnglishTrigger(key string, keyCode int) string {
 		return ""
 	}
 	return matchTriggerKeyInList(c.config.Input.ShiftTempEnglish.TriggerKeys, key, keyCode)
-}
-
-// getTempEnglishTriggerKey 检查按键是否应触发临时英文模式
-func (c *Coordinator) getTempEnglishTriggerKey(key string, keyCode int) string {
-	if c.config == nil || !c.config.Input.ShiftTempEnglish.Enabled {
-		return ""
-	}
-	if len(c.inputBuffer) > 0 || len(c.candidates) > 0 {
-		return ""
-	}
-
-	triggerKeys := c.config.Input.ShiftTempEnglish.TriggerKeys
-	if len(triggerKeys) == 0 {
-		return ""
-	}
-
-	parsedKey, _ := keys.ParseKey(key)
-	for _, tk := range triggerKeys {
-		tkKey, _ := keys.ParseKey(tk)
-		switch tkKey {
-		case keys.KeyGrave:
-			if parsedKey == keys.KeyGrave || uint32(keyCode) == ipc.VK_OEM_3 {
-				return tk
-			}
-		case keys.KeySemicolon:
-			if parsedKey == keys.KeySemicolon || uint32(keyCode) == ipc.VK_OEM_1 {
-				return tk
-			}
-		case keys.KeyQuote:
-			if parsedKey == keys.KeyQuote || uint32(keyCode) == ipc.VK_OEM_7 {
-				return tk
-			}
-		case keys.KeyComma:
-			if parsedKey == keys.KeyComma || uint32(keyCode) == ipc.VK_OEM_COMMA {
-				return tk
-			}
-		case keys.KeyPeriod:
-			if parsedKey == keys.KeyPeriod || uint32(keyCode) == ipc.VK_OEM_PERIOD {
-				return tk
-			}
-		case keys.KeySlash:
-			if parsedKey == keys.KeySlash || uint32(keyCode) == ipc.VK_OEM_2 {
-				return tk
-			}
-		case keys.KeyBackslash:
-			if parsedKey == keys.KeyBackslash || uint32(keyCode) == ipc.VK_OEM_5 {
-				return tk
-			}
-		case keys.KeyLBracket:
-			if parsedKey == keys.KeyLBracket || uint32(keyCode) == ipc.VK_OEM_4 {
-				return tk
-			}
-		case keys.KeyRBracket:
-			if parsedKey == keys.KeyRBracket || uint32(keyCode) == ipc.VK_OEM_6 {
-				return tk
-			}
-		}
-	}
-	return ""
 }

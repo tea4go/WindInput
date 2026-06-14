@@ -195,17 +195,15 @@ func (c *Coordinator) enterModeCommitting(name, triggerKey string, commitIdx int
 
 	// 受管宿主（temp_pinyin/quick_input）经 buffer 非空/热键路径进入时，对齐 d.host，使后续
 	// 模式内键走 dispatchManagedHost。onXxxEntered 自带模式真值守卫。
-	if c.devCfg.DeciderEnabled {
-		switch {
-		case name == "temp_pinyin":
-			c.decider.onTempPinyinEntered()
-		case name == "quick_input":
-			c.decider.onQuickInputEntered()
-		case name == "temp_english":
-			c.decider.onTempEnglishEntered()
-		case strings.HasPrefix(name, "special:"):
-			c.decider.onSpecialEntered()
-		}
+	switch {
+	case name == "temp_pinyin":
+		c.decider.onTempPinyinEntered()
+	case name == "quick_input":
+		c.decider.onQuickInputEntered()
+	case name == "temp_english":
+		c.decider.onTempEnglishEntered()
+	case strings.HasPrefix(name, "special:"):
+		c.decider.onSpecialEntered()
 	}
 
 	if finalText != "" {

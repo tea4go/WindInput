@@ -149,20 +149,6 @@ func (d *decider) decide(key string, data *bridge.KeyEventData) (*bridge.KeyEven
 	return nil, false
 }
 
-// shadowLog 第 0b 影子运行：只读地运行宿主迁移裁决并记 DEBUG 日志，零副作用、零行为影响。
-// 仅记元数据 + 单按键 + 裁决（DEBUG 级，遵守日志隐私约束，不记 buffer 内容/候选文本）。
-func (d *decider) shadowLog(key string, data *bridge.KeyEventData) {
-	ctx := newDecisionCtx(d.c, d.host)
-	hd := d.host.Judge(ctx, key, data)
-	d.c.logger.Debug("shadow decider",
-		"host", d.host.Name(),
-		"key", key,
-		"bufferLen", ctx.BufferLen(),
-		"candCount", ctx.CandidateCount(),
-		"verdict", hd.Verdict.String(),
-	)
-}
-
 // judgeZFallback 用决策器（engine_default 宿主裁决）判定 z 键混合回退，供主路径在
 // decider_enabled 时接管旧 zHybridFallback。返回 (residual, true) 表示应回退临时拼音，
 // residual 为初始拼音 buffer。判定与旧 zHybridFallback 等价（含 z 触发键门禁）。
@@ -285,9 +271,7 @@ func (d *decider) rewindHijack() *bridge.KeyEventResult {
 	}
 	c.updateCandidates()
 	c.showUI()
-	if c.devCfg.DeciderEnabled {
-		d.reconcileHost() // 模式标志已被 cleanup 清零 → 回落 engine_default
-	}
+	d.reconcileHost() // 模式标志已被 cleanup 清零 → 回落 engine_default
 	return c.compositionUpdateResult()
 }
 

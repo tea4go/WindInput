@@ -146,7 +146,7 @@ func TestSpecialModeAutoCommitPrefixFree(t *testing.T) {
 
 // TestSpecialModeHighlightNav 验证 special 的候选高亮导航——KeyHandler 链分解后导航键经链上
 // 复用的 navKeyHandler 分发（决策器开），与旧 handleSpecialModeKey switch（决策器关）逐字节
-// 等价（A/B 经 WIND_E2E_DECIDER=1 验证）。grave 进入打 "a" 得三候选 ★/☆/●（selectedIndex=0），
+// 等价（golden 回归；决策器已是唯一路径）。grave 进入打 "a" 得三候选 ★/☆/●（selectedIndex=0），
 // 方向下键高亮下移到 1、2，方向上键回到 1（页内移动，真状态变化）。
 func TestSpecialModeHighlightNav(t *testing.T) {
 	h := mustSpecialHarness(t, specialModeManual())

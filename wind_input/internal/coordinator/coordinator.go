@@ -307,13 +307,9 @@ type Coordinator struct {
 	// Dark mode watcher for system theme changes
 	darkModeWatcher *theme.DarkModeWatcher
 
-	// 输入处理器流水线决策器（host 永不为空，默认 engine_default）。
-	// 第 0b 仅影子运行（只读裁决 + 日志，开关见 devCfg.DeciderShadow），不接管主路径。
-	// 详见 docs/design/input-processor-pipeline.md。
+	// 输入处理器流水线决策器（host 永不为空，默认 engine_default）。接管键事件主路径：
+	// 受管宿主模式内键、触发键激活、z 回退、夺取回退。详见 docs/design/input-processor-pipeline.md。
 	decider *decider
-
-	// devCfg 独立开发/调试配置（wind_dev.toml，不进主配置流程，见 dev_config.go）。
-	devCfg devConfig
 
 	// 输入历史：追踪最近上屏文字，用于加词推荐
 	inputHistory *InputHistory
@@ -840,9 +836,7 @@ func NewCoordinator(engineMgr *engine.Manager, uiManager *ui.Manager, cfg *confi
 	// 特殊模式注册表（引导键自定义码表）
 	c.specialModeReg = newSpecialModeRegistry(c.config.Features.SpecialModes, c.schemasDirs(), c.logger)
 
-	// 独立开发配置（wind_dev.toml）：影子运行等调试开关，不污染主配置流程。
-	c.devCfg = loadDevConfig()
-	// 输入处理器流水线决策器（第 0b 影子运行；不接管主路径，开关见 devCfg.DeciderShadow）。
+	// 输入处理器流水线决策器：接管键事件主路径（受管宿主、触发激活、z 回退、夺取回退）。
 	c.decider = newDecider(c)
 
 	return c

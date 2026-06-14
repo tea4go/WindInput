@@ -97,12 +97,6 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 	// Use Debug for high-frequency key events to reduce log noise
 	c.logger.Debug("HandleKeyEvent", "key", data.Key, "keycode", data.KeyCode, "modifiers", data.Modifiers, "chineseMode", c.chineseMode, "lockWait", lockTime.String())
 
-	// 第 0b 影子运行：只读地运行新决策器裁决并记日志，与旧路径并行，零行为影响。
-	// 受 WIND_SHADOW_DECIDER 门控（默认关闭）。详见 docs/design/input-processor-pipeline.md。
-	if c.devCfg.DeciderShadow && c.decider != nil {
-		c.decider.shadowLog(data.Key, &data)
-	}
-
 	// 数字后智能标点：保存前一按键的数字状态，然后重置。
 	// 仅在数字直通（无候选词选择）时重新设置为 true。
 	// 对于 modifier-only 按键（Shift/Ctrl/Alt/CapsLock），保持状态不变，
@@ -511,53 +505,10 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		c.decider.clearRewind()
 	}
 
-	// 检查是否处于临时英文模式
-	if c.tempEnglishMode {
-		// decider_enabled：temp_english 全接管——模式内键经 decide() 链分发（host 状态机维护、
-		// 退出回落 engine_default）。行为与旧 handleTempEnglishKey 逐条等价。
-		if c.devCfg.DeciderEnabled {
-			return c.decider.dispatchManagedHost(key, &data)
-		}
-		return c.handleTempEnglishKey(key, &data)
-	}
-
-	// 检查是否处于临时拼音模式
-	if c.tempPinyinMode {
-		// decider_enabled：temp_pinyin 全接管——模式内键经 decide() 链分发（host 状态机维护、
-		// 退出回落 engine_default）。行为与旧 handleTempPinyinKey 逐条等价。
-		if c.devCfg.DeciderEnabled {
-			return c.decider.dispatchManagedHost(key, &data)
-		}
-		return c.handleTempPinyinKey(key, &data)
-	}
-
-	// 检查是否处于快捷输入模式
-	if c.quickInputMode {
-		// decider_enabled：quick_input 全接管——模式内键经 decide() 链分发（含拼音子模式，
-		// host 状态机维护、退出回落 engine_default）。行为与旧 handleQuickInputKey 逐条等价。
-		if c.devCfg.DeciderEnabled {
-			return c.decider.dispatchManagedHost(key, &data)
-		}
-		return c.handleQuickInputKey(key, &data)
-	}
-
-	// 检查是否处于特殊模式（自定义码表）
-	if c.specialMode {
-		// decider_enabled：special 模式内键全接管——经 decide() 链分发（host 状态机维护、退出
-		// 回落 engine_default）。行为与旧 handleSpecialModeKey 逐条等价。触发仍走旧 2 步匹配。
-		if c.devCfg.DeciderEnabled {
-			return c.decider.dispatchManagedHost(key, &data)
-		}
-		return c.handleSpecialModeKey(key, &data)
-	}
-
-	// 检查是否处于 URL 输入模式
-	if c.urlMode {
-		// 受管宿主：模式内键经 dispatchManagedHost 走链（urlKeyHandler.Apply=handleUrlKey）。
-		if c.devCfg.DeciderEnabled {
-			return c.decider.dispatchManagedHost(key, &data)
-		}
-		return c.handleUrlKey(key, &data)
+	// 受管宿主模式内键：经决策器链分发（dispatchManagedHost：host 状态机维护、退出回落
+	// engine_default）。temp_english/temp_pinyin/quick_input/special/url 五宿主统一走此路径。
+	if c.tempEnglishMode || c.tempPinyinMode || c.quickInputMode || c.specialMode || c.urlMode {
+		return c.decider.dispatchManagedHost(key, &data)
 	}
 
 	// URL 模式激活：正常输入下 inputBuffer + 本键字符恰好构成某 URL 前缀（悲观全匹配）→ 夺取
@@ -566,9 +517,7 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 	if !hasShift && c.chineseMode {
 		if residual, ok := c.urlActivationResidual(key); ok {
 			res := c.enterUrlMode(residual)
-			if c.devCfg.DeciderEnabled {
-				c.decider.onUrlEntered()
-			}
+			c.decider.onUrlEntered()
 			return res
 		}
 	}
@@ -582,64 +531,17 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		}
 	}
 
-	// buffer 空触发键激活：decider_enabled 时由决策器按优先级接管（quick > temp_pinyin >
-	// temp_english 的触发键，含 z 首次触发——tempPinyinProcessor.Judge 经 judgeZFirstTrigger
-	// 收编了 z 的渐进仲裁）。未接管（special）继续下方旧逻辑。
-	if !hasShift && c.devCfg.DeciderEnabled {
+	// buffer 空触发键激活：决策器按优先级接管。
+	if !hasShift {
+		// 触发键激活（quick > temp_pinyin > temp_english 的 registry 优先级，含 z 首次触发——
+		// tempPinyinProcessor.Judge 经 judgeZFirstTrigger 收编了 z 的渐进仲裁）。
 		if res, ok := c.decider.tryActivateFromEmpty(key, &data); ok {
 			return res
 		}
-	}
-
-	// buffer 为空且无候选：保留原三段 getXxxTriggerKey 调用，仅按新优先级
-	// 顺序重排（快捷输入 > 临时拼音 > 临时英文）。
-	// ★ 这三段是 decider 关闭时的旧路径；decider_enabled 下触发（含 z 首次触发）已由上方
-	//   tryActivateFromEmpty 接管返回，不会落到这里。getTempPinyinTriggerKey 仍内含 z 键
-	//   首触发渐进仲裁，供 decider-off 与 judgeZFirstTrigger 共同复用。
-	if triggerKey := c.getQuickInputTriggerKey(key, data.KeyCode); !hasShift && triggerKey != "" {
-		// decider_enabled 下 quick_input 触发已由上方 tryActivateFromEmpty 接管；此路径主要承接
-		// decider 关闭时的旧逻辑。无论哪条，进入后对齐受管宿主 host（onQuickInputEntered 自带守卫）。
-		res := c.enterQuickInputMode(triggerKey)
-		if c.devCfg.DeciderEnabled {
-			c.decider.onQuickInputEntered()
-		}
-		return res
-	}
-	if triggerKey := c.getTempPinyinTriggerKey(key, data.KeyCode); !hasShift && triggerKey != "" {
-		// decider_enabled 下临时拼音触发（含 z 首次触发）已由上方 tryActivateFromEmpty 接管，
-		// 不会落到这里；此路径承接 decider 关闭时的旧逻辑。onTempPinyinEntered 守卫保留，
-		// 兼容未来若有触发未被 tryActivateFromEmpty 覆盖的边界。
-		res := c.enterTempPinyinMode(triggerKey)
-		if c.devCfg.DeciderEnabled {
-			c.decider.onTempPinyinEntered()
-		}
-		return res
-	}
-	if triggerKey := c.getTempEnglishTriggerKey(key, data.KeyCode); !hasShift && triggerKey != "" {
-		// decider_enabled 下 temp_english 触发已由上方 tryActivateFromEmpty 接管；此路径主要承接
-		// decider 关闭时的旧逻辑。无论哪条，进入后对齐受管宿主 host（onTempEnglishEntered 自带守卫）。
-		res := c.enterTempEnglishModeWithTrigger(triggerKey)
-		if c.devCfg.DeciderEnabled {
-			c.decider.onTempEnglishEntered()
-		}
-		return res
-	}
-	// 特殊模式（自定义码表）：buffer 为空时触发。decider_enabled 时由 tryActivateSpecial 接管
-	// （在此位置调用，保持 special-last 优先级——getXxxTriggerKey 之后），执行经 specialProcessor
-	// Judge/Activate + markEntered，等价旧 setupSpecialMode + modeCompositionResult。
-	if !hasShift {
-		if c.devCfg.DeciderEnabled {
-			if res, ok := c.decider.tryActivateSpecial(key, &data); ok {
-				return res
-			}
-		} else if c.specialModeReg != nil {
-			if id := c.specialModeReg.match(key, data.KeyCode); id != "" {
-				if tk := c.matchSpecialTrigger(id, key, data.KeyCode); tk != "" {
-					if prefix, ok := c.setupSpecialMode(id, tk); ok {
-						return c.modeCompositionResult(prefix, len(prefix))
-					}
-				}
-			}
+		// special-last：自定义码表引导键。在 registry 触发键之后调用，保持 special-last 优先级，
+		// 经 specialProcessor Judge/Activate + markEntered 激活（不入 registry，避免被提到 z 首触发前）。
+		if res, ok := c.decider.tryActivateSpecial(key, &data); ok {
+			return res
 		}
 	}
 
@@ -665,9 +567,7 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 				}
 				// 默认 "temp_english": 进入临时英文模式（Shift+字母路径，非触发键）
 				res := c.enterTempEnglishMode(key)
-				if c.devCfg.DeciderEnabled {
-					c.decider.onTempEnglishEntered()
-				}
+				c.decider.onTempEnglishEntered()
 				return res
 			}
 		}
@@ -768,18 +668,13 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 
 	case len(key) == 1 && ((key[0] >= 'a' && key[0] <= 'z') || (key[0] >= 'A' && key[0] <= 'Z')):
 		lowerKey := strings.ToLower(key)
-		// z 键混合回退：decider_enabled 时由决策器判定（执行复用 enterTempPinyinFromZBuffer
-		// = CompHot 原地切换），否则走旧 zHybridFallback。判定逻辑等价（含 z 触发键门禁，
-		// 见 pipeline_engine_default.go）。
-		if c.devCfg.DeciderEnabled {
-			if buf, ok := c.decider.judgeZFallback(lowerKey, &data); ok {
-				res := c.enterTempPinyinFromZBuffer(buf, c.inputBuffer)
-				// CompHot 进入 temp_pinyin：对齐受管宿主 host，后续模式内键走 dispatchManagedHost。
-				c.decider.onTempPinyinEntered()
-				return res
-			}
-		} else if buf, ok := c.zHybridFallback(lowerKey); ok {
-			return c.enterTempPinyinFromZBuffer(buf, c.inputBuffer)
+		// z 键混合回退：决策器判定（engine_default 宿主裁决，含 z 触发键门禁，见
+		// pipeline_engine_default.go）。执行复用 enterTempPinyinFromZBuffer（CompHot 原地切换）。
+		if buf, ok := c.decider.judgeZFallback(lowerKey, &data); ok {
+			res := c.enterTempPinyinFromZBuffer(buf, c.inputBuffer)
+			// CompHot 进入 temp_pinyin：对齐受管宿主 host，后续模式内键走 dispatchManagedHost。
+			c.decider.onTempPinyinEntered()
+			return res
 		}
 		// Chinese mode: convert to lowercase for pinyin
 		return c.handleAlphaKey(lowerKey)

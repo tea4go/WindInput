@@ -92,7 +92,7 @@ func TestQuickInputPinyinSubmode(t *testing.T) {
 
 // TestQuickInputPinyinHighlightNav 验证快捷输入拼音上下文的高亮导航——KeyHandler 链分解后
 // 导航键经链上 navKeyHandler（quick_input.pinyin.nav，标准翻页谓词 + showPinyinModeUI）分发，
-// 与旧 handlePinyinModeKey switch 逐字节等价（A/B 经 WIND_E2E_DECIDER=1 验证）。';' 进入打
+// 与旧 handlePinyinModeKey switch 逐字节等价（golden 回归；决策器已是唯一路径）。';' 进入打
 // "shi" 得拼音候选，方向下键高亮下移、上键回移。
 func TestQuickInputPinyinHighlightNav(t *testing.T) {
 	h := mustHarness(t, "pinyin")
@@ -122,7 +122,7 @@ func TestQuickInputBaseHighlightNav(t *testing.T) {
 
 // TestTempEnglishHighlightNav 验证临时英文的候选高亮导航——KeyHandler 链分解后导航键经链上
 // 专用 tempEnglishNavKeyHandler 分发（决策器开），与旧 handleTempEnglishKey switch（决策器关）
-// 逐字节等价（A/B 经 WIND_E2E_DECIDER=1 验证）。打 "Hello" 进入得大小写变体候选，方向下键
+// 逐字节等价（golden 回归；决策器已是唯一路径）。打 "Hello" 进入得大小写变体候选，方向下键
 // 高亮下移、上键回移（temp_english 高亮特有时序经 tempEnglishHighlightUp/Down 保留）。
 func TestTempEnglishHighlightNav(t *testing.T) {
 	h := mustHarness(t, "pinyin")
