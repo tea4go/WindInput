@@ -152,6 +152,12 @@ func BuildHarness(opts Options) (*Harness, error) {
 	appCompat := config.LoadAppCompat()
 	coord := coordinator.NewCoordinator(engineMgr, uiManager, cfg, appCompat, logger)
 
+	// golden A/B：决策器接管开关。Options.DeciderEnabled 或环境变量 WIND_E2E_DECIDER=1 时开启——
+	// 后者可让整套 golden 在「决策器开」下复跑，验证与「关」逐字节等价（新逻辑替代旧逻辑的前提）。
+	if opts.DeciderEnabled || os.Getenv("WIND_E2E_DECIDER") == "1" {
+		coord.SetDeciderEnabledForTest(true)
+	}
+
 	// 引导键特殊模式（自定义码表）：注入测试 fixture 目录并重建注册表。
 	// 码表懒加载，仅首次激活时读盘。
 	if len(opts.SpecialModes) > 0 {
