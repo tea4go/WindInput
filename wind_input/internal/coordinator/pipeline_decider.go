@@ -227,6 +227,9 @@ func (d *decider) dispatchManagedHost(key string, data *bridge.KeyEventData) *br
 			continue
 		}
 		res := h.Apply(d.c, key, data)
+		// 慢请求归因：受管宿主模式内键处理（拼音候选已在 updatePinyinModeCandidates 单独标记，
+		// 此处兜底 quick/special/url 等未单独标记的模式路径，避免全归 p_teardown）。
+		d.c.markKeyPhase("mode_dispatch")
 		d.reconcileHost()
 		return res
 	}

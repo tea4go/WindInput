@@ -305,6 +305,9 @@ func (c *Coordinator) updatePinyinModeCandidates(ops *pinyinModeOps) {
 	if c.currentPage < 1 {
 		c.currentPage = 1
 	}
+	// 慢请求归因：拼音/临时拼音候选生成（含首次用时的拼音词库冷加载 + ConvertWithPinyin）。
+	// 模式路径不经正常输入的 p_convert 相位，此前全归 p_teardown；显式标记以便排查。
+	c.markKeyPhase("mode_pinyin_cands")
 }
 
 // selectPinyinModeCandidate 选择候选（支持部分上屏）
