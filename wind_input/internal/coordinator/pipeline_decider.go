@@ -17,6 +17,7 @@ type decider struct {
 	quickInput    Processor // 受管宿主单例（decide() 全接管）
 	tempEnglish   Processor // 受管宿主单例（decide() 全接管）
 	special       Processor // 受管宿主单例（模式内键全接管；触发仍走旧 2 步匹配，不入 registry）
+	url           Processor // 受管宿主单例（激活走正常输入路径前缀夺取钩子，不入 registry）
 
 	registry  []Processor  // 触发激活类宿主，按优先级（高→低）
 	sharedNav []KeyHandler // 共享导航 handler（翻页/选候选/导航/删空）
@@ -30,6 +31,7 @@ func newDecider(c *Coordinator) *decider {
 	d.quickInput = newQuickInputProcessor(c)
 	d.tempEnglish = newTempEnglishProcessor(c)
 	d.special = newSpecialProcessor(c)
+	d.url = newUrlProcessor(c)
 	d.host = d.engineDefault // host 永不为空
 	// 触发激活类宿主，按优先级（高→低），对齐旧 getXxxTriggerKey 顺序。special 暂走旧逻辑。
 	// 受管宿主（quick_input/temp_pinyin/temp_english）复用单例，使激活后 d.host 与 registry 实例同一。
@@ -46,7 +48,7 @@ func newDecider(c *Coordinator) *decider {
 // 退出经 reconcileHost 回落。当前 temp_pinyin + quick_input + temp_english + special。
 // special 的触发仍走旧 2 步匹配（不在 registry），但模式内键 + host 由决策器全接管。
 func (d *decider) isManaged(p Processor) bool {
-	return p == d.tempPinyin || p == d.quickInput || p == d.tempEnglish || p == d.special
+	return p == d.tempPinyin || p == d.quickInput || p == d.tempEnglish || p == d.special || p == d.url
 }
 
 // modeActive 据模式真值源判定受管宿主 p 是否仍活跃。模式真值源仍是各 c.xxxMode 布尔
@@ -62,6 +64,8 @@ func (d *decider) modeActive(p Processor) bool {
 		return d.c.tempEnglishMode
 	case d.special:
 		return d.c.specialMode
+	case d.url:
+		return d.c.urlMode
 	default:
 		return false
 	}
@@ -97,6 +101,7 @@ func (d *decider) onTempPinyinEntered()  { d.markEntered(d.tempPinyin) }
 func (d *decider) onQuickInputEntered()  { d.markEntered(d.quickInput) }
 func (d *decider) onTempEnglishEntered() { d.markEntered(d.tempEnglish) }
 func (d *decider) onSpecialEntered()     { d.markEntered(d.special) }
+func (d *decider) onUrlEntered()         { d.markEntered(d.url) }
 
 // keyHandlerChain 按当前 host 动态组装按键处理链：全局分流 + 宿主特有 + 共享导航。
 func (d *decider) keyHandlerChain() []KeyHandler {

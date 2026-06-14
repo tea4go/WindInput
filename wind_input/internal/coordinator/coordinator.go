@@ -192,6 +192,15 @@ type specialModeState struct {
 	specialHasMore        bool   // 码表中是否还有更多候选未加载
 }
 
+// urlModeState URL 临时输入模式状态。正常输入下 inputBuffer 恰好构成某 URL 前缀
+// （www./http/https/ftp. 等，悲观全匹配）时夺取进入；模式内自由输入网址字符（不触发上屏），
+// 仅空格/回车上屏，退格删空退出。无候选，纯 preedit。详见 docs/design/input-processor-pipeline.md。
+type urlModeState struct {
+	urlMode      bool   // 是否处于 URL 输入模式
+	urlBuffer    string // URL 输入缓冲（含触发前缀）
+	urlCursorPos int    // 光标位置（buffer 内字节偏移）
+}
+
 // Coordinator orchestrates between C++ Bridge, Engine, and native UI
 type Coordinator struct {
 	engineMgr    *engine.Manager
@@ -325,6 +334,10 @@ type Coordinator struct {
 
 	// 引导键特殊模式（自定义码表）
 	specialModeState
+
+	// URL 临时输入模式
+	urlModeState
+
 	specialModeReg *specialModeRegistry
 	// specialSchemasDirsOverride 非空时覆盖 schemasDirs() 的特殊模式码表搜索目录，
 	// 供 in-process 测试（internal/e2e）注入 fixture 码表目录用；生产路径置空。
@@ -1139,6 +1152,11 @@ func (c *Coordinator) modeAccentColor(modeName string) color.Color {
 			hexStr = c.config.Features.QuickInput.AccentColor
 		}
 		def = color.RGBA{102, 187, 106, 255}
+	case "url":
+		if c.config != nil {
+			hexStr = c.config.Input.UrlInput.AccentColor
+		}
+		def = color.RGBA{255, 167, 38, 255} // 橙色，区别于其它模式
 	default:
 		return nil
 	}

@@ -541,6 +541,28 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		return c.handleSpecialModeKey(key, &data)
 	}
 
+	// 检查是否处于 URL 输入模式
+	if c.urlMode {
+		// 受管宿主：模式内键经 dispatchManagedHost 走链（urlKeyHandler.Apply=handleUrlKey）。
+		if c.devCfg.DeciderEnabled {
+			return c.decider.dispatchManagedHost(key, &data)
+		}
+		return c.handleUrlKey(key, &data)
+	}
+
+	// URL 模式激活：正常输入下 inputBuffer + 本键字符恰好构成某 URL 前缀（悲观全匹配）→ 夺取
+	// 进入。须在下方 buffered-trigger 路由与正常字母/标点处理之前——否则带 '.' 的前缀（www./ftp.）
+	// 的 '.' 会先被当作标点处理。urlActivationResidual 自带 urlEnabled 门禁与精确匹配。
+	if !hasShift && c.chineseMode {
+		if residual, ok := c.urlActivationResidual(key); ok {
+			res := c.enterUrlMode(residual)
+			if c.devCfg.DeciderEnabled {
+				c.decider.onUrlEntered()
+			}
+			return res
+		}
+	}
+
 	// 正在输入（有 buffer / 有候选）时：统一优先级回落链
 	// （二三候选 > 模式激活 > overflow > 标点）。详见
 	// docs/design/mode-trigger-priority-chain.md。

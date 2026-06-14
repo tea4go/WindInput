@@ -37,6 +37,9 @@ type Options struct {
 	// TempPinyinTriggerKeys 覆盖 config.Input.TempPinyin.TriggerKeys（nil = 默认 ["backtick"]）。
 	// 用于覆盖 z 键临时拼音回退（z-fallback）等需要特定触发键配置的场景。
 	TempPinyinTriggerKeys []string
+	// Configure 在 DefaultConfig 之上对配置做任意覆盖（nil = 不改）。用于按用例开启/调整
+	// 默认关闭的功能（如 url_input.enabled），避免为每个开关都加专用 Options 字段。
+	Configure func(*config.Config)
 }
 
 func (o Options) schemaID() string {

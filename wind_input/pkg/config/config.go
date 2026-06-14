@@ -93,8 +93,9 @@ type InputConfig struct {
 	TempPinyin           TempPinyinConfig       `yaml:"temp_pinyin" json:"temp_pinyin"`
 	AutoPair             AutoPairConfig         `yaml:"auto_pair" json:"auto_pair"`
 	PunctCustom          PunctCustomConfig      `yaml:"punct_custom" json:"punct_custom"`
-	Overflow             OverflowConfig         `yaml:"overflow" json:"overflow"` // 候选按键无效时的处理策略
-	Phrase               PhraseConfig           `yaml:"phrase" json:"phrase"`     // 短语相关行为
+	Overflow             OverflowConfig         `yaml:"overflow" json:"overflow"`   // 候选按键无效时的处理策略
+	Phrase               PhraseConfig           `yaml:"phrase" json:"phrase"`       // 短语相关行为
+	UrlInput             UrlInputConfig         `yaml:"url_input" json:"url_input"` // URL 临时输入模式
 }
 
 // PhraseConfig 短语相关行为配置（暂无 UI，文件配置）
@@ -197,6 +198,15 @@ type TempPinyinConfig struct {
 	// 默认 true（保留 z），仅对 z 触发键生效，不影响符号触发键。暂不暴露 UI，作为内部预留开关。
 	ZIncludeOnCommit bool `yaml:"z_include_on_commit" json:"z_include_on_commit"`
 	// AccentColor 模式内发光边框颜色（十六进制，如 "#3C78AFD2"），空=内置默认色
+	AccentColor string `yaml:"accent_color" json:"accent_color"`
+}
+
+// UrlInputConfig URL 临时输入模式配置。正常输入下 inputBuffer 恰好构成某前缀（悲观全匹配）
+// 时夺取进入，模式内自由输入网址、仅空格/回车上屏。
+type UrlInputConfig struct {
+	Enabled  bool     `yaml:"enabled" json:"enabled"`   // 总开关（默认 false）
+	Prefixes []string `yaml:"prefixes" json:"prefixes"` // 触发前缀（恰好匹配即接管），如 ["www.", "http", "https", "ftp."]
+	// AccentColor 模式内发光边框颜色（十六进制），空=内置默认色
 	AccentColor string `yaml:"accent_color" json:"accent_color"`
 }
 
@@ -502,6 +512,10 @@ func DefaultConfig() *Config {
 			},
 			Phrase: PhraseConfig{
 				MinPrefixLength: 2,
+			},
+			UrlInput: UrlInputConfig{
+				Enabled:  false, // 默认关闭（opt-in，避免误抢正常输入）
+				Prefixes: []string{"www.", "http", "https", "ftp."},
 			},
 		},
 		UI: UIConfig{

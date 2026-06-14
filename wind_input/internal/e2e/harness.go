@@ -79,6 +79,9 @@ func BuildHarness(opts Options) (*Harness, error) {
 	if opts.TempPinyinTriggerKeys != nil {
 		cfg.Input.TempPinyin.TriggerKeys = opts.TempPinyinTriggerKeys
 	}
+	if opts.Configure != nil {
+		opts.Configure(cfg)
+	}
 
 	// 引擎 + 方案管理器（main.go:262-282）
 	engineMgr := engine.NewManager(logger)

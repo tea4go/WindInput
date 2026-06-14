@@ -567,9 +567,10 @@ func TestEngineDefaultJudge(t *testing.T) {
 
 > **实现校准（重要）**：快捷输入的候选实为 **XOR**——拼音上下文 vs 结构化（date/calc/number）由 buffer 内容互斥，**从不同时呈现**。故 §9.2 的"分段合并"对本宿主退化为"结构化段合并 + 拼音段单独路由"，§9.3 的"数字键仲裁"由**上下文路由天然解决**（拼音上下文数字选候选、结构化上下文数字追加 buffer），**无需独立仲裁层**；§9.4 的 `AcceptedProviders` 白名单"拒绝"语义只在引入 url_english 等**真正多源共存**宿主时才有意义。
 
-**推迟（待真正多源融合宿主出现时一并做）**：
-- `AcceptedProviders` 白名单驱动 merge（当前各宿主返回 nil，候选源由宿主按上下文硬路由）。
-- url_english（悲观/全匹配，经 `Residual`→`Release`→`Activate` 复用 z fallback）。
+**URL 临时输入模式 ✅（2026-06-14 实现）**：`urlProcessor`（`pipeline_url.go`）+ `handle_url.go` + `config.UrlInputConfig`（默认关，前缀 www./http/https/ftp.）。**悲观全匹配**：正常输入下 `inputBuffer+本键` 恰好等于某前缀即夺取（`urlActivationResidual` 钩子，须置于 buffered-trigger 与标点处理**之前**，使带 '.' 前缀的 '.' 在被当标点前被拦截——单钩子覆盖字母结尾与点结尾两类前缀）。前缀作初始 buffer，模式内任意 ASCII 可见字符追加不上屏、仅空格/回车上屏、退格删空退出。受管宿主但**不入 registry**（激活非触发键驱动）。无候选纯 preedit。e2e `mode_url_http`/`mode_url_www`/`mode_url_esc`/`mode_url_backspace_exit`（A/B）。**简化**：未走设计原定的 engine_default `Release`（engine_default 正常输入尚未入决策器），改用正常输入路径显式钩子，等价效果。
+
+**推迟**：
+- `AcceptedProviders` 白名单驱动 merge（当前各宿主返回 nil，候选源由宿主按上下文硬路由；url 独占=拒绝一切，待 emoji 等真正多源共存宿主出现时落地白名单）。
 - `applyEngineDiff` 统一引擎副作用 diff（当前 `setQuickInputPinyinLayer` / `setup`/`exit`/`clearState` 既有路径管，对称性经真机日志验证 22/22）。
 
 > 加词模式（`addWordActive`）是功能模式，**不参与**。命令直通车是候选选中后的解析/动作层，
