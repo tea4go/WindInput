@@ -284,6 +284,21 @@ func (c *Coordinator) exitTempPinyinMode(commit bool, text string) *bridge.KeyEv
 	return &bridge.KeyEventResult{Type: bridge.ResponseTypeClearComposition}
 }
 
+// judgeZFirstTrigger 判定 z 首次触发是否应进入临时拼音（决策器收编 z 首触发的入口）。
+//
+// 直接复用旧 getTempPinyinTriggerKey 的 z 渐进仲裁，保证决策器与旧路径逐字节等价：
+//   - z 必须配置为临时拼音触发键、码表引擎、TempPinyin 开启、inputBuffer 空、无候选；
+//   - 开启 z-repeat 且有上屏历史 → 不进（z 留作重复上屏）；
+//   - z 仍有码表/短语前缀 → 不进（渐进决策，留给正常码表输入）；
+//   - 否则 → 进临时拼音。
+//
+// getTempPinyinTriggerKey 仅在 KeyZ 分支返回 "z"，故 ==“z” 恰好等价于 z 首触发条件；
+// 限定 parsedKey==KeyZ 是为防御性地排除非 z 键意外命中。
+func (c *Coordinator) judgeZFirstTrigger(key string, keyCode int) bool {
+	parsed, _ := keys.ParseKey(key)
+	return parsed == keys.KeyZ && c.getTempPinyinTriggerKey(key, keyCode) == "z"
+}
+
 // isTempPinyinZTrigger 检查 z 是否配置为临时拼音触发键
 func (c *Coordinator) isTempPinyinZTrigger() bool {
 	if c.engineMgr == nil || !c.engineMgr.IsTempPinyinEnabled() {

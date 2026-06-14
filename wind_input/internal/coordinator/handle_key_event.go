@@ -551,7 +551,8 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 	}
 
 	// buffer 空触发键激活：decider_enabled 时由决策器按优先级接管（quick > temp_pinyin >
-	// temp_english 的触发键），未接管（z 首次触发、special）继续下方旧逻辑。
+	// temp_english 的触发键，含 z 首次触发——tempPinyinProcessor.Judge 经 judgeZFirstTrigger
+	// 收编了 z 的渐进仲裁）。未接管（special）继续下方旧逻辑。
 	if !hasShift && c.devCfg.DeciderEnabled {
 		if res, ok := c.decider.tryActivateFromEmpty(key, &data); ok {
 			return res
@@ -560,8 +561,9 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 
 	// buffer 为空且无候选：保留原三段 getXxxTriggerKey 调用，仅按新优先级
 	// 顺序重排（快捷输入 > 临时拼音 > 临时英文）。
-	// ★ 保留旧 getXxxTriggerKey：getTempPinyinTriggerKey 内含 z 键首次触发逻辑，
-	//   matchTempPinyinTrigger 已排除 z；改用 matchXxx 遍历会丢失 z 首次触发 → 回归。
+	// ★ 这三段是 decider 关闭时的旧路径；decider_enabled 下触发（含 z 首次触发）已由上方
+	//   tryActivateFromEmpty 接管返回，不会落到这里。getTempPinyinTriggerKey 仍内含 z 键
+	//   首触发渐进仲裁，供 decider-off 与 judgeZFirstTrigger 共同复用。
 	if triggerKey := c.getQuickInputTriggerKey(key, data.KeyCode); !hasShift && triggerKey != "" {
 		// decider_enabled 下 quick_input 触发已由上方 tryActivateFromEmpty 接管；此路径主要承接
 		// decider 关闭时的旧逻辑。无论哪条，进入后对齐受管宿主 host（onQuickInputEntered 自带守卫）。
@@ -572,9 +574,9 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		return res
 	}
 	if triggerKey := c.getTempPinyinTriggerKey(key, data.KeyCode); !hasShift && triggerKey != "" {
-		// 此路径在 decider_enabled 下仅承接 z 首次触发（matchTempPinyinTrigger 排除 z，
-		// tryActivateFromEmpty 不接管），非 z 触发已由上方 tryActivateFromEmpty 处理。
-		// 无论哪条，进入 temp_pinyin 后都需对齐受管宿主 host。
+		// decider_enabled 下临时拼音触发（含 z 首次触发）已由上方 tryActivateFromEmpty 接管，
+		// 不会落到这里；此路径承接 decider 关闭时的旧逻辑。onTempPinyinEntered 守卫保留，
+		// 兼容未来若有触发未被 tryActivateFromEmpty 覆盖的边界。
 		res := c.enterTempPinyinMode(triggerKey)
 		if c.devCfg.DeciderEnabled {
 			c.decider.onTempPinyinEntered()

@@ -498,6 +498,13 @@ func TestEngineDefaultJudge(t *testing.T) {
 > 经 **E2E golden A/B**（`internal/e2e`，`WIND_E2E_DECIDER=1` 复跑全套 golden）验证与旧逻辑逐字节
 > 等价。`wind_dev.toml` 设 `decider_enabled = false` 可一键回退旧逻辑。旧 `handleXxxKey` 仍作为
 > 决策器链上 `Apply` 的被调实现保留（删除待 KeyHandler 链分解，目标③）。
+>
+> **z 首次触发收编（2026-06-14）**：原散落在 `getTempPinyinTriggerKey` KeyZ 分支的「重复上屏历史 /
+> z 码表前缀 / 否则进临时拼音」渐进仲裁，已经 `tempPinyinProcessor.Judge`→`judgeZFirstTrigger` 收编进
+> registry，与标点触发键一样经 `tryActivateFromEmpty` 激活——z 不再是决策器的特殊旁路。`judgeZFirstTrigger`
+> 直接复用旧 `getTempPinyinTriggerKey` 的判定，保证逐字节等价（A/B golden + `z_first_trigger_test.go`）。
+> z 混合回退（②，`judgeZFallback`）此前已收编。**仍留旧路径**：z 重复上屏的选词上屏（`handle_candidates.go`，
+> 属正常码表选词，待 KeyHandler 链分解批次）；z 临时拼音**不融合**英文/生僻字（按需求保持）。
 
 **贯穿全程：开关控制，可回退旧 `HandleKeyEvent`。** 第 0b 影子运行的开关放在独立开发
 配置 `wind_dev.toml`（`decider_shadow`，见 `internal/coordinator/dev_config.go`），**不进主配置

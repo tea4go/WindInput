@@ -28,11 +28,19 @@ func (p *tempPinyinProcessor) Name() string { return "temp_pinyin" }
 
 // Judge：作为 registry 候选时的「激活」裁决——buffer 空、无候选时匹配临时拼音触发键 → Activate。
 // 复用 matchTempPinyinTrigger（含引擎类型/开关门禁，engineMgr==nil 时安全返回空 → Pass）。
+//
+// z 首次触发由 judgeZFirstTrigger 单独裁决（matchTempPinyinTrigger 故意排除 z，因 z 还需
+// 渐进决策：重复上屏历史 / z 码表前缀）。收编进决策器后，z 与标点触发键一样经 registry
+// 激活，不再走 handle_key_event.go 的 getTempPinyinTriggerKey 旁路（decider_enabled 下）。
+//
 // 作为当前 host 时的「退出」裁决在 1c 接管时补充（1a host 不会是 temp_pinyin）。
 func (p *tempPinyinProcessor) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
 	if ctx.BufferLen() == 0 && ctx.CandidateCount() == 0 {
 		if tk := p.c.matchTempPinyinTrigger(key, data.KeyCode); tk != "" {
 			return decActivate(tk, -1)
+		}
+		if p.c.judgeZFirstTrigger(key, data.KeyCode) {
+			return decActivate("z", -1)
 		}
 	}
 	return decPass()
