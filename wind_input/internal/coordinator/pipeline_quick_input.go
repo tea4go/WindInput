@@ -44,16 +44,45 @@ func (p *quickInputProcessor) BufferText() string { return p.c.quickInputBuffer 
 
 func (p *quickInputProcessor) Capabilities() Capability { return 0 }
 
-// KeyHandlers：quick_input 是自包含模式——成为 host 后所有按键归它（旧 handleQuickInputKey
-// 内部已统一处理数字/字母选择/拼音子模式/导航/退出）。用「整模式」薄包装 handler 建立 decide()
-// 分发路径，与旧逐条等价；共享导航 handler 抽取留待后续批次。
+// KeyHandlers：quick_input 的链 = 模式特有 handler + 共享导航 handler（KeyHandler 链分解）。
+// quick_input 有**双上下文**，导航键谓词与 showUI 各异，故按当前上下文构造对应的 navKeyHandler：
+//   - 拼音上下文（quickInputPinyinActive）：标准翻页谓词 + showPinyinModeUI（与 temp_pinyin 同款）。
+//   - 基础上下文（date/calc/number/重复）：专用翻页谓词 isQuickInputPageUpKey（排除 -/= 等输入字符）
+//   - showQuickInputUI、无分级加载。
+//
+// KeyHandlers 每键调用一次，故据当前（按键前）上下文取对应 nav handler。
 func (p *quickInputProcessor) KeyHandlers() []KeyHandler {
-	return []KeyHandler{quickInputKeyHandler{c: p.c}}
+	c := p.c
+	var nav navKeyHandler
+	if c.quickInputPinyinActive() {
+		ops := c.quickInputPinyinOps()
+		nav = navKeyHandler{
+			c:              c,
+			name:           "quick_input.pinyin.nav",
+			pageUp:         c.stdPageUp,
+			pageDown:       c.stdPageDown,
+			showUI:         func() { c.showPinyinModeUI(ops) },
+			pageDownExpand: nil,
+			hiDownExpand:   c.expandCandidates,
+		}
+	} else {
+		nav = navKeyHandler{
+			c:              c,
+			name:           "quick_input.base.nav",
+			pageUp:         c.quickPageUp,
+			pageDown:       c.quickPageDown,
+			showUI:         c.showQuickInputUI,
+			pageDownExpand: nil, // 基础上下文翻页/高亮均无分级加载（与旧 navXxx(show, nil) 一致）
+			hiDownExpand:   nil,
+		}
+	}
+	return []KeyHandler{quickInputKeyHandler{c: c}, nav}
 }
 
-// quickInputKeyHandler 把 handleQuickInputKey 包装成链上的「整模式」处理单元。
-// Judge 恒 Handle（host 为 quick_input 时模式内键全部认领，I11 短路于此）；
-// Apply 委托回 handleQuickInputKey（含拼音子模式内部分发），行为字节级不变。
+// quickInputKeyHandler 把 handleQuickInputKey 包装成链上的模式特有处理单元。
+// Judge 对当前上下文的导航键 Pass（让位链上居后的 navKeyHandler），其余键 Handle（I11 短路于此）；
+// Apply 委托回 handleQuickInputKey（含拼音子模式内部分发）——其导航 case 已被链上 nav handler
+// 在 Apply 前认领，对 quick_input 不再被触达（仍供 decider 关闭时的旧路径复用）。
 type quickInputKeyHandler struct {
 	c *Coordinator
 }
@@ -61,6 +90,15 @@ type quickInputKeyHandler struct {
 func (h quickInputKeyHandler) Name() string { return "quick_input.mode" }
 
 func (h quickInputKeyHandler) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
+	c := h.c
+	// 让位谓词必须与 KeyHandlers 构造的 navKeyHandler 认领谓词按上下文一一对应（同经 navKeyMatch）。
+	if c.quickInputPinyinActive() {
+		if c.isStandardNavKey(key, data) {
+			return decPass()
+		}
+	} else if c.isQuickInputBaseNavKey(key, data) {
+		return decPass()
+	}
 	return decHandle()
 }
 

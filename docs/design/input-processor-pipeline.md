@@ -506,14 +506,16 @@ func TestEngineDefaultJudge(t *testing.T) {
 > z 混合回退（②，`judgeZFallback`）此前已收编。**仍留旧路径**：z 重复上屏的选词上屏（`handle_candidates.go`，
 > 属正常码表选词，待 KeyHandler 链分解批次）；z 临时拼音**不融合**英文/生僻字（按需求保持）。
 >
-> **KeyHandler 链分解（2026-06-14，已接入 temp_pinyin + special）**：把翻页/高亮从「整模式」handler 抽成
-> 链上独立的通用 `navKeyHandler`（`pipeline_nav_handler.go`）——模式特有 handler 的 `Judge` 对导航键 **Pass**
-> 让位、nav handler **Handle**，二者用同一谓词 `isStandardNavKey` 保证「Pass ⟺ Handle」同步、I11 单一归属。
-> 导航逻辑复用 `pipeline_nav.go` 的 navXxx 函数；**宿主差异（showUI / pageDownExpand / hiDownExpand）经构造
-> 参数注入，同一 navKeyHandler 类型被 temp_pinyin、special 复用**（true sharedNav 落地）。A/B golden
-> （`mode_temp_pinyin_paging` / `special_highlight_nav`，含高亮真状态变化）+ 单测验证逐字节等价。**待办**：
-> quick_input（双上下文 + 专用翻页谓词 `isQuickInputPageUpKey`）/ temp_english（highlight 内联）接入链；
-> 模式特有键进一步细分；引擎副作用 `applyEngineDiff` 单点化（I3）。
+> **KeyHandler 链分解（2026-06-14，已接入 temp_pinyin / special / quick_input 双上下文）**：把翻页/高亮从
+> 「整模式」handler 抽成链上独立的通用 `navKeyHandler`（`pipeline_nav_handler.go`）——模式特有 handler 的
+> `Judge` 对导航键 **Pass** 让位、nav handler **Handle**，二者经同一 `navKeyMatch`（注入翻页谓词 + 通用高亮
+> 谓词）保证「Pass ⟺ Handle」同步、I11 单一归属、零漂移。**宿主差异（翻页谓词 pageUp/pageDown、showUI、
+> pageDownExpand、hiDownExpand）经构造参数注入，同一 navKeyHandler 被 temp_pinyin/special/quick_input 复用**
+> （true sharedNav）。quick_input **双上下文**：拼音上下文用标准翻页谓词 + showPinyinModeUI，基础上下文用专用
+> `isQuickInputPageUpKey`（排除 -/= 输入字符）+ showQuickInputUI，按 `quickInputPinyinActive` 选用。A/B golden
+> （`mode_temp_pinyin_paging`/`special_highlight_nav`/`mode_quick_input_pinyin_highlight`/`mode_quick_input_base_highlight`，
+> 含高亮真状态变化）+ 单测验证逐字节等价。**待办**：temp_english（highlight 内联，需先统一其 highlight 走 navXxx）
+> 接入链；模式特有键进一步细分；引擎副作用 `applyEngineDiff` 单点化（I3）。
 
 **贯穿全程：开关控制，可回退旧 `HandleKeyEvent`。** 第 0b 影子运行的开关放在独立开发
 配置 `wind_dev.toml`（`decider_shadow`，见 `internal/coordinator/dev_config.go`），**不进主配置

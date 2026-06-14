@@ -73,6 +73,8 @@ func (p *specialProcessor) KeyHandlers() []KeyHandler {
 		navKeyHandler{
 			c:              p.c,
 			name:           "special.nav",
+			pageUp:         p.c.stdPageUp,
+			pageDown:       p.c.stdPageDown,
 			showUI:         p.c.showSpecialUI,
 			pageDownExpand: p.c.expandSpecialCandidates, // special 翻页后于接近末页分级加载
 			hiDownExpand:   p.c.expandSpecialCandidates,

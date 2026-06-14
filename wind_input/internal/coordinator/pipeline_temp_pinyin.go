@@ -75,6 +75,8 @@ func (p *tempPinyinProcessor) KeyHandlers() []KeyHandler {
 		navKeyHandler{
 			c:              p.c,
 			name:           "temp_pinyin.nav",
+			pageUp:         p.c.stdPageUp,
+			pageDown:       p.c.stdPageDown,
 			showUI:         func() { p.c.showPinyinModeUI(ops) },
 			pageDownExpand: nil, // 拼音翻页不分级加载（与旧 navPageDown(show, nil, false) 一致）
 			hiDownExpand:   p.c.expandCandidates,

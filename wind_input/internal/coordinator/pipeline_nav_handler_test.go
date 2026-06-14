@@ -28,6 +28,8 @@ func TestPinyinNavKeyHandlerDispatch(t *testing.T) {
 	nav := navKeyHandler{
 		c:            h.Coordinator,
 		name:         "temp_pinyin.nav",
+		pageUp:       h.stdPageUp,
+		pageDown:     h.stdPageDown,
 		showUI:       func() { h.showPinyinModeUI(ops) },
 		hiDownExpand: h.expandCandidates,
 	}

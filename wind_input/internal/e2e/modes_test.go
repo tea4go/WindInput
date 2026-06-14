@@ -90,6 +90,34 @@ func TestQuickInputPinyinSubmode(t *testing.T) {
 	AssertGolden(t, "mode_quick_input_pinyin_submode", rec.Render())
 }
 
+// TestQuickInputPinyinHighlightNav 验证快捷输入拼音上下文的高亮导航——KeyHandler 链分解后
+// 导航键经链上 navKeyHandler（quick_input.pinyin.nav，标准翻页谓词 + showPinyinModeUI）分发，
+// 与旧 handlePinyinModeKey switch 逐字节等价（A/B 经 WIND_E2E_DECIDER=1 验证）。';' 进入打
+// "shi" 得拼音候选，方向下键高亮下移、上键回移。
+func TestQuickInputPinyinHighlightNav(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Key(";").
+		Type("shi").
+		Key("down").
+		Key("down").
+		Key("up")
+	AssertGolden(t, "mode_quick_input_pinyin_highlight", rec.Render())
+}
+
+// TestQuickInputBaseHighlightNav 验证快捷输入基础上下文的高亮导航——导航键经链上 navKeyHandler
+// （quick_input.base.nav，专用翻页谓词 isQuickInputPageUpKey + showQuickInputUI）分发，与旧
+// handleQuickInputKey switch 逐字节等价。';' 进入打 "123" 得数字读法多候选，方向键高亮移动。
+func TestQuickInputBaseHighlightNav(t *testing.T) {
+	h := mustHarness(t, "pinyin")
+	rec := NewRecorder(h).
+		Key(";").
+		Type("123").
+		Key("down").
+		Key("up")
+	AssertGolden(t, "mode_quick_input_base_highlight", rec.Render())
+}
+
 // ── temp_english 补充场景 ─────────────────────────────────────────────────────
 
 // TestTempEnglishDigitSelect 验证临时英文数字选词：打 "Hello" 进入，数字 2 选第二候选
