@@ -79,6 +79,30 @@ func (c *Coordinator) quickInputAlphaExtraProviders() []CandidateProvider {
 	return ps
 }
 
+// ensureQuickInputAlphaSources 进入字母上下文时 eager 加载启用的非拼音融合源词库
+// （英文词库 / 生僻字码表）。幂等；加载失败只记 WARN 不阻断输入（该源候选届时为空）。
+// applyEngineDiff 尚未落地，故沿用 setQuickInputPinyinLayer 同样的「启用即加载」策略。
+func (c *Coordinator) ensureQuickInputAlphaSources() {
+	if c.engineMgr == nil {
+		return
+	}
+	if c.quickInputEnglishEnabled() {
+		if err := c.engineMgr.EnsureEnglishLoaded(); err != nil {
+			c.logger.Warn("Failed to load english dict for quick input fusion", "error", err)
+		}
+	}
+	if c.quickInputRareCharEnabled() {
+		id := c.config.Features.QuickInput.AlphaProviders.RareCharID
+		inst := c.specialModeReg.get(id)
+		if inst == nil {
+			// 配了 rare_char_id 但 registry 无此实例：诊断提示，否则用户开了源却一直无候选
+			c.logger.Warn("quick input rare-char id not found in registry", "id", id)
+		} else if _, err := c.specialModeReg.ensureLoaded(inst); err != nil {
+			c.logger.Warn("Failed to load rare-char table for quick input fusion", "id", id, "error", err)
+		}
+	}
+}
+
 // engageQuickInputPinyin 在快捷输入空 buffer 下首次输入字母时切入拼音上下文。
 // 不再有独立的子模式布尔/缓冲——状态进统一的 quickInputBuffer，上下文由
 // quickInputPinyinActive() 派生。
@@ -91,6 +115,7 @@ func (c *Coordinator) engageQuickInputPinyin(firstKey string) *bridge.KeyEventRe
 		}
 	}
 	c.setQuickInputPinyinLayer(true)
+	c.ensureQuickInputAlphaSources()
 
 	c.quickInputBuffer = firstKey
 	c.quickInputPinyinCursorPos = len(firstKey)
