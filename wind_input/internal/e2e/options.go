@@ -34,6 +34,9 @@ type Options struct {
 	// 用于 golden A/B：同一用例在决策器关/开下跑，验证新决策器逻辑与旧逻辑逐字节等价。
 	// 也可经环境变量 WIND_E2E_DECIDER=1 对整套用例统一开启。
 	DeciderEnabled bool
+	// TempPinyinTriggerKeys 覆盖 config.Input.TempPinyin.TriggerKeys（nil = 默认 ["backtick"]）。
+	// 用于覆盖 z 键临时拼音回退（z-fallback）等需要特定触发键配置的场景。
+	TempPinyinTriggerKeys []string
 }
 
 func (o Options) schemaID() string {

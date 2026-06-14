@@ -76,6 +76,9 @@ func BuildHarness(opts Options) (*Harness, error) {
 	// 配置：用默认配置保证确定性，不读开发机上的真实 config.toml；仅覆盖活跃方案。
 	cfg := config.DefaultConfig()
 	cfg.Schema.Active = schemaID
+	if opts.TempPinyinTriggerKeys != nil {
+		cfg.Input.TempPinyin.TriggerKeys = opts.TempPinyinTriggerKeys
+	}
 
 	// 引擎 + 方案管理器（main.go:262-282）
 	engineMgr := engine.NewManager(logger)
