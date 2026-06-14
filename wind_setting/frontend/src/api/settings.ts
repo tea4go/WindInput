@@ -216,6 +216,13 @@ export interface PhraseConfig {
   min_prefix_length: number;
 }
 
+// URL 临时输入模式配置
+export interface UrlInputConfig {
+  enabled: boolean;
+  prefixes: string[];
+  accent_color: string;
+}
+
 // 自定义标点映射配置
 export interface PunctCustomConfig {
   enabled: boolean;
@@ -246,6 +253,7 @@ export interface InputConfig {
   punct_custom: PunctCustomConfig;
   overflow: OverflowConfig;
   phrase: PhraseConfig;
+  url_input: UrlInputConfig;
 }
 
 // 快捷输入配置（v1: features.quick_input，吸收 accent_color）
@@ -518,6 +526,11 @@ export function getDefaultConfig(): Config {
       },
       phrase: {
         min_prefix_length: 2,
+      },
+      url_input: {
+        enabled: false,
+        prefixes: ["www.", "http", "https", "ftp."],
+        accent_color: "",
       },
     },
     ui: {

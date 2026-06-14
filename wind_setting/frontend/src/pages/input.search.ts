@@ -2,6 +2,7 @@ import { schemaToEntries, type SearchEntry } from "@/schemas/searchEntry";
 import {
   punctSchema, keyBehaviorSchema, overflowSchema,
   quickInputExtraSchema, pinyinSeparatorSchema, shiftExtraSchema, startupExtraSchema,
+  urlInputSchema,
 } from "@/schemas/input.schema";
 
 const tab = "input";
@@ -15,7 +16,11 @@ export const entries: SearchEntry[] = [
   ...schemaToEntries(pinyinSeparatorSchema, { tab, tabLabel, card: "临时拼音" }),
   ...schemaToEntries(shiftExtraSchema,      { tab, tabLabel, card: "临时英文" }),
   ...schemaToEntries(startupExtraSchema,    { tab, tabLabel, card: "默认状态" }),
+  ...schemaToEntries(urlInputSchema,        { tab, tabLabel, card: "网址输入" }),
   // ── 手写控件（非 schema 驱动）──
+  { id: "input.url_input.prefixes", tab, tabLabel, card: "网址输入",
+    title: "触发前缀", hint: "打出完整前缀即进入网址模式，多个用逗号分隔（如 www., http, https, ftp.）",
+    anchor: "input.url_input.prefixes", keywords: ["网址", "URL", "链接", "http", "www"] },
   { id: "input.punct_custom.enabled", tab, tabLabel, card: "字符与标点",
     title: "自定义标点映射", hint: "自定义英文标点的中文/全角替换",
     anchor: "input.punct_custom.enabled" },

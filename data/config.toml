@@ -76,6 +76,13 @@ select_char_key = "ignore"
 [input.phrase]
 min_prefix_length = 2
 
+# URL 临时输入模式：正常输入下打出完整前缀（如 http / www.）即进入网址输入模式，
+# 模式内自由输入网址字符（不触发上屏），空格或回车上屏。默认关闭。
+[input.url_input]
+enabled = false
+prefixes = ["www.", "http", "https", "ftp."]
+accent_color = ""
+
 [ui.candidate]
 font_size = 18
 font_size_follow_theme = true

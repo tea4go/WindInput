@@ -184,6 +184,15 @@ export const inputSchema: PageSchema = [
     label: '记忆前次状态',
     hint: '启用后恢复上次的中英文、全半角和标点状态',
   },
+
+  // ── 网址输入（enabled schema 驱动，prefixes 手写）────
+  { type: 'card', label: '__url_extra__' }, // 占位符，不实际使用
+  {
+    type: 'toggle',
+    key: 'input.url_input.enabled',
+    label: '启用网址输入模式',
+    hint: '打出完整前缀（如 http、www.）即进入网址输入模式，可自由输入网址，空格或回车上屏',
+  },
 ]
 
 // 按 card 分组，供页面按需取用
@@ -209,3 +218,6 @@ export const shiftExtraSchema: PageSchema = inputSchema.slice(18, 22)
 
 /** 默认状态卡片内的记忆字段（bare 模式） */
 export const startupExtraSchema: PageSchema = inputSchema.slice(23, 24)
+
+/** 网址输入卡片内的 enabled 字段（bare 模式，prefixes 手写在后） */
+export const urlInputSchema: PageSchema = inputSchema.slice(25, 26)

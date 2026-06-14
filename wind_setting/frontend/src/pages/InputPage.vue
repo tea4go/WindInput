@@ -433,6 +433,37 @@
       </div>
     </div>
 
+    <!-- 网址输入 -->
+    <div class="settings-card">
+      <div class="card-title">网址输入</div>
+      <SchemaRenderer
+        :schema="urlInputSchema"
+        :form-data="formData"
+        mode="bare"
+      />
+      <div
+        class="setting-item"
+        data-search-anchor="input.url_input.prefixes"
+        :class="{ 'item-disabled': !formData.input.url_input.enabled }"
+      >
+        <div class="setting-info">
+          <label>触发前缀</label>
+          <p class="setting-hint">
+            打出完整前缀即进入网址模式，多个用逗号分隔（如 www., http, https, ftp.）
+          </p>
+        </div>
+        <div class="setting-control">
+          <input
+            type="text"
+            class="url-prefix-input"
+            v-model.lazy="urlPrefixesText"
+            :disabled="!formData.input.url_input.enabled"
+            placeholder="www., http, https, ftp."
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- 默认状态 -->
     <div class="settings-card">
       <div class="card-title">默认状态</div>
@@ -552,6 +583,7 @@ import {
   pinyinSeparatorSchema,
   shiftExtraSchema,
   startupExtraSchema,
+  urlInputSchema,
 } from "@/schemas/input.schema";
 
 const props = defineProps<{
@@ -944,6 +976,17 @@ const tempEnglishConflictMsg = computed(() => {
   );
   return msgs.length > 0 ? msgs.join("；") : "";
 });
+
+// 网址前缀：逗号分隔文本 ⟷ string[]（v-model.lazy，change 时拆分、去空白、去空项）
+const urlPrefixesText = computed({
+  get: () => (props.formData.input.url_input?.prefixes ?? []).join(", "),
+  set: (v: string) => {
+    props.formData.input.url_input.prefixes = v
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  },
+});
 </script>
 
 <style scoped>
@@ -1092,5 +1135,29 @@ const tempEnglishConflictMsg = computed(() => {
   outline: none;
   border-color: hsl(var(--primary));
   box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
+}
+
+/* ========== 网址输入：前缀文本框 ========== */
+.url-prefix-input {
+  width: 280px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  font-size: 14px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--card));
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.url-prefix-input:focus {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
+}
+.url-prefix-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

@@ -70,6 +70,9 @@
 - 新增接口：`TSFLogConfig`（`mode`、`level`）、`TempPinyinConfig`（`trigger_keys`）、`ToolbarConfig`（`visible`）
 - 新增 `getDefaultTSFLogConfig()` 工厂函数
 
+### settings.ts 变更（2026-06-14）
+- 新增接口 `UrlInputConfig`（`enabled`、`prefixes`、`accent_color`）；`InputConfig` 新增字段 `url_input`（URL 临时输入模式）。设置页对应 `InputPage.vue` 的「网址输入」卡片（enabled toggle 走 schema，prefixes 手写逗号分隔输入框）
+
 ### Testing Requirements
 - `pnpm run build`（TypeScript 类型检查）
 - 在 `wails dev` 环境中调用每个 API 函数验证实际返回值
