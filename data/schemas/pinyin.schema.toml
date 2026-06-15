@@ -39,4 +39,4 @@ temp_promote_count = 0
 enabled = false
 
 [learning.freq]
-enabled = false
+enabled = true
