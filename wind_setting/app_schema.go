@@ -11,6 +11,7 @@ import (
 
 	"github.com/bodgit/sevenzip"
 	"github.com/huanfeng/wind_input/pkg/config"
+	"github.com/huanfeng/wind_input/pkg/rpcapi"
 	toml "github.com/pelletier/go-toml/v2"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"gopkg.in/yaml.v3"
@@ -1285,14 +1286,38 @@ func (a *App) DeleteSchema(schemaID string) error {
 	}
 	schemasDir := filepath.Join(configDir, "schemas")
 
-	// 删除方案配置文件（.schema.toml / .schema.yaml 两种格式若都存在则都删，避免残留）
-	for _, suf := range schemaFileSuffixes {
-		schemaFile := filepath.Join(schemasDir, schemaID+suf)
-		if _, err := os.Stat(schemaFile); err == nil {
-			if err := os.Remove(schemaFile); err != nil {
-				return fmt.Errorf("删除方案文件失败: %w", err)
-			}
+	// 扫描用户方案目录，找出 schema.id 匹配的文件并删除。
+	// 不依赖"文件名 == schemaID"的假设：collectSchemaIDs 通过文件内容识别方案，
+	// 删除时也必须走同样的路径，否则文件名与 ID 不一致时会静默跳过。
+	entries, readErr := os.ReadDir(schemasDir)
+	if readErr != nil {
+		return fmt.Errorf("读取用户方案目录失败 (%s): %w", schemasDir, readErr)
+	}
+	fileDeleted := false
+	for _, entry := range entries {
+		if entry.IsDir() || !isSchemaFileName(entry.Name()) {
+			continue
 		}
+		filePath := filepath.Join(schemasDir, entry.Name())
+		data, readFileErr := os.ReadFile(filePath)
+		if readFileErr != nil {
+			continue
+		}
+		var peek struct {
+			Schema struct {
+				ID string `yaml:"id" toml:"id"`
+			} `yaml:"schema" toml:"schema"`
+		}
+		if unmarshalErr := unmarshalSchemaFileData(filePath, data, &peek); unmarshalErr != nil || peek.Schema.ID != schemaID {
+			continue
+		}
+		if removeErr := os.Remove(filePath); removeErr != nil {
+			return fmt.Errorf("删除方案文件失败: %w", removeErr)
+		}
+		fileDeleted = true
+	}
+	if !fileDeleted {
+		return fmt.Errorf("未找到用户方案文件（%s），目录: %s", schemaID, schemasDir)
 	}
 
 	// 删除方案关联的词典目录（如果存在）
@@ -1306,6 +1331,36 @@ func (a *App) DeleteSchema(schemaID string) error {
 	// 清理方案覆盖配置（通过 RPC，wind_input 统一管理 schema_overrides.toml）
 	if a.rpcClient != nil {
 		a.rpcClient.ConfigDeleteSchemaOverride(schemaID)
+	}
+
+	// 从 schema.available 移除已删方案，并在必要时切换 schema.active，
+	// 使 wind_input 立即感知删除，无需用户再手动点"保存设置"。
+	if a.rpcClient != nil {
+		if reply, err := a.rpcClient.ConfigGet([]string{"schema.available", "schema.active"}); err == nil {
+			var setItems []rpcapi.ConfigSetItem
+			if val, ok := reply.Values["schema.available"]; ok {
+				if arr, ok := val.([]interface{}); ok {
+					newArr := make([]interface{}, 0, len(arr))
+					for _, v := range arr {
+						if s, _ := v.(string); s != "" && s != schemaID {
+							newArr = append(newArr, s)
+						}
+					}
+					if len(newArr) != len(arr) {
+						setItems = append(setItems, rpcapi.ConfigSetItem{Key: "schema.available", Value: newArr})
+						// 若被删方案恰好是当前活跃方案，自动切换到剩余第一个
+						if active, _ := reply.Values["schema.active"].(string); active == schemaID && len(newArr) > 0 {
+							if first, _ := newArr[0].(string); first != "" {
+								setItems = append(setItems, rpcapi.ConfigSetItem{Key: "schema.active", Value: first})
+							}
+						}
+					}
+				}
+			}
+			if len(setItems) > 0 {
+				_, _ = a.rpcClient.ConfigSet(setItems)
+			}
+		}
 	}
 
 	return nil

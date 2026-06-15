@@ -132,10 +132,16 @@ const currentThemeOption = computed(() => {
 });
 
 const systemFontOptions = computed(() => {
-  return props.systemFonts.map((font) => ({
-    value: font.family,
-    label: font.display_name || font.family,
-  }));
+  const seenLabels = new Set<string>();
+  const result: { value: string; label: string }[] = [];
+  for (const font of props.systemFonts) {
+    const label = font.display_name || font.family;
+    if (!seenLabels.has(label)) {
+      seenLabels.add(label);
+      result.push({ value: font.family, label });
+    }
+  }
+  return result;
 });
 
 // 状态提示 schema：macOS 上气泡始终锚定光标，position_mode 无效 → 移除「位置模式」项；
@@ -223,7 +229,8 @@ function confirmCmdbarPrefixDialog() {
 }
 function cancelCmdbarPrefixDialog() {
   // 把字段恢复到打开弹框前的值, 让 cmdbarPrefixMode 计算属性切回正确的下拉项
-  props.formData.features.cmdbar.candidate_prefix = cmdbarPrefixFallback.value ?? "";
+  props.formData.features.cmdbar.candidate_prefix =
+    cmdbarPrefixFallback.value ?? "";
   cmdbarPrefixDialogOpen.value = false;
 }
 
@@ -686,7 +693,10 @@ async function copyServerURL() {
 
     <div class="settings-card">
       <div class="card-title">候选窗口</div>
-      <div class="setting-item" data-search-anchor="ui.candidate.font_size_follow_theme">
+      <div
+        class="setting-item"
+        data-search-anchor="ui.candidate.font_size_follow_theme"
+      >
         <div class="setting-info">
           <label>字号跟随主题</label>
           <p class="setting-hint">
@@ -696,14 +706,18 @@ async function copyServerURL() {
         <div class="setting-control">
           <Switch
             :checked="formData.ui.candidate.font_size_follow_theme"
-            @update:checked="formData.ui.candidate.font_size_follow_theme = $event"
+            @update:checked="
+              formData.ui.candidate.font_size_follow_theme = $event
+            "
           />
         </div>
       </div>
       <div
         class="setting-item"
         data-search-anchor="ui.candidate.font_size"
-        :class="{ 'setting-item-disabled': formData.ui.candidate.font_size_follow_theme }"
+        :class="{
+          'setting-item-disabled': formData.ui.candidate.font_size_follow_theme,
+        }"
       >
         <div class="setting-info">
           <label>字体大小</label>
@@ -718,7 +732,9 @@ async function copyServerURL() {
             :disabled="formData.ui.candidate.font_size_follow_theme"
             v-model.number="formData.ui.candidate.font_size"
           />
-          <span class="range-value">{{ formData.ui.candidate.font_size }}px</span>
+          <span class="range-value"
+            >{{ formData.ui.candidate.font_size }}px</span
+          >
         </div>
       </div>
       <div
@@ -758,7 +774,10 @@ async function copyServerURL() {
         :form-data="formData"
         mode="bare"
       />
-      <div class="setting-item" data-search-anchor="features.cmdbar.candidate_prefix">
+      <div
+        class="setting-item"
+        data-search-anchor="features.cmdbar.candidate_prefix"
+      >
         <div class="setting-info">
           <label>命令直通车标注</label>
           <p class="setting-hint">命令候选前的提示符号</p>

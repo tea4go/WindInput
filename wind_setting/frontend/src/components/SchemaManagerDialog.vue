@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { useToast } from "@/composables/useToast";
 import type {
   SchemaConfig,
   SchemaInfo,
@@ -60,6 +61,8 @@ const exportSuccess = ref(false);
 // Import
 const importPreview = ref<ImportPreview | null>(null);
 const importLoading = ref(false);
+
+const { toast } = useToast();
 
 // Delete
 const deleteConfirmID = ref<string | null>(null);
@@ -159,7 +162,6 @@ function openDetail(schemaID: string) {
     });
   }
 }
-
 
 function handleToggleEnabled(schemaID: string) {
   if (isEnabled(schemaID)) {
@@ -302,24 +304,25 @@ function requestDelete(schemaID: string) {
 }
 
 async function confirmDelete() {
-  if (!deleteConfirmID.value) return;
+  // AlertDialogAction 关闭时会同步触发 cancelDelete() 将 deleteConfirmID 置 null，
+  // 必须在首个 await 前捕获快照，否则后续读到的值已是 null。
+  const id = deleteConfirmID.value;
+  const relatedIDs = [...deleteRelatedIDs.value];
+  if (!id) return;
   deleting.value = true;
   try {
-    // 先删除依赖的混输方案
-    for (const rid of deleteRelatedIDs.value) {
+    for (const rid of relatedIDs) {
       await wailsApi.deleteSchema(rid);
       if (selectedID.value === rid) selectedID.value = null;
     }
-    // 再删除主方案
-    await wailsApi.deleteSchema(deleteConfirmID.value);
-    if (selectedID.value === deleteConfirmID.value) {
-      selectedID.value = null;
-    }
-    emit("schemasChanged");
+    await wailsApi.deleteSchema(id);
+    if (selectedID.value === id) selectedID.value = null;
     deleteConfirmID.value = null;
     deleteRelatedIDs.value = [];
-  } catch (e) {
-    console.error("删除方案失败", e);
+    emit("schemasChanged");
+  } catch (e: any) {
+    const msg = typeof e === "string" ? e : (e?.message ?? "删除失败");
+    toast(msg, "error");
   } finally {
     deleting.value = false;
   }
@@ -733,13 +736,13 @@ function close() {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel @click="cancelDelete">取消</AlertDialogCancel>
-          <AlertDialogAction
+          <Button
             :disabled="deleting"
             class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             @click="confirmDelete"
           >
             {{ deleting ? "删除中..." : "删除" }}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
