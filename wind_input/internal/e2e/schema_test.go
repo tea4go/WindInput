@@ -31,21 +31,22 @@ func TestShuangpinTwoSyllable(t *testing.T) {
 	AssertGolden(t, "shuangpin_two_syllable", rec.Render())
 }
 
-// TestMixedFusionConvert 验证混输方案码表+拼音融合：输入 "wgkg" 得融合候选（码表字 +
-// 拼音字），engine_name=mixed，数字 2 选第二候选上屏。
+// TestMixedFusionConvert 验证混输方案码表+拼音融合：输入 "wen" 得融合候选（码表字"仍" +
+// 拼音字文/温/问等），engine_name=mixed，数字 2 选第二候选上屏。
+// 使用完整拼音音节而非缩拼，避免候选存在性依赖特定词典版本。
 func TestMixedFusionConvert(t *testing.T) {
 	h := mustHarness(t, "wubi86_pinyin")
 	rec := NewRecorder(h).
-		Type("wgkg").
+		Type("wen").
 		SelectCandidate(2)
 	AssertGolden(t, "mixed_fusion_convert", rec.Render())
 }
 
-// TestMixedSpaceCommit 验证混输方案空格上屏首选：输入 "wgkg" 后空格上屏融合候选首选。
+// TestMixedSpaceCommit 验证混输方案空格上屏首选：输入 "wen" 后空格上屏融合候选首选。
 func TestMixedSpaceCommit(t *testing.T) {
 	h := mustHarness(t, "wubi86_pinyin")
 	rec := NewRecorder(h).
-		Type("wgkg").
+		Type("wen").
 		Space()
 	AssertGolden(t, "mixed_space_commit", rec.Render())
 }

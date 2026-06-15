@@ -15,26 +15,25 @@ package e2e
 
 import "testing"
 
-// TestLearningFreqRecorded 验证重复选词累积词频：拼音方案下选「拟好」5 次并
-// FlushLearning，词频桶中应存在 ("nihao","拟好") 记录且 Count==4（首次不计，误选保护）。
+// TestLearningFreqRecorded 验证重复选词累积词频：拼音方案下重复选第 1 候选 5 次并
+// FlushLearning，词频桶中应存在对应记录且 Count==4（首次不计，误选保护）。
+// 选第 1 候选而非固定文字，避免测试依赖特定词典版本的候选顺序。
 func TestLearningFreqRecorded(t *testing.T) {
 	h := mustHarness(t, "pinyin")
 
+	// 先确定 nihao 第 1 候选的文字（由词典决定，但每次查询稳定）
+	h.Type("nihao")
+	initState := h.Coord.ExportState()
+	if len(initState.Candidates) == 0 {
+		t.Fatal("nihao 无候选，拼音词典可能未就绪")
+	}
+	targetText := initState.Candidates[0].Text
+	h.SelectCandidate(1) // 第一次选择（首次不计入词频）
+
 	const selections = 5
-	for range [selections]struct{}{} {
+	for range [selections - 1]struct{}{} {
 		h.Type("nihao")
-		state := h.Coord.ExportState()
-		pos := -1
-		for i, c := range state.Candidates {
-			if c.Text == "拟好" {
-				pos = i + 1 // SelectCandidate 是 1-indexed
-				break
-			}
-		}
-		if pos < 0 {
-			t.Fatal("nihao 候选中未找到「拟好」，请确认拼音词典包含该词")
-		}
-		h.SelectCandidate(pos)
+		h.SelectCandidate(1)
 	}
 	h.FlushLearning()
 
@@ -43,12 +42,12 @@ func TestLearningFreqRecorded(t *testing.T) {
 		t.Fatal("harness store 为 nil")
 	}
 	schemaID := h.EngineMgr.GetCurrentSchemaID()
-	rec, err := store.GetFreq(schemaID, "nihao", "拟好")
+	rec, err := store.GetFreq(schemaID, "nihao", targetText)
 	if err != nil {
 		t.Fatalf("GetFreq(%q): %v", schemaID, err)
 	}
 	if got, want := int(rec.Count), selections-1; got != want {
-		t.Errorf("选 %d 次后 拟好 词频 Count = %d, 期望 %d（首次选择不计入）", selections, got, want)
+		t.Errorf("选 %d 次后 %s 词频 Count = %d, 期望 %d（首次选择不计入）", selections, targetText, got, want)
 	}
 }
 

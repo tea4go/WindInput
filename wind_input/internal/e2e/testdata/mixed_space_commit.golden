@@ -1,4 +1,4 @@
->>> type wgkg
+>>> type wen
 {
   "result_type": "update_composition",
   "state": {
@@ -7,48 +7,33 @@
     "chinese_punctuation": true,
     "effective_mode": "chinese",
     "engine_name": "mixed",
-    "input_buffer": "wgkg",
-    "input_cursor_pos": 4,
+    "input_buffer": "wen",
+    "input_cursor_pos": 3,
     "preedit_display": "",
     "candidates": [
       {
-        "text": "鸽",
-        "code": "wgkg",
+        "text": "仍",
+        "code": "wen",
         "weight": 0
       },
       {
-        "text": "俉",
-        "code": "wgkg",
+        "text": "问",
+        "code": "wen",
         "weight": 0
       },
       {
-        "text": "万",
-        "code": "wan",
+        "text": "仍以",
+        "code": "weny",
         "weight": 0
       },
       {
-        "text": "为",
-        "code": "wei",
-        "weight": 0
-      },
-      {
-        "text": "哇",
-        "code": "wa",
-        "weight": 0
-      },
-      {
-        "text": "嗡",
-        "code": "weng",
-        "weight": 0
-      },
-      {
-        "text": "外",
-        "code": "wai",
+        "text": "仍属",
+        "code": "went",
         "weight": 0
       }
     ],
     "current_page": 1,
-    "total_pages": 4,
+    "total_pages": 1,
     "selected_index": 0,
     "candidates_per_page": 7
   }
@@ -56,7 +41,7 @@
 >>> key space
 {
   "result_type": "insert_text",
-  "commit_text": "鸽",
+  "commit_text": "仍",
   "state": {
     "chinese_mode": true,
     "full_width": false,
