@@ -9,6 +9,7 @@ package e2e
 import (
 	"log/slog"
 
+	"github.com/huanfeng/wind_input/internal/schema"
 	"github.com/huanfeng/wind_input/pkg/config"
 )
 
@@ -36,6 +37,10 @@ type Options struct {
 	// Configure 在 DefaultConfig 之上对配置做任意覆盖（nil = 不改）。用于按用例开启/调整
 	// 默认关闭的功能（如 url_input.enabled），避免为每个开关都加专用 Options 字段。
 	Configure func(*config.Config)
+	// ConfigureSchema 在方案加载后、UpdateLearningConfig 之前对 Schema 做任意覆盖
+	// （nil = 不改）。用于测试需要开启生产默认关闭功能（如 freq.enabled）而不修改
+	// 生产 schema 文件的场景。
+	ConfigureSchema func(*schema.Schema)
 }
 
 func (o Options) schemaID() string {

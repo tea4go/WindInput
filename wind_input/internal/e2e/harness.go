@@ -144,6 +144,9 @@ func BuildHarness(opts Options) (*Harness, error) {
 	}
 
 	// 学习策略 + 过滤模式（main.go:383-391）
+	if opts.ConfigureSchema != nil && activeSchema != nil {
+		opts.ConfigureSchema(activeSchema)
+	}
 	if activeSchema != nil {
 		engineMgr.UpdateLearningConfig(&activeSchema.Learning)
 	}

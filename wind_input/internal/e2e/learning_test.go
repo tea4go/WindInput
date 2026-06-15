@@ -13,13 +13,30 @@
 //     （docs/design/freq-sort-mode.md），故本文件只回归"记录"管线，不断言候选顺序变化。
 package e2e
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/huanfeng/wind_input/internal/schema"
+)
 
 // TestLearningFreqRecorded 验证重复选词累积词频：拼音方案下重复选第 1 候选 5 次并
 // FlushLearning，词频桶中应存在对应记录且 Count==5（每次选择均记录）。
 // 选第 1 候选而非固定文字，避免测试依赖特定词典版本的候选顺序。
+// 通过 ConfigureSchema 显式启用 freq，不依赖生产 schema 默认值。
 func TestLearningFreqRecorded(t *testing.T) {
-	h := mustHarness(t, "pinyin")
+	h, err := BuildHarness(Options{
+		SchemaID: "pinyin",
+		ConfigureSchema: func(s *schema.Schema) {
+			if s.Learning.Freq == nil {
+				s.Learning.Freq = &schema.FreqSpec{}
+			}
+			s.Learning.Freq.Enabled = true
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildHarness: %v", err)
+	}
+	t.Cleanup(h.Close)
 
 	// 先确定 nihao 第 1 候选的文字（由词典决定，但每次查询稳定）
 	h.Type("nihao")
