@@ -165,13 +165,12 @@ type addWordState struct {
 
 // quickInputState 快捷输入模式状态
 type quickInputState struct {
-	quickInputMode              bool                   // 是否处于快捷输入模式
-	quickInputTriggerKey        string                 // 当前使用的触发键类型（如 "semicolon"）
-	quickInputBuffer            string                 // 触发键后的输入缓冲区（不含触发键本身）；拼音上下文下即拼音码
-	quickInputPinyinCursorPos   int                    // 拼音上下文光标位置（在 quickInputBuffer 中）
-	quickInputPinyinCommitted   string                 // 拼音上下文部分上屏累积文本
-	quickInputPinyinDictSwapped bool                   // 是否已交换词库层（仅码表引擎下为 true）
-	savedLayout                 config.CandidateLayout // 进入快捷输入前的布局（用于退出时恢复）
+	quickInputMode            bool                   // 是否处于快捷输入模式
+	quickInputTriggerKey      string                 // 当前使用的触发键类型（如 "semicolon"）
+	quickInputBuffer          string                 // 触发键后的输入缓冲区（不含触发键本身）；拼音上下文下即拼音码
+	quickInputPinyinCursorPos int                    // 拼音上下文光标位置（在 quickInputBuffer 中）
+	quickInputPinyinCommitted string                 // 拼音上下文部分上屏累积文本
+	savedLayout               config.CandidateLayout // 进入快捷输入前的布局（用于退出时恢复）
 }
 
 // specialModeState 引导键特殊模式（自定义码表）状态
@@ -1056,9 +1055,11 @@ func (c *Coordinator) clearState() {
 	c.expandedGroupTemplate = ""
 	c.tempEnglishMode = false
 	c.tempEnglishBuffer = ""
-	// 清除临时拼音状态时，同步卸载引擎层的拼音词库层，避免污染五笔查询
-	if c.tempPinyinMode && c.engineMgr != nil {
-		c.engineMgr.DeactivateTempPinyin()
+	// 卸载拼音词库层（避免污染五笔查询）——经决策器单点 diff（I3）一次性覆盖临时拼音 +
+	// 快捷输入拼音子上下文两种挂载来源；无条件执行（mounted 去抖），不依赖各 mode 布尔，
+	// 防其已被其他路径置 false 时词库层泄漏。
+	if c.decider != nil {
+		c.decider.applyEngineDiff(0)
 	}
 	c.tempPinyinMode = false
 	c.tempPinyinBuffer = ""
@@ -1076,10 +1077,8 @@ func (c *Coordinator) clearState() {
 	c.addWordChars = nil
 	c.addWordLen = 0
 	c.addWordCode = ""
-	// 清理快捷输入模式状态（恢复布局需在重置标志前执行）
-	// 拼音上下文的词库层卸载无条件执行（幂等，dictSwapped 守护）——不依赖 quickInputMode
-	// 布尔，防其已被其他路径置 false 时词库层泄漏。
-	c.setQuickInputPinyinLayer(false)
+	// 清理快捷输入模式状态（恢复布局需在重置标志前执行）。拼音子上下文的词库层卸载已由
+	// 上方统一的 applyEngineDiff(0) 覆盖（mounted 去抖、不依赖 quickInputMode 布尔）。
 	if c.quickInputMode {
 		if c.savedLayout != "" && c.uiManager != nil {
 			c.uiManager.SetCandidateLayout(c.savedLayout)

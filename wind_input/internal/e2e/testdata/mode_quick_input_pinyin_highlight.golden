@@ -71,7 +71,8 @@
     "total_pages": 1,
     "selected_index": 0,
     "candidates_per_page": 7,
-    "quick_input_mode": true
+    "quick_input_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key down
@@ -127,7 +128,8 @@
     "total_pages": 1,
     "selected_index": 1,
     "candidates_per_page": 7,
-    "quick_input_mode": true
+    "quick_input_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key down
@@ -183,7 +185,8 @@
     "total_pages": 1,
     "selected_index": 2,
     "candidates_per_page": 7,
-    "quick_input_mode": true
+    "quick_input_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key up
@@ -239,6 +242,7 @@
     "total_pages": 1,
     "selected_index": 1,
     "candidates_per_page": 7,
-    "quick_input_mode": true
+    "quick_input_mode": true,
+    "pinyin_layer_mounted": true
   }
 }

@@ -57,6 +57,10 @@ type State struct {
 	// 特殊模式输入（独立于 InputBuffer/PreeditDisplay；仅 special 模式下非空）
 	SpecialActiveID string `json:"special_active_id,omitempty"`
 	SpecialBuffer   string `json:"special_buffer,omitempty"`
+
+	// 引擎层挂载观测（I3 applyEngineDiff）：拼音词库层是否已挂载。供 golden 验证对称挂卸
+	// （进临时拼音/快捷拼音子上下文=true、退出=false，证明无泄漏）。仅 true 时输出。
+	PinyinLayerMounted bool `json:"pinyin_layer_mounted,omitempty"`
 }
 
 // ExportState 返回当前 Coordinator 核心状态的快照。线程安全。
@@ -107,6 +111,7 @@ func (c *Coordinator) ExportState() State {
 		AddWordLen:         c.addWordLen,
 		SpecialActiveID:    c.specialActiveID,
 		SpecialBuffer:      c.specialBuffer,
+		PinyinLayerMounted: c.decider != nil && c.decider.mounted&CapPinyinLayer != 0,
 	}
 }
 

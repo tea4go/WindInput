@@ -179,8 +179,10 @@ func (c *Coordinator) setupTempPinyinMode(triggerKey string) (string, bool) {
 			c.logger.Warn("Failed to load pinyin engine for temp pinyin", "error", err)
 			return "", false
 		}
-		// 激活拼音词库层（进入时注册，退出时卸载，避免污染五笔查询）
-		c.engineMgr.ActivateTempPinyin()
+	}
+	// 激活拼音词库层（避免污染五笔查询）——经决策器单点 diff（I3），退出时对称卸载。
+	if c.decider != nil {
+		c.decider.applyEngineDiff(CapPinyinLayer)
 	}
 
 	c.tempPinyinMode = true
@@ -253,9 +255,9 @@ func (c *Coordinator) exitTempPinyinMode(commit bool, text string) *bridge.KeyEv
 	c.clearHostUIState()
 	c.hideUI()
 
-	// 卸载拼音词库层，避免污染五笔引擎的查询结果
-	if c.engineMgr != nil {
-		c.engineMgr.DeactivateTempPinyin()
+	// 卸载拼音词库层，避免污染五笔引擎的查询结果（I3 单点 diff，对称卸载）
+	if c.decider != nil {
+		c.decider.applyEngineDiff(0)
 	}
 
 	c.logger.Debug("Exited temp pinyin mode", "commit", commit, "textLen", len(text))
@@ -343,7 +345,9 @@ func (c *Coordinator) enterTempPinyinFromZBuffer(initialBuffer, rewindBuffer str
 			c.logger.Warn("Failed to load pinyin engine for z fallback", "error", err)
 			return nil
 		}
-		c.engineMgr.ActivateTempPinyin()
+	}
+	if c.decider != nil {
+		c.decider.applyEngineDiff(CapPinyinLayer) // 拼音层挂载（I3 单点 diff）
 	}
 
 	c.tempPinyinMode = true
@@ -378,8 +382,8 @@ func (c *Coordinator) clearTempPinyinModeStateForRewind() {
 	c.tempPinyinCommitted = ""
 	c.tempPinyinTriggerKey = ""
 	c.preeditDisplay = ""
-	if c.engineMgr != nil {
-		c.engineMgr.DeactivateTempPinyin()
+	if c.decider != nil {
+		c.decider.applyEngineDiff(0) // 拼音层卸载（I3 单点 diff）
 	}
 }
 

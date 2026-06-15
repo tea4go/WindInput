@@ -71,7 +71,8 @@
     "total_pages": 1,
     "selected_index": 0,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> type hao
@@ -97,7 +98,8 @@
     "total_pages": 1,
     "selected_index": 0,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key esc

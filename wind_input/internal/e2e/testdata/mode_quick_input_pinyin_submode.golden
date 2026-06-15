@@ -71,7 +71,8 @@
     "total_pages": 13,
     "selected_index": 0,
     "candidates_per_page": 7,
-    "quick_input_mode": true
+    "quick_input_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key space

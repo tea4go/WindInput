@@ -31,6 +31,11 @@ type decider struct {
 	rewindBuffer   string // 夺取前的正常输入 inputBuffer 快照（回退时还原）
 	rewindHostText string // 夺取瞬间的 host buffer（判定"未编辑"：当前 host buffer 与此一致才可回退）
 	rewindCleanup  func() // 清当前夺取 host 的模式状态 + 引擎层（各 host 注入）
+
+	// mounted 是当前已挂载的「需对称管理」引擎资源位集（I3 单点 diff 的唯一真值源）。
+	// 目前仅 CapPinyinLayer（拼音词库层，码表引擎下交换、混输 no-op）。English/拼音引擎/生僻字
+	// 是只加载不卸载的幂等资源，不进 diff。各挂卸入口统一调 applyEngineDiff，杜绝散落不对称。
+	mounted Capability
 }
 
 func newDecider(c *Coordinator) *decider {
@@ -276,10 +281,31 @@ func (d *decider) rewindHijack() *bridge.KeyEventResult {
 	return c.compositionUpdateResult()
 }
 
+// applyEngineDiff 据 needed 与已挂载资源的差集，单点驱动需对称管理的引擎层挂卸（I3）。
+// 各挂卸入口（setup/exit/clearState/rewind/quick_input 拼音子上下文）统一改调本方法，传入「此刻
+// 需要的资源位集」，由 mounted 去抖：仅在跨边界时真正调引擎，杜绝散落不对称 + 重复挂卸。
+//
+// CapPinyinLayer：码表引擎下 ActivateTempPinyin 移码表层挂拼音层、DeactivateTempPinyin 逆操作；
+// 混输引擎下引擎内部 no-op（见 manager_temp_pinyin.go）。引擎调用本身幂等，mounted 仅作去抖。
+// English/拼音引擎/生僻字是只加载不卸载的幂等资源，不在此 diff（保留各自 EnsureXxxLoaded 调用）。
+func (d *decider) applyEngineDiff(needed Capability) {
+	if d.c.engineMgr == nil {
+		d.mounted = needed
+		return
+	}
+	added, removed := computeCapabilityDiff(d.mounted, needed)
+	if added&CapPinyinLayer != 0 {
+		d.c.engineMgr.ActivateTempPinyin()
+	}
+	if removed&CapPinyinLayer != 0 {
+		d.c.engineMgr.DeactivateTempPinyin()
+	}
+	d.mounted = needed
+}
+
 // logSwitch 在宿主切换边界记 DEBUG 遥测：宿主名 + 容量 diff（应挂载/卸载的引擎资源）+
-// CompositionPhase。本批次为**只读观测**（容量 diff 不真正驱动 ActivateTempPinyin/Deactivate——
-// 引擎副作用仍由 setup/exit/clearState 既有路径管），用于第 2 批 applyEngineDiff 接线前的真机
-// 验证与去抖统计（设计文档第十一节）。遵守日志隐私：仅元数据，不记 buffer/候选文本。
+// CompositionPhase。容量 diff 的真实挂卸已由 applyEngineDiff 在各入口落地（I3）；本方法仅
+// 只读观测去抖统计（设计文档第十一节）。遵守日志隐私：仅元数据，不记 buffer/候选文本。
 func (d *decider) logSwitch(from, to Processor) {
 	if d.c.logger == nil || from == to {
 		return

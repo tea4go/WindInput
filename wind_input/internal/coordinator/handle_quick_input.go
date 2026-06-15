@@ -351,7 +351,9 @@ func (c *Coordinator) selectQuickInputCandidate(index int) *bridge.KeyEventResul
 // exitQuickInputMode 退出快捷输入模式
 func (c *Coordinator) exitQuickInputMode(commit bool, text string) *bridge.KeyEventResult {
 	// 清理拼音上下文的引擎词库层（防御性：正常路径由 exitQuickInputPinyinMode 提前清理）
-	c.setQuickInputPinyinLayer(false)
+	if c.decider != nil {
+		c.decider.applyEngineDiff(0) // I3 单点 diff
+	}
 	c.quickInputPinyinCursorPos = 0
 	c.quickInputPinyinCommitted = ""
 

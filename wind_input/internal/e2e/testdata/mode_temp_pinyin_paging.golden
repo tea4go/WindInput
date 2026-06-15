@@ -15,7 +15,8 @@
     "total_pages": 1,
     "selected_index": 0,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> type shi
@@ -71,7 +72,8 @@
     "total_pages": 1,
     "selected_index": 0,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key pagedown
@@ -127,7 +129,8 @@
     "total_pages": 1,
     "selected_index": 0,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key pageup
@@ -183,7 +186,8 @@
     "total_pages": 1,
     "selected_index": 0,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key down
@@ -239,7 +243,8 @@
     "total_pages": 1,
     "selected_index": 1,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key down
@@ -295,7 +300,8 @@
     "total_pages": 1,
     "selected_index": 2,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
 >>> key up
@@ -351,6 +357,7 @@
     "total_pages": 1,
     "selected_index": 1,
     "candidates_per_page": 7,
-    "temp_pinyin_mode": true
+    "temp_pinyin_mode": true,
+    "pinyin_layer_mounted": true
   }
 }
