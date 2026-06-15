@@ -67,6 +67,12 @@ type SearchOptions struct {
 	SortMode candidate.CandidateSortMode // 排序模式，空值默认为词频排序
 }
 
+// perLayerNOOffset 跨层 NaturalOrder 偏移量：每个词库层的候选 NaturalOrder 叠加
+// layerIdx × perLayerNOOffset，确保声明靠前的词库候选全局 NaturalOrder 更小，
+// 从而在无权重差异时按词库声明顺序排列。
+// 取 1e7（1 千万）可覆盖任意实际词库条目规模（最大码表通常不超过百万条）。
+const perLayerNOOffset = 10_000_000
+
 // seenIdxPool 复用 searchInternal 中的去重 map。每次按键都会触发一轮 search，
 // map 反复 make/丢弃在 alloc_space 中占据非常显著的份额（profile 中 ~227 MB 累计）。
 // Put 时调用 clear() 确保下次取出是空 map。
@@ -233,7 +239,7 @@ func (c *CompositeDict) searchInternal(code string, opt SearchOptions, isPrefix 
 	}
 	results := make([]candidate.Candidate, 0, resultsCap)
 
-	for _, layer := range c.layers {
+	for layerIdx, layer := range c.layers {
 		var layerResults []candidate.Candidate
 		if isPrefix {
 			layerLimit := prefixSafeLimit
@@ -246,6 +252,9 @@ func (c *CompositeDict) searchInternal(code string, opt SearchOptions, isPrefix 
 		}
 
 		for _, cand := range layerResults {
+			// 叠加层偏移：layerIdx × perLayerNOOffset，使声明靠前的词库候选
+			// NaturalOrder 天然小于后续词库，确保无权重时按词库声明顺序排列。
+			cand.NaturalOrder += layerIdx * perLayerNOOffset
 			if idx, exists := seenIdx[cand.Text]; exists {
 				// 同 Text 词条已存在：继承更高的权重
 				if cand.Weight > results[idx].Weight {
@@ -255,9 +264,13 @@ func (c *CompositeDict) searchInternal(code string, opt SearchOptions, isPrefix 
 				// 最短码离输入最近，其 NaturalOrder 代表该字词在词库中最早出现的位置。
 				// 不按此修正会导致代表条目携带长码高权重的 NaturalOrder（偏后），
 				// 使该候选在自然顺序排序中错排到后面。
+				// 注：仅当新 NaturalOrder 更小时才更新，防止后续层（layerIdx 更大、偏移更高）
+				// 覆盖先行层的顺序位置，保持词库声明优先级不变。
 				if isPrefix && len(cand.Code) < len(results[idx].Code) {
 					results[idx].Code = cand.Code
-					results[idx].NaturalOrder = cand.NaturalOrder
+					if cand.NaturalOrder < results[idx].NaturalOrder {
+						results[idx].NaturalOrder = cand.NaturalOrder
+					}
 				}
 				continue
 			}
