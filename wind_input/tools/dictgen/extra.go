@@ -67,7 +67,11 @@ func classifyExtraEntry(text string) extraCategory {
 // parseExtraDict 解析 extra 词库文件（rime-wubi-jidian extra 格式）
 // 列顺序：text<TAB>code[<TAB>weight][<TAB>note]
 // 跳过 ## 分组注释、空行、# 行
-func parseExtraDict(path string) ([]Entry, error) {
+//
+// 容错：源数据偶有 code 列被错填（如 "白狐\t白狐\t5" 把词本身填进编码列），
+// 这类非法编码（非纯 a-y 五笔码）会按五笔词组取码规则用 charCodes 单字反查表
+// 重新合成；无法合成（缺字）则丢弃并告警。charCodes 为 nil 时退化为仅丢弃。
+func parseExtraDict(path string, charCodes map[rune]string) ([]Entry, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -102,6 +106,25 @@ func parseExtraDict(path string) ([]Entry, error) {
 		if text == "" || code == "" {
 			continue
 		}
+		// 容错：code 列被错填（含中文/数字/符号等非字母字符，如 "白狐\t白狐"）时
+		// 按五笔规律重新合成；无法合成（缺字）则丢弃。纯 a-z 编码（含英文桶的 z 码，
+		// 如 "brz"）视为合法直接放行，不做五笔校验。
+		isAlphaCode := true
+		for _, c := range code {
+			if c < 'a' || c > 'z' {
+				isAlphaCode = false
+				break
+			}
+		}
+		if !isAlphaCode {
+			if fixed, ok := encodePhrase(text, charCodes); ok && isValidCode(fixed) {
+				fmt.Printf("      [extra] 修正非法编码: %q  %q → %q\n", text, code, fixed)
+				code = fixed
+			} else {
+				fmt.Printf("      [extra] 跳过非法编码行: %q (code=%q，无法按五笔规律合成)\n", text, code)
+				continue
+			}
+		}
 		weight := 0
 		if len(parts) >= 3 {
 			if w, err := strconv.Atoi(strings.TrimSpace(parts[2])); err == nil {
@@ -121,7 +144,7 @@ func parseExtraDict(path string) ([]Entry, error) {
 
 // processExtra 处理扩展词库：分类 + 加权 + 写出 4 个 yaml 文件。
 // 文件名按 cfg.OutputPath 的后缀模式派生（保持与主输出一致：dev 带 .out / build 不带）。
-func processExtra(cfg *Config, unigram map[string]int64, logMedian float64) error {
+func processExtra(cfg *Config, unigram map[string]int64, logMedian float64, charCodes map[rune]string) error {
 	if !cfg.Extra.Enabled {
 		return nil
 	}
@@ -134,7 +157,7 @@ func processExtra(cfg *Config, unigram map[string]int64, logMedian float64) erro
 	}
 
 	fmt.Printf("\n[extra] 处理扩展词库: %s\n", cfg.Extra.InputPath)
-	entries, err := parseExtraDict(cfg.Extra.InputPath)
+	entries, err := parseExtraDict(cfg.Extra.InputPath, charCodes)
 	if err != nil {
 		return fmt.Errorf("解析 extra 失败: %w", err)
 	}

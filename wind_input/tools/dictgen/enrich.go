@@ -723,6 +723,9 @@ func enrich(cfg *Config) error {
 	}
 	fmt.Printf("      %s: %d 条\n", cfg.JidianPath, len(jidianEntries))
 
+	// 单字→首选编码反查表：供自定义词反查、extra 非法 code 按五笔规律修正复用
+	charCodes := buildCharCodeMap(jidianEntries)
+
 	// 3. 过滤
 	fmt.Printf("[3/4] 过滤 + 补充词频...\n")
 	filterStats := make(map[string]int)
@@ -774,7 +777,6 @@ func enrich(cfg *Config) error {
 	if cfg.CustomWordsPath != "" {
 		if _, statErr := os.Stat(cfg.CustomWordsPath); statErr == nil {
 			fmt.Printf("      加载自定义词表: %s\n", cfg.CustomWordsPath)
-			charCodes := buildCharCodeMap(jidianEntries)
 			customEntries, cerr := loadCustomWords(cfg.CustomWordsPath, charCodes, unigram, logMedian, cfg)
 			if cerr != nil {
 				fmt.Printf("      [警告] 自定义词表加载失败: %v\n", cerr)
@@ -890,7 +892,7 @@ func enrich(cfg *Config) error {
 
 	// 扩展词库处理（按字符类型拆分为 cjk / emoji / english / symbols 四个文件）
 	if cfg.Extra.Enabled {
-		if err := processExtra(cfg, unigram, logMedian); err != nil {
+		if err := processExtra(cfg, unigram, logMedian, charCodes); err != nil {
 			fmt.Printf("      [警告] extra 处理失败: %v\n", err)
 		}
 	}
