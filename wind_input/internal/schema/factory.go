@@ -1119,10 +1119,8 @@ func ResolveDictPath(exeDir, dataDir, path string) string {
 func wdbOnlyInDir(srcPath string) string {
 	dir := filepath.Dir(srcPath)
 	base := filepath.Base(srcPath)
-	for _, suf := range []string{".dict.yaml", ".dict.toml"} {
-		if stem, ok := strings.CutSuffix(base, suf); ok {
-			return filepath.Join(dir, stem+".wdb")
-		}
+	if stem, ok := strings.CutSuffix(base, ".dict.yaml"); ok {
+		return filepath.Join(dir, stem+".wdb")
 	}
 	return ""
 }

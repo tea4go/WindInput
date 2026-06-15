@@ -53,12 +53,6 @@ func TestWdbOnlyInDir(t *testing.T) {
 			wantDir:  filepath.Join("data", "schemas", "wubi"),
 			wantBase: "wubi.wdb",
 		},
-		{
-			name:     "toml后缀",
-			src:      filepath.Join("data", "schemas", "wubi", "wubi.dict.toml"),
-			wantDir:  filepath.Join("data", "schemas", "wubi"),
-			wantBase: "wubi.wdb",
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

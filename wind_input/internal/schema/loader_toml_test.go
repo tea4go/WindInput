@@ -27,16 +27,16 @@ engine:
 dictionaries:
   - id: main
     label: "主"
-    path: "a.dict.toml"
+    path: "a.dict.yaml"
     type: rime_codetable
     default: true
   - id: extra
-    path: "b.dict.toml"
+    path: "b.dict.yaml"
     type: rime_codetable
     default_enabled: true
     weight_as_order: true
   - id: off
-    path: "c.dict.toml"
+    path: "c.dict.yaml"
     type: rime_codetable
     enabled: false
 learning:
@@ -74,20 +74,20 @@ schema = "pinyin"
 [[dictionaries]]
 id = "main"
 label = "主"
-path = "a.dict.toml"
+path = "a.dict.yaml"
 type = "rime_codetable"
 default = true
 
 [[dictionaries]]
 id = "extra"
-path = "b.dict.toml"
+path = "b.dict.yaml"
 type = "rime_codetable"
 default_enabled = true
 weight_as_order = true
 
 [[dictionaries]]
 id = "off"
-path = "c.dict.toml"
+path = "c.dict.yaml"
 type = "rime_codetable"
 enabled = false
 
@@ -241,7 +241,7 @@ enabled = false
 		t.Fatalf("extra.enabled 覆盖未生效: %+v", extra.Enabled)
 	}
 	// extra 的内置字段（path/weight_as_order）应保留
-	if extra.Path != "b.dict.toml" || !extra.WeightAsOrder {
+	if extra.Path != "b.dict.yaml" || !extra.WeightAsOrder {
 		t.Fatalf("extra 内置字段未保留: %+v", extra)
 	}
 }

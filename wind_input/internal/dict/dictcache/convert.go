@@ -167,14 +167,14 @@ func LoadCodeTableMetaFromWdb(reader *binformat.DictReader) (*CodeTableMeta, err
 // RimePinyinSourcePaths 返回拼音词库的所有源文件路径（用于缓存失效检测）
 // mainDictPath 为主词库文件路径，自动从 import_tables 发现关联词库及补丁文件
 func RimePinyinSourcePaths(mainDictPath string) []string {
-	paths := dictFilesFor(mainDictPath)
+	paths := []string{mainDictPath}
 	dictDir := filepath.Dir(mainDictPath)
 
 	importFiles := discoverRimePinyinFiles(mainDictPath)
 	for _, name := range importFiles {
 		p := filepath.Join(dictDir, name)
 		if _, err := os.Stat(p); err == nil {
-			paths = append(paths, dictFilesFor(p)...)
+			paths = append(paths, p)
 		}
 	}
 
@@ -191,15 +191,14 @@ func RimePinyinSourcePaths(mainDictPath string) []string {
 
 // discoverRimePinyinFiles 从主词库的 import_tables 发现关联词库的相对路径
 // 严格只加载 import_tables 中声明的词库，保留原始路径结构（如 "cn_dicts/8105.dict.yaml"）。
-// 兄弟词库扩展名跟随主词库格式（split→.dict.toml，rime→.dict.yaml）。
+// 兄弟词库扩展名固定为 .dict.yaml。
 func discoverRimePinyinFiles(mainDictPath string) []string {
 	hdr, _ := ReadDictHeader(mainDictPath)
-	suffix := dictSuffixOf(mainDictPath)
 
 	var files []string
 	for _, name := range hdr.ImportTables {
-		// 保留原始路径: "cn_dicts/8105" → "cn_dicts/8105.dict.yaml"（或 .dict.toml）
-		files = append(files, name+suffix)
+		// 保留原始路径: "cn_dicts/8105" → "cn_dicts/8105.dict.yaml"
+		files = append(files, name+dictSuffixYAML)
 	}
 
 	return files
@@ -284,9 +283,8 @@ func ConvertRimeCodetableToWdb(mainDictPath, wdbPath string, logger *slog.Logger
 
 	// 2. 发现关联词库：import_tables + 目录扫描
 	importNames := discoverRimeCodetableImports(mainDictPath)
-	importSuffix := dictSuffixOf(mainDictPath)
 	for _, name := range importNames {
-		path := filepath.Join(dictDir, name+importSuffix)
+		path := filepath.Join(dictDir, name+dictSuffixYAML)
 		if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
 			continue
 		}
@@ -391,15 +389,14 @@ func ConvertRimeCodetableToWdb(mainDictPath, wdbPath string, logger *slog.Logger
 // RimeCodetableSourcePaths 返回 rime 码表词库的所有源文件路径（用于缓存失效检测）
 // mainDictPath 为主词库文件路径，自动发现关联词库及补丁文件
 func RimeCodetableSourcePaths(mainDictPath string) []string {
-	paths := dictFilesFor(mainDictPath)
+	paths := []string{mainDictPath}
 	dictDir := filepath.Dir(mainDictPath)
 
 	importNames := discoverRimeCodetableImports(mainDictPath)
-	importSuffix := dictSuffixOf(mainDictPath)
 	for _, name := range importNames {
-		p := filepath.Join(dictDir, name+importSuffix)
+		p := filepath.Join(dictDir, name+dictSuffixYAML)
 		if _, err := os.Stat(p); err == nil {
-			paths = append(paths, dictFilesFor(p)...)
+			paths = append(paths, p)
 		}
 	}
 
@@ -416,9 +413,9 @@ func discoverRimeCodetableImports(mainDictPath string) []string {
 	return hdr.ImportTables
 }
 
-// loadRimeCodetableFile 解析 rime 格式的码表词库（.dict.yaml 或 split .dict.toml+.dict.tsv）。
+// loadRimeCodetableFile 解析 rime 格式的码表词库（.dict.yaml）。
 // 头/体来源经 OpenDictSource 解耦：列顺序由头的 columns 决定（缺省 text/code/weight），
-// 数据体逐行制表符分隔解析，两种磁盘格式共用同一段体解析逻辑、零行为差异。
+// 数据体逐行制表符分隔解析。
 //
 // 权重策略基于词库自身的 sort 字段：
 //   - sort: by_weight → 使用显式权重（权威词库，如主词库）
@@ -682,9 +679,8 @@ type dictEntry struct {
 	naturalOrder int // 同编码下的原始顺序（0-based，按文件出现顺序）
 }
 
-// loadRimeFile 解析 rime 拼音词库（.dict.yaml 或 split .dict.toml+.dict.tsv）。
-// 拼音词库固定 text/code/weight 列序（不读 header columns），头/体经 OpenDictSource
-// 解耦后体解析逻辑两种格式共用。
+// loadRimeFile 解析 rime 拼音词库（.dict.yaml）。
+// 拼音词库固定 text/code/weight 列序（不读 header columns），头/体经 OpenDictSource 解耦。
 func loadRimeFile(path string, codeEntries map[string][]dictEntry, abbrevEntries map[string][]dictEntry, globalOrder *int, logger *slog.Logger) (int, error) {
 	_, body, err := OpenDictSource(path)
 	if err != nil {

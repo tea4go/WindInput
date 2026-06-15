@@ -104,7 +104,7 @@ func (p *DictPatch) IsEmpty() bool {
 }
 
 // patchPath 根据词库文件路径推导补丁文件路径（补丁统一为 YAML 格式）。
-// 例如: wubi86_jidian.dict.yaml / .dict.toml → wubi86_jidian.dict.patch.yaml
+// 例如: wubi86_jidian.dict.yaml → wubi86_jidian.dict.patch.yaml
 func patchPath(dictPath string) string {
 	if base := dictStem(dictPath); base != dictPath {
 		return base + ".dict.patch.yaml"
