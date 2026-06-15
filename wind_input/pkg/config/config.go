@@ -53,22 +53,23 @@ type SchemaConfig struct {
 
 // HotkeyConfig contains hotkey settings
 type HotkeyConfig struct {
-	ToggleModeKeys   []string          `yaml:"toggle_mode_keys" json:"toggle_mode_keys"`
-	CommitOnSwitch   bool              `yaml:"commit_on_switch" json:"commit_on_switch"`
-	SwitchEngine     string            `yaml:"switch_engine" json:"switch_engine"`
-	ToggleFullWidth  string            `yaml:"toggle_full_width" json:"toggle_full_width"`
-	TogglePunct      string            `yaml:"toggle_punct" json:"toggle_punct"`
-	DeleteCandidate  string            `yaml:"delete_candidate" json:"delete_candidate"`     // 删除候选词: "ctrl+shift+number", "ctrl+number", "none"
-	PinCandidate     string            `yaml:"pin_candidate" json:"pin_candidate"`           // 置顶候选词: "ctrl+number", "ctrl+shift+number", "none"
-	ToggleToolbar    string            `yaml:"toggle_toolbar" json:"toggle_toolbar"`         // 显示/隐藏状态栏: 通用按键组合或 "none"
-	OpenSettings     string            `yaml:"open_settings" json:"open_settings"`           // 打开设置: 通用按键组合或 "none"
-	AddWord          string            `yaml:"add_word" json:"add_word"`                     // 快捷加词: 通用按键组合或 "none"
-	ToggleS2T        string            `yaml:"toggle_s2t" json:"toggle_s2t"`                 // 简入繁出开关切换: 通用按键组合或 "none"
-	TakeScreenshot   string            `yaml:"take_screenshot" json:"take_screenshot"`       // UI 截图: 通用按键组合或 "none"
-	GlobalHotkeys    []string          `yaml:"global_hotkeys" json:"global_hotkeys"`         // 注册为全局热键的快捷键名称列表
-	ActivateIME      string            `yaml:"activate_ime" json:"activate_ime"`             // Windows 专用：切换到本输入法（全局热键），"none" 或空=禁用
-	EnterTempPinyin  string            `yaml:"enter_temp_pinyin" json:"enter_temp_pinyin"`   // 本地热键：直接进入临时拼音模式
-	EnterSpecialMode map[string]string `yaml:"enter_special_mode" json:"enter_special_mode"` // 本地热键：mode_id → 热键字符串
+	ToggleModeKeys    []string          `yaml:"toggle_mode_keys" json:"toggle_mode_keys"`
+	CommitOnSwitch    bool              `yaml:"commit_on_switch" json:"commit_on_switch"`
+	SwitchEngine      string            `yaml:"switch_engine" json:"switch_engine"`
+	ToggleFullWidth   string            `yaml:"toggle_full_width" json:"toggle_full_width"`
+	TogglePunct       string            `yaml:"toggle_punct" json:"toggle_punct"`
+	DeleteCandidate   string            `yaml:"delete_candidate" json:"delete_candidate"`         // 删除候选词: "ctrl+shift+number", "ctrl+number", "none"
+	PinCandidate      string            `yaml:"pin_candidate" json:"pin_candidate"`               // 置顶候选词: "ctrl+number", "ctrl+shift+number", "none"
+	ToggleToolbar     string            `yaml:"toggle_toolbar" json:"toggle_toolbar"`             // 显示/隐藏状态栏: 通用按键组合或 "none"
+	OpenSettings      string            `yaml:"open_settings" json:"open_settings"`               // 打开设置: 通用按键组合或 "none"
+	AddWord           string            `yaml:"add_word" json:"add_word"`                         // 快捷加词: 通用按键组合或 "none"
+	OpenAddWordDialog string            `yaml:"open_add_word_dialog" json:"open_add_word_dialog"` // 直接打开加词界面（预填最近输入，仅中文模式）: 通用按键组合或 "none"
+	ToggleS2T         string            `yaml:"toggle_s2t" json:"toggle_s2t"`                     // 简入繁出开关切换: 通用按键组合或 "none"
+	TakeScreenshot    string            `yaml:"take_screenshot" json:"take_screenshot"`           // UI 截图: 通用按键组合或 "none"
+	GlobalHotkeys     []string          `yaml:"global_hotkeys" json:"global_hotkeys"`             // 注册为全局热键的快捷键名称列表
+	ActivateIME       string            `yaml:"activate_ime" json:"activate_ime"`                 // Windows 专用：切换到本输入法（全局热键），"none" 或空=禁用
+	EnterTempPinyin   string            `yaml:"enter_temp_pinyin" json:"enter_temp_pinyin"`       // 本地热键：直接进入临时拼音模式
+	EnterSpecialMode  map[string]string `yaml:"enter_special_mode" json:"enter_special_mode"`     // 本地热键：mode_id → 热键字符串
 }
 
 // InputConfig 按键流水线行为配置
@@ -452,20 +453,21 @@ func DefaultConfig() *Config {
 			Available: []string{"wubi86", "pinyin"},
 		},
 		Hotkeys: HotkeyConfig{
-			ToggleModeKeys:  []string{"lshift", "rshift"},
-			CommitOnSwitch:  true,
-			SwitchEngine:    "ctrl+shift+e",
-			ToggleFullWidth: "shift+space",
-			TogglePunct:     "ctrl+.",
-			DeleteCandidate: "ctrl+shift+number",
-			PinCandidate:    "ctrl+number",
-			ToggleToolbar:   "none",
-			OpenSettings:    "none",
-			AddWord:         "ctrl+equal",
-			ToggleS2T:       "ctrl+shift+j",
-			TakeScreenshot:  "ctrl+shift+f11",
-			GlobalHotkeys:   []string{},
-			ActivateIME:     "ctrl+shift+[",
+			ToggleModeKeys:    []string{"lshift", "rshift"},
+			CommitOnSwitch:    true,
+			SwitchEngine:      "ctrl+shift+e",
+			ToggleFullWidth:   "shift+space",
+			TogglePunct:       "ctrl+.",
+			DeleteCandidate:   "ctrl+shift+number",
+			PinCandidate:      "ctrl+number",
+			ToggleToolbar:     "none",
+			OpenSettings:      "none",
+			AddWord:           "ctrl+equal",
+			OpenAddWordDialog: "none",
+			ToggleS2T:         "ctrl+shift+j",
+			TakeScreenshot:    "ctrl+shift+f11",
+			GlobalHotkeys:     []string{},
+			ActivateIME:       "ctrl+shift+[",
 		},
 		Input: InputConfig{
 			SmartPunctAfterDigit: true,

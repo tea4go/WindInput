@@ -26,11 +26,11 @@
       </div>
 
       <DialogFooter
-        class="px-6 py-4 border-t shrink-0 bg-background flex items-center"
+        class="px-6 py-4 border-t shrink-0 bg-background flex flex-row flex-nowrap items-center justify-end gap-2"
       >
         <label
           v-if="!isEditing"
-          class="mr-auto flex items-center gap-2 text-sm text-muted-foreground select-none"
+          class="mr-auto flex items-center gap-2 text-sm text-muted-foreground select-none whitespace-nowrap"
         >
           <Checkbox
             :checked="continuousAdd"
@@ -38,8 +38,19 @@
           />
           <span>连续添加</span>
         </label>
-        <Button variant="outline" size="sm" @click="handleCancel">取消</Button>
-        <Button size="sm" @click="handleAdd" :disabled="!canAdd || adding">
+        <Button
+          variant="outline"
+          size="sm"
+          class="shrink-0"
+          @click="handleCancel"
+          >取消</Button
+        >
+        <Button
+          size="sm"
+          class="shrink-0"
+          @click="handleAdd"
+          :disabled="!canAdd || adding"
+        >
           {{ adding ? "保存中..." : "保存" }}
         </Button>
       </DialogFooter>
@@ -103,11 +114,14 @@ function onOpenUpdate(val: boolean) {
 
 // 编辑模式: 用 editingItem.weight 作为初始权重 (>0 时); 否则默认 1200。
 const initialWeight =
-  props.editingItem && typeof props.editingItem.weight === "number" &&
+  props.editingItem &&
+  typeof props.editingItem.weight === "number" &&
   props.editingItem.weight > 0
     ? props.editingItem.weight
     : 1200;
-const formState = ref<PhraseFormState>(createEmptyPhraseFormState(initialWeight));
+const formState = ref<PhraseFormState>(
+  createEmptyPhraseFormState(initialWeight),
+);
 // 初始 text/code 注入
 formState.value.buffers.normal.text = props.initialText ?? "";
 formState.value.code = props.initialCode ?? "";

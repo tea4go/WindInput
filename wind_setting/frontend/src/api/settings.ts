@@ -50,6 +50,7 @@ export interface HotkeyConfig {
   toggle_toolbar: string; // 通用按键组合或 "none"
   open_settings: string; // 通用按键组合或 "none"
   add_word: string; // 快捷加词: 通用按键组合或 "none"
+  open_add_word_dialog: string; // 直接打开加词界面（预填最近输入，仅中文模式）: 通用按键组合或 "none"
   toggle_s2t: string; // 简入繁出开关: 通用按键组合或 "none"
   take_screenshot: string; // UI 截图: 通用按键组合或 "none"
   activate_ime: string; // Windows 专用：切换到本输入法的全局热键，"none" 或空=禁用
@@ -471,6 +472,7 @@ export function getDefaultConfig(): Config {
       toggle_toolbar: "none",
       open_settings: "none",
       add_word: "ctrl+=",
+      open_add_word_dialog: "none",
       toggle_s2t: "ctrl+shift+j",
       take_screenshot: "ctrl+shift+f11",
       activate_ime: "ctrl+shift+[",

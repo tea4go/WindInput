@@ -241,6 +241,7 @@ func (c *Config) validateActionHotkeyConflicts() []string {
 	add(c.Hotkeys.ToggleToolbar, "工具栏")
 	add(c.Hotkeys.OpenSettings, "打开设置")
 	add(c.Hotkeys.AddWord, "快捷加词")
+	add(c.Hotkeys.OpenAddWordDialog, "打开加词界面")
 	add(c.Hotkeys.ToggleS2T, "简繁切换")
 	add(c.Hotkeys.TakeScreenshot, "UI截图")
 	add(c.Hotkeys.ActivateIME, "切换到本输入法")

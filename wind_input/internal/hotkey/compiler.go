@@ -59,6 +59,9 @@ func (c *Compiler) Compile() (keyDownList, keyUpList []uint32) {
 	if hash, ok := c.parseHotkeyString(c.config.Hotkeys.AddWord); ok {
 		keyDownList = append(keyDownList, hash|ipc.HotkeyPolicyChineseOnly)
 	}
+	if hash, ok := c.parseHotkeyString(c.config.Hotkeys.OpenAddWordDialog); ok {
+		keyDownList = append(keyDownList, hash|ipc.HotkeyPolicyChineseOnly)
+	}
 	if hash, ok := c.parseHotkeyString(c.config.Hotkeys.ToggleS2T); ok {
 		keyDownList = append(keyDownList, hash|ipc.HotkeyPolicyChineseOnly)
 	}

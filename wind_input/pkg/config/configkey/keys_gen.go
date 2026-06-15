@@ -35,6 +35,7 @@ const (
 	HotkeysEnterSpecialMode                    = "hotkeys.enter_special_mode"
 	HotkeysEnterTempPinyin                     = "hotkeys.enter_temp_pinyin"
 	HotkeysGlobalHotkeys                       = "hotkeys.global_hotkeys"
+	HotkeysOpenAddWordDialog                   = "hotkeys.open_add_word_dialog"
 	HotkeysOpenSettings                        = "hotkeys.open_settings"
 	HotkeysPinCandidate                        = "hotkeys.pin_candidate"
 	HotkeysSwitchEngine                        = "hotkeys.switch_engine"

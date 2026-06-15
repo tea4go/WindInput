@@ -157,7 +157,7 @@ func (c *Coordinator) confirmAddWord() *bridge.KeyEventResult {
 	return &bridge.KeyEventResult{Type: bridge.ResponseTypeClearComposition}
 }
 
-// openAddWordDialog 打开加词对话框
+// openAddWordDialog 从加词模式打开加词对话框（带当前预览的词/编码）
 func (c *Coordinator) openAddWordDialog() *bridge.KeyEventResult {
 	word := ""
 	code := ""
@@ -172,6 +172,41 @@ func (c *Coordinator) openAddWordDialog() *bridge.KeyEventResult {
 
 	c.exitAddWordMode()
 
+	return c.openAddWordDialogWith(word, code, schemaID)
+}
+
+// openAddWordDialogFromHistory 通过独立快捷键直接打开加词对话框。
+// 不进入加词模式（不改候选窗布局/composition），仅取最近输入预填，绕过候选窗交互。
+func (c *Coordinator) openAddWordDialogFromHistory() *bridge.KeyEventResult {
+	// 若当前有未上屏输入，先清理，避免残留 composition
+	if c.hasPendingInput() {
+		c.clearState()
+		c.hideUI()
+	}
+
+	word := ""
+	code := ""
+	maxLen := c.getAddWordMaxLen()
+	chars := c.inputHistory.GetRecentChars(maxLen, 0)
+	if len(chars) >= addWordMinLen {
+		wordLen := addWordDefaultLen
+		if wordLen > len(chars) {
+			wordLen = len(chars)
+		}
+		word = string(chars[len(chars)-wordLen:])
+		code = c.calcAddWordCode(word)
+	}
+
+	schemaID := ""
+	if c.engineMgr != nil {
+		schemaID = c.engineMgr.DataSchemaID(c.engineMgr.GetCurrentSchemaID())
+	}
+
+	return c.openAddWordDialogWith(word, code, schemaID)
+}
+
+// openAddWordDialogWith 拉起设置端加词页面，按需预填 text/code/schema 参数。
+func (c *Coordinator) openAddWordDialogWith(word, code, schemaID string) *bridge.KeyEventResult {
 	if c.uiManager != nil {
 		// 构造参数：--page=add-word --text=xxx --code=xxx --schema=xxx
 		// ShellExecute 会自动按空格拆分为独立的命令行参数
@@ -197,11 +232,18 @@ func (c *Coordinator) updateAddWordCode() {
 		return
 	}
 	word := string(c.addWordChars[len(c.addWordChars)-c.addWordLen:])
-	if c.engineMgr.IsPinyinSchema() {
-		c.addWordCode = c.engineMgr.GeneratePinyinCode(word)
-	} else {
-		c.addWordCode = c.calcWordCodeForCurrentSchema(word)
+	c.addWordCode = c.calcAddWordCode(word)
+}
+
+// calcAddWordCode 按当前方案为词计算编码（拼音方案走拼音生成，其余走反查编码）
+func (c *Coordinator) calcAddWordCode(word string) string {
+	if c.engineMgr == nil {
+		return ""
 	}
+	if c.engineMgr.IsPinyinSchema() {
+		return c.engineMgr.GeneratePinyinCode(word)
+	}
+	return c.calcWordCodeForCurrentSchema(word)
 }
 
 // calcWordCodeForCurrentSchema 根据当前方案计算词的编码

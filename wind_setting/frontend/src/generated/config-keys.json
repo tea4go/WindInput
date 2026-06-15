@@ -28,6 +28,7 @@
   "hotkeys.enter_special_mode",
   "hotkeys.enter_temp_pinyin",
   "hotkeys.global_hotkeys",
+  "hotkeys.open_add_word_dialog",
   "hotkeys.open_settings",
   "hotkeys.pin_candidate",
   "hotkeys.switch_engine",

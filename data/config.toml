@@ -27,6 +27,7 @@ pin_candidate = "ctrl+number"
 toggle_toolbar = 'ctrl+shift+\'
 open_settings = "ctrl+shift+]"
 add_word = "ctrl+equal"
+open_add_word_dialog = "none"
 toggle_s2t = "ctrl+shift+j"
 take_screenshot = "ctrl+shift+f11"
 activate_ime = "ctrl+shift+["

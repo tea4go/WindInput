@@ -305,7 +305,9 @@
         :label="item.label"
         :hint="item.hint"
         :model-value="getHotkeyValue(item.field)"
-        :default-value="getDefaultValue(item.field)"
+        :default-value="
+          (item as any).enableDefault ?? getDefaultValue(item.field)
+        "
         :show-global="showGlobalFor(item.field)"
         :is-global="isGlobalHotkey(item.field)"
         :is-mac="isMac"
@@ -370,6 +372,13 @@ const composerItems = [
     field: "add_word",
     label: "快捷加词",
     hint: "快速将输入的内容加入用户词库",
+  },
+  {
+    field: "open_add_word_dialog",
+    label: "打开加词界面",
+    hint: "一键直接打开加词对话框",
+    // 默认关闭(none)，但用户点「启用」时预填此推荐键
+    enableDefault: "ctrl+shift+equal",
   },
   {
     field: "toggle_s2t",
