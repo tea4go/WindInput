@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/huanfeng/wind_input/internal/coordinator"
 )
@@ -86,11 +87,20 @@ func (r *Recorder) Render() []byte {
 // 截断按 current_page 取窗口 [(page-1)*perPage : page*perPage]：单页用例 start=0，等价于取
 // 前 perPage 条；多页用例（如翻页）则随 current_page 显示该页实际候选，使分页 golden 能体现
 // 候选窗滑动，而非每页重复同一批。
+// 截断前先按 (weight↓, text↑) 稳定排序，使同权重候选的顺序不随词典版本变化而漂移。
 func normalizeState(s coordinator.State, mask bool) coordinator.State {
 	if !mask {
 		return s
 	}
-	cands := s.Candidates
+	sorted := make([]coordinator.CandidateView, len(s.Candidates))
+	copy(sorted, s.Candidates)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].Weight != sorted[j].Weight {
+			return sorted[i].Weight > sorted[j].Weight
+		}
+		return sorted[i].Text < sorted[j].Text
+	})
+	cands := sorted
 	if limit := s.CandidatesPerPage; limit > 0 && len(cands) > limit {
 		start := 0
 		if s.CurrentPage > 1 {

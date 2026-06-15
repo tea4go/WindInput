@@ -12,17 +12,17 @@
     "preedit_display": "",
     "candidates": [
       {
+        "text": "HELLO",
+        "code": "hello",
+        "weight": 0
+      },
+      {
         "text": "Hello",
         "code": "hello",
         "weight": 0
       },
       {
         "text": "hello",
-        "code": "hello",
-        "weight": 0
-      },
-      {
-        "text": "HELLO",
         "code": "hello",
         "weight": 0
       }
@@ -48,17 +48,17 @@
     "preedit_display": "",
     "candidates": [
       {
+        "text": "HELLO",
+        "code": "hello",
+        "weight": 0
+      },
+      {
         "text": "Hello",
         "code": "hello",
         "weight": 0
       },
       {
         "text": "hello",
-        "code": "hello",
-        "weight": 0
-      },
-      {
-        "text": "HELLO",
         "code": "hello",
         "weight": 0
       }
@@ -84,17 +84,17 @@
     "preedit_display": "",
     "candidates": [
       {
+        "text": "HELLO",
+        "code": "hello",
+        "weight": 0
+      },
+      {
         "text": "Hello",
         "code": "hello",
         "weight": 0
       },
       {
         "text": "hello",
-        "code": "hello",
-        "weight": 0
-      },
-      {
-        "text": "HELLO",
         "code": "hello",
         "weight": 0
       }
@@ -120,17 +120,17 @@
     "preedit_display": "",
     "candidates": [
       {
+        "text": "HELLO",
+        "code": "hello",
+        "weight": 0
+      },
+      {
         "text": "Hello",
         "code": "hello",
         "weight": 0
       },
       {
         "text": "hello",
-        "code": "hello",
-        "weight": 0
-      },
-      {
-        "text": "HELLO",
         "code": "hello",
         "weight": 0
       }

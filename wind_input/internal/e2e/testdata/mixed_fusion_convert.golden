@@ -22,28 +22,28 @@
         "weight": 0
       },
       {
-        "text": "哇",
-        "code": "wa",
-        "weight": 0
-      },
-      {
-        "text": "外",
-        "code": "wai",
-        "weight": 0
-      },
-      {
         "text": "万",
         "code": "wan",
         "weight": 0
       },
       {
-        "text": "往",
-        "code": "wang",
+        "text": "为",
+        "code": "wei",
         "weight": 0
       },
       {
-        "text": "为",
-        "code": "wei",
+        "text": "哇",
+        "code": "wa",
+        "weight": 0
+      },
+      {
+        "text": "嗡",
+        "code": "weng",
+        "weight": 0
+      },
+      {
+        "text": "外",
+        "code": "wai",
         "weight": 0
       }
     ],

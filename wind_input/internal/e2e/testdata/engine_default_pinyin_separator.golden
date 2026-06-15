@@ -27,7 +27,7 @@
         "weight": 0
       },
       {
-        "text": "锡安",
+        "text": "西岸",
         "code": "xian",
         "weight": 0
       },
@@ -37,7 +37,7 @@
         "weight": 0
       },
       {
-        "text": "西岸",
+        "text": "锡安",
         "code": "xian",
         "weight": 0
       }
@@ -102,17 +102,17 @@
         "weight": 0
       },
       {
-        "text": "暗",
+        "text": "㜝",
         "code": "an",
         "weight": 0
       },
       {
-        "text": "氨",
+        "text": "㟁",
         "code": "an",
         "weight": 0
       },
       {
-        "text": "胺",
+        "text": "㡋",
         "code": "an",
         "weight": 0
       }

@@ -33,13 +33,8 @@
     "preedit_display": "",
     "candidates": [
       {
-        "text": "★",
-        "code": "a",
-        "weight": 0
-      },
-      {
-        "text": "☆",
-        "code": "a",
+        "text": "◆",
+        "code": "aa",
         "weight": 0
       },
       {
@@ -48,8 +43,13 @@
         "weight": 0
       },
       {
-        "text": "◆",
-        "code": "aa",
+        "text": "★",
+        "code": "a",
+        "weight": 0
+      },
+      {
+        "text": "☆",
+        "code": "a",
         "weight": 0
       }
     ],

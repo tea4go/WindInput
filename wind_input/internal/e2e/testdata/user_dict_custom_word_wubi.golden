@@ -12,12 +12,12 @@
     "preedit_display": "",
     "candidates": [
       {
-        "text": "恭恭敬敬",
+        "text": "测试词",
         "code": "aaaa",
         "weight": 0
       },
       {
-        "text": "测试词",
+        "text": "恭恭敬敬",
         "code": "aaaa",
         "weight": 0
       },

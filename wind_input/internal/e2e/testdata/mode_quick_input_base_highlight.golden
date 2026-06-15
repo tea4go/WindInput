@@ -32,22 +32,7 @@
     "preedit_display": "",
     "candidates": [
       {
-        "text": "壹佰贰拾叁元整",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "一百二十三元整",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "一百二十三",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "壹佰贰拾叁",
+        "text": "123",
         "code": "",
         "weight": 0
       },
@@ -57,12 +42,27 @@
         "weight": 0
       },
       {
-        "text": "壹贰叁",
+        "text": "一百二十三",
         "code": "",
         "weight": 0
       },
       {
-        "text": "123",
+        "text": "一百二十三元整",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹佰贰拾叁",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹佰贰拾叁元整",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹贰叁",
         "code": "",
         "weight": 0
       }
@@ -88,22 +88,7 @@
     "preedit_display": "",
     "candidates": [
       {
-        "text": "壹佰贰拾叁元整",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "一百二十三元整",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "一百二十三",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "壹佰贰拾叁",
+        "text": "123",
         "code": "",
         "weight": 0
       },
@@ -113,12 +98,27 @@
         "weight": 0
       },
       {
-        "text": "壹贰叁",
+        "text": "一百二十三",
         "code": "",
         "weight": 0
       },
       {
-        "text": "123",
+        "text": "一百二十三元整",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹佰贰拾叁",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹佰贰拾叁元整",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹贰叁",
         "code": "",
         "weight": 0
       }
@@ -144,22 +144,7 @@
     "preedit_display": "",
     "candidates": [
       {
-        "text": "壹佰贰拾叁元整",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "一百二十三元整",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "一百二十三",
-        "code": "",
-        "weight": 0
-      },
-      {
-        "text": "壹佰贰拾叁",
+        "text": "123",
         "code": "",
         "weight": 0
       },
@@ -169,12 +154,27 @@
         "weight": 0
       },
       {
-        "text": "壹贰叁",
+        "text": "一百二十三",
         "code": "",
         "weight": 0
       },
       {
-        "text": "123",
+        "text": "一百二十三元整",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹佰贰拾叁",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹佰贰拾叁元整",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "壹贰叁",
         "code": "",
         "weight": 0
       }

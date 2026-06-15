@@ -15,7 +15,7 @@ package e2e
 
 import "testing"
 
-// TestLearningFreqRecorded 验证重复选词累积词频：拼音方案下选第二候选（拟好）5 次并
+// TestLearningFreqRecorded 验证重复选词累积词频：拼音方案下选「拟好」5 次并
 // FlushLearning，词频桶中应存在 ("nihao","拟好") 记录且 Count==4（首次不计，误选保护）。
 func TestLearningFreqRecorded(t *testing.T) {
 	h := mustHarness(t, "pinyin")
@@ -23,7 +23,18 @@ func TestLearningFreqRecorded(t *testing.T) {
 	const selections = 5
 	for range [selections]struct{}{} {
 		h.Type("nihao")
-		h.SelectCandidate(2) // 拟好
+		state := h.Coord.ExportState()
+		pos := -1
+		for i, c := range state.Candidates {
+			if c.Text == "拟好" {
+				pos = i + 1 // SelectCandidate 是 1-indexed
+				break
+			}
+		}
+		if pos < 0 {
+			t.Fatal("nihao 候选中未找到「拟好」，请确认拼音词典包含该词")
+		}
+		h.SelectCandidate(pos)
 	}
 	h.FlushLearning()
 
