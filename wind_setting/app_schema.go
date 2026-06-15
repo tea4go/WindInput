@@ -128,6 +128,8 @@ func collectSchemaResourceFiles(cfg *SchemaConfig, exeDataDir, configDir string)
 			add(stem + ".dict.tsv")
 		}
 		add(stem + ".dict.patch.yaml")
+		// wdb-only 模式：yaml/toml 不存在时导出预编译词库（wind_input 会自动回退读取）
+		add(stem + ".wdb")
 	}
 	for _, d := range cfg.Dicts {
 		if d.Path == "" {
