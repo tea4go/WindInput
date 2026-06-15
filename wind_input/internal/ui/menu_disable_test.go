@@ -111,15 +111,15 @@ func TestMenuDisable_SingleCandidate(t *testing.T) {
 // computeMenuDisableForGroupMember 复制 handleRightClick 中针对 IsGroupMember
 // 的 disable 规则, 验证 $AA/$SS 字符组/字符串组子项所有可编辑菜单都被屏蔽。
 // 入参分别对应 window_mouse.go 内的 isGlobalFirst / isGlobalLast / 单候选 /
-// pinyin / command / quickInput / hasShadow / isSingleChar / isGroupMember。
+// pinyin / command / quickInput / hasShadow / isGroupMember。
 func computeMenuDisableForGroupMember(
 	isGlobalFirst, isGlobalLast, isSingleCandidate,
-	isPinyin, isCommand, isQuickInput, hasShadow, isSingleChar, isGroupMember bool,
+	isPinyin, isCommand, isQuickInput, hasShadow, isGroupMember bool,
 ) (disableMoveUp, disableMoveDown, disableTop, disableDelete, disableReset bool) {
 	disableMoveUp = isGlobalFirst || isSingleCandidate || (isPinyin && !isCommand) || isQuickInput || isGroupMember
 	disableMoveDown = isGlobalLast || isSingleCandidate || (isPinyin && !isCommand) || isQuickInput || isGroupMember
 	disableTop = isGlobalFirst || isQuickInput || isGroupMember
-	disableDelete = (isSingleChar && !isCommand) || isQuickInput || isGroupMember
+	disableDelete = isQuickInput || isGroupMember
 	disableReset = !hasShadow || isGroupMember
 	return
 }
@@ -140,7 +140,6 @@ func TestMenuDisable_GroupMemberAllDisabled(t *testing.T) {
 		true,  // isCommand
 		false, // isQuickInput
 		true,  // hasShadow
-		false, // isSingleChar
 		true,  // isGroupMember
 	)
 	if !up || !down || !top || !del || !reset {
@@ -154,11 +153,35 @@ func TestMenuDisable_GroupMemberAllDisabled(t *testing.T) {
 func TestMenuDisable_NonGroupMemberHonorsOtherRules(t *testing.T) {
 	// 中段、命令候选、有 Shadow — 期望全部启用
 	up, down, top, del, reset := computeMenuDisableForGroupMember(
-		false, false, false, false, true, false, true, false, false,
+		false, false, false, false, true, false, true, false,
 	)
 	if up || down || top || del || reset {
 		t.Errorf("non-group-member: middle command with shadow should enable all, got up=%v down=%v top=%v del=%v reset=%v",
 			up, down, top, del, reset)
+	}
+}
+
+// TestMenuDisable_SingleCharDeletable 验证普通单字候选 (非命令 / 非组成员 /
+// 非快捷输入) 的"删除/隐藏候选"菜单项**启用**。
+//
+// 引入: 2026-06-15 取消"单字不可删除/隐藏"限制后的回归守护。历史上 disableDelete
+// 含 `isSingleChar && !isCommand` 条件, 会禁用单字删除; 现已移除。若未来有人重新
+// 给 disableDelete 加回单字门控, 同步更新本镜像函数会让此用例失败, 提示行为回退。
+func TestMenuDisable_SingleCharDeletable(t *testing.T) {
+	// 中段、普通单字 (isCommand=false)、无 Shadow、非拼音、非快捷输入、非组成员。
+	// 唯一会影响 delete 的剩余门控 isQuickInput / isGroupMember 均为 false。
+	_, _, _, del, _ := computeMenuDisableForGroupMember(
+		false, // isGlobalFirst
+		false, // isGlobalLast
+		false, // isSingleCandidate
+		false, // isPinyin
+		false, // isCommand — 普通单字, 非命令候选
+		false, // isQuickInput
+		false, // hasShadow
+		false, // isGroupMember
+	)
+	if del {
+		t.Errorf("普通单字候选的删除/隐藏菜单应启用 (单字限制已取消), got disableDelete=%v", del)
 	}
 }
 

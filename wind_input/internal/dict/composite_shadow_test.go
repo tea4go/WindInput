@@ -75,21 +75,21 @@ func TestApplyShadowPins_DeleteByID(t *testing.T) {
 	}
 }
 
-// TestApplyShadowPins_SingleCharProtectedByWordOnly 验证单字保护仅在按 word 匹配时生效:
-// 短语 / 命令候选用 candID 时可以"删除单字" (用户主动挑了具体单字)。
-func TestApplyShadowPins_SingleCharProtectedByWordOnly(t *testing.T) {
+// TestApplyShadowPins_SingleCharDeletableByWord 验证单字也可按 word 匹配隐藏:
+// 已取消"单字不可删/隐藏"限制 (用户可主动隐藏任意单字候选)。
+func TestApplyShadowPins_SingleCharDeletableByWord(t *testing.T) {
 	cands := []candidate.Candidate{
 		{Text: "你", Code: "n"},
 		{Text: "中", Code: "n", ID: "phrase:n:中"},
 	}
 	rules := &ShadowRules{
 		Deleted: []DeletedWord{
-			{Word: "你"},                       // 按 word 匹配, 单字应被忽略
+			{Word: "你"},                       // 按 word 匹配, 单字现可隐藏
 			{Word: "中", CandID: "phrase:n:中"}, // 按 id 匹配, 单字可删
 		},
 	}
 	out := ApplyShadowPins(cands, rules)
-	if len(out) != 1 || out[0].Text != "你" {
-		t.Fatalf("expected only 你 remaining (single-char protected by word match), got %+v", out)
+	if len(out) != 0 {
+		t.Fatalf("expected both single chars hidden, got %+v", out)
 	}
 }

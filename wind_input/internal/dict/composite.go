@@ -301,7 +301,7 @@ func (c *CompositeDict) searchInternal(code string, opt SearchOptions, isPrefix 
 // (兼容手输文本规则)。详见 docs/design/command-bar-followup.md R2。
 //
 // 处理逻辑：
-//  1. 移除 deleted 中的词（单字跳过）
+//  1. 移除 deleted 中的词
 //  2. 提取有 pin 规则的候选
 //  3. 按 pin position 放置（LIFO 碰撞顺延）
 //  4. 未被 pin 的候选按原始顺序填充剩余位置
@@ -324,13 +324,9 @@ func ApplyShadowPins(candidates []candidate.Candidate, rules *ShadowRules) []can
 		return c.Text == p.Word
 	}
 
-	// 1. 过滤 deleted (单字按 Word 跳过, 短语 / cand 带 id 时不受单字保护)
+	// 1. 过滤 deleted (按 CandID 优先, 否则按 Word 匹配; 单字亦可隐藏)
 	isDeleted := func(c candidate.Candidate) bool {
 		for _, d := range rules.Deleted {
-			// 单字保护: 仅当 Word 是单字且无 CandID 时跳过 (旧"单字不删"语义)
-			if d.CandID == "" && len([]rune(d.Word)) <= 1 {
-				continue
-			}
 			if candMatchesDel(c, d) {
 				return true
 			}

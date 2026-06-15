@@ -42,12 +42,6 @@ func (c *Coordinator) handleDeleteCandidateByKey(num int) *bridge.KeyEventResult
 		return consumed
 	}
 
-	// 单字不允许删除 (短语 ID 例外, 用户主动挑了具体单字候选)
-	if cand.ID == "" && len([]rune(cand.Text)) <= 1 {
-		c.logger.Debug("Cannot delete single character via hotkey")
-		return consumed
-	}
-
 	code := c.inputBuffer
 
 	c.mu.Unlock()

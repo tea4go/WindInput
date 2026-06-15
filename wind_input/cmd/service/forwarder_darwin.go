@@ -521,7 +521,6 @@ func (f *darwinForwarder) computeMenuFlags(candidates []ui.Candidate, page, perP
 		isLast := total > 0 && global == total-1
 		single := total <= 1
 		isGroupMember := c.IsGroupMember
-		isSingleChar := len([]rune(c.Text)) <= 1
 		// 拼音引擎的普通候选无稳定 ID, 不能移动 (Win: isPinyin && !isCommand);
 		// 纯拼音方案按 schema 判, 混输按候选 Source 判。
 		isPinyin := pinyinSchema || string(c.Source) == "pinyin"
@@ -534,7 +533,7 @@ func (f *darwinForwarder) computeMenuFlags(candidates []ui.Candidate, page, perP
 		if isLast || single || moveBlocked || isGroupMember {
 			b |= ipc.MenuFlagDisableMoveDown
 		}
-		if (isSingleChar && !c.IsCommand) || isGroupMember {
+		if isGroupMember {
 			b |= ipc.MenuFlagDisableDelete
 		}
 		if !c.HasShadow || isGroupMember {

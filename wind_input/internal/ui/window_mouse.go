@@ -322,13 +322,6 @@ func (w *CandidateWindow) handleRightClick(lParam uintptr) {
 	// Check if this candidate has shadow modifications
 	hasShadow := hitIndex >= 0 && hitIndex < len(hasShadowFlags) && hasShadowFlags[hitIndex]
 
-	// Check if candidate is single character (cannot delete)
-	isSingleChar := false
-	candidateTexts := w.candidateTexts
-	if hitIndex >= 0 && hitIndex < len(candidateTexts) {
-		isSingleChar = len([]rune(candidateTexts[hitIndex])) <= 1
-	}
-
 	// Check if pinyin mode (disable move up/down for non-command candidates)
 	isPinyin := w.isPinyinMode
 
@@ -357,12 +350,12 @@ func (w *CandidateWindow) handleRightClick(lParam uintptr) {
 	// 前移: 首位禁用 | 单候选禁用 | 拼音非命令禁用 | 字符组子项禁用
 	// 后移: 末位禁用 | 单候选禁用 | 拼音非命令禁用 | 字符组子项禁用
 	// 置顶: 首位禁用 | 字符组子项禁用
-	// 删除: 单字+非命令禁用 | 字符组子项禁用 (命令候选 / 短语 ID 候选允许删除走 Shadow CandID)
+	// 删除: 快捷输入模式禁用 | 字符组子项禁用 (命令候选 / 短语 ID 候选允许删除走 Shadow CandID)
 	// 恢复默认: 无 Shadow/短语覆盖时禁用 | 字符组子项禁用
 	disableMoveUp := isGlobalFirst || isSingleCandidate || (isPinyin && !isCommand) || w.isQuickInputMode || isGroupMember
 	disableMoveDown := isGlobalLast || isSingleCandidate || (isPinyin && !isCommand) || w.isQuickInputMode || isGroupMember
 	disableTop := isGlobalFirst || w.isQuickInputMode || isGroupMember
-	disableDelete := (isSingleChar && !isCommand) || w.isQuickInputMode || isGroupMember
+	disableDelete := w.isQuickInputMode || isGroupMember
 	disableReset := !hasShadow || isGroupMember
 
 	// Build menu items

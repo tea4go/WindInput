@@ -449,13 +449,6 @@ func (c *Coordinator) handleCandidateDelete(index int) {
 		return
 	}
 
-	// 单字不允许删除 (短语 ID 例外, 用户主动挑了具体单字候选)
-	if cand.ID == "" && len([]rune(cand.Text)) <= 1 {
-		c.logger.Debug("Cannot delete single character")
-		c.mu.Unlock()
-		return
-	}
-
 	// 统一用 inputBuffer 作为 code
 	code := c.inputBuffer
 
