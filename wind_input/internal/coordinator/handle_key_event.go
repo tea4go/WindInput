@@ -496,14 +496,19 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		}
 	}
 
-	// 通用「夺取后首次退格回退」：z 键混合回退 / URL 前缀夺取等推断式进入的模式，刚夺取、未编辑
-	// 时第一次退格撤销夺取、回正常输入流（decider 开/关一致，状态由决策器统一持有）。任何其它键
-	// 作废登记（视为用户确认要用该模式）。必须在下方各模式分发之前。
+	// 通用「夺取后退格回退」：z 键混合回退 / URL 前缀夺取等推断式进入的模式，退格删回夺取瞬间的
+	// buffer（z=初始拼音 buffer / URL=完整前缀）时撤销夺取、回正常输入流（前缀本是被夺取的正常
+	// 输入，删进它即撤销）。必须在下方各模式分发之前。
+	//   - 单键夺取（z 临时拼音）：「编辑即作废」——一旦在模式内敲新键即视为确认用该模式，登记作废。
+	//   - 多键夺取（URL）：前缀由多键逐字打成，编辑（续打网址）**不**作废登记，使退格删回前缀边界
+	//     时仍能弹回正常输入流；仅模式正常退出（上屏/ESC/删空）时由 exitUrlMode 作废。
 	if c.decider != nil && c.decider.rewindArmed() {
 		if buf, ok := c.activeHijackBuffer(); ok && uint32(data.KeyCode) == ipc.VK_BACK && c.decider.canRewind(buf) {
 			return c.decider.rewindHijack()
 		}
-		c.decider.clearRewind()
+		if !c.urlMode {
+			c.decider.clearRewind()
+		}
 	}
 
 	// 受管宿主模式内键：经决策器链分发（dispatchHostChain：host 状态机维护、退出回落

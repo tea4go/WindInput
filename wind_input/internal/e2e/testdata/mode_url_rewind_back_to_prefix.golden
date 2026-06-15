@@ -64,12 +64,48 @@
     "chinese_punctuation": true,
     "effective_mode": "chinese",
     "engine_name": "pinyin",
-    "input_buffer": "",
-    "input_cursor_pos": 0,
-    "preedit_display": "htt",
-    "candidates": [],
+    "input_buffer": "htt",
+    "input_cursor_pos": 3,
+    "preedit_display": "h t t",
+    "candidates": [
+      {
+        "text": "活脱脱",
+        "code": "htt",
+        "weight": 0
+      },
+      {
+        "text": "还天天",
+        "code": "htt",
+        "weight": 0
+      },
+      {
+        "text": "核糖体",
+        "code": "htt",
+        "weight": 0
+      },
+      {
+        "text": "红彤彤",
+        "code": "htt",
+        "weight": 0
+      },
+      {
+        "text": "黄体酮",
+        "code": "htt",
+        "weight": 0
+      },
+      {
+        "text": "很体贴",
+        "code": "htt",
+        "weight": 0
+      },
+      {
+        "text": "很挑剔",
+        "code": "htt",
+        "weight": 0
+      }
+    ],
     "current_page": 1,
-    "total_pages": 1,
+    "total_pages": 12,
     "selected_index": 0,
     "candidates_per_page": 7
   }

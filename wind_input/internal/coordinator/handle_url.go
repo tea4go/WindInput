@@ -59,13 +59,15 @@ func (c *Coordinator) clearUrlModeState() {
 // enterUrlMode 从正常输入夺取进入 URL 模式，residual 为完整前缀（作初始 buffer）。
 // 清理当前正常输入状态（前缀字符不单独上屏，转为 URL buffer），进入后原地显示。
 func (c *Coordinator) enterUrlMode(residual string) *bridge.KeyEventResult {
-	pre := c.inputBuffer // 夺取前的正常输入 buffer（如打 "http" 时为 "htt"），供首次退格回退
+	pre := c.inputBuffer // 夺取前的正常输入 buffer（如打 "http" 时为 "htt"），供退格回前缀边界时回退
 	c.clearState()
 	c.urlMode = true
 	c.urlBuffer = residual
 	c.urlCursorPos = len(residual)
 
-	// 登记统一回退：刚夺取、未编辑时第一次退格撤销夺取、回 "pre" 正常输入流。
+	// 登记统一回退：URL 是多键夺取，前缀 residual 本是被夺取的正常输入，退格删回前缀边界（urlBuffer
+	// 退回 == residual）时再退格 → 撤销夺取、回 "pre" 正常输入流。续打网址内容不作废登记（见
+	// handle_key_event.go 回退触发块的 url 分支），故编辑后删回前缀仍能回退。
 	if c.decider != nil {
 		c.decider.armRewind(pre, residual, c.clearUrlModeState)
 	}
