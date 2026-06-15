@@ -306,19 +306,23 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		}
 	}
 
-	// Other Ctrl/Alt combinations should be passed to the system
+	// Other Ctrl/Alt/Win(⌘) combinations should be passed to the system
 	// (after checking toggle mode keys, since lctrl/rctrl are valid toggle keys)
-	if hasCtrl || hasAlt {
+	// 注意必须包含 hasWin：macOS 上 ⌘ 映射为 ModWin，⌘C/⌘V/⌘X/⌘A 等系统快捷键
+	// 若不在此透传，会被下方字符处理当成拼音字母消费（中文模式），导致复制/粘贴失效。
+	// 在标准 Cocoa 应用中该事件先被菜单快捷键截获，故仅在 Electron/终端等会把 Command
+	// 事件下发给输入法的应用里暴露。用户配置的热键已在上方 matchHotkey 处理，不受影响。
+	if hasCtrl || hasAlt || hasWin {
 		if c.hasPendingInput() {
-			// 输入态下 Ctrl/Alt 组合键（非已注册热键）：取消输入，让 C++ 端透传按键给宿主程序
-			// 例如 Ctrl+S 保存、Ctrl+C 复制等，用户意图是执行快捷键而非继续打字
-			c.logger.Debug("Ctrl/Alt combo during composing, clearing state for pass-through",
-				"ctrl", hasCtrl, "alt", hasAlt, "keyCode", data.KeyCode)
+			// 输入态下 Ctrl/Alt/⌘ 组合键（非已注册热键）：取消输入，让前端透传按键给宿主程序
+			// 例如 Ctrl+S 保存、⌘C 复制等，用户意图是执行快捷键而非继续打字
+			c.logger.Debug("Ctrl/Alt/Win combo during composing, clearing state for pass-through",
+				"ctrl", hasCtrl, "alt", hasAlt, "win", hasWin, "keyCode", data.KeyCode)
 			c.clearState()
 			c.hideUI()
 			return &bridge.KeyEventResult{Type: bridge.ResponseTypeClearComposition}
 		}
-		c.logger.Debug("Key has Ctrl/Alt modifier, passing to system")
+		c.logger.Debug("Key has Ctrl/Alt/Win modifier, passing to system")
 		return nil
 	}
 
