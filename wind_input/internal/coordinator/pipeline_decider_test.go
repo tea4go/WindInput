@@ -89,8 +89,9 @@ func TestDecisionConstructors(t *testing.T) {
 	}
 }
 
-// TestDeciderSkeleton 验证第 0 批决策器骨架：host 永不为空（默认 engine_default），
-// 且在尚无 KeyHandler 的情况下不接管任何按键（交旧路径，handled=false）。
+// TestDeciderSkeleton 验证决策器宿主基线：host 永不为空（默认 engine_default），且
+// engine_default 现为链上真正一员——其 KeyHandlers 含整模式 handler（engine_default.key），
+// 正常输入经此 handler 进 handleEngineDefaultKey（不再是 HandleKeyEvent 内联 switch）。
 func TestDeciderSkeleton(t *testing.T) {
 	c := &Coordinator{}
 	d := newDecider(c)
@@ -101,14 +102,16 @@ func TestDeciderSkeleton(t *testing.T) {
 	if d.host.Name() != "engine_default" {
 		t.Fatalf("default host = %q, want engine_default", d.host.Name())
 	}
-	if len(d.keyHandlerChain()) != 0 {
-		t.Errorf("phase-0 chain should be empty, got %d handlers", len(d.keyHandlerChain()))
+	chain := d.keyHandlerChain()
+	if len(chain) != 1 {
+		t.Fatalf("engine_default chain = %d handlers, want 1 (engine_default.key)", len(chain))
 	}
-
-	// 第 0 批：链为空，普通字母不被接管，交旧路径。
-	res, handled := d.decide("a", &bridge.KeyEventData{Key: "a"})
-	if handled || res != nil {
-		t.Errorf("phase-0 decide should not handle, got (%v, %v)", res, handled)
+	if chain[0].Name() != "engine_default.key" {
+		t.Errorf("chain[0] = %q, want engine_default.key", chain[0].Name())
+	}
+	// engineDefaultKeyHandler 恒 Handle（兜底宿主接管其全部正常输入键）。
+	if v := chain[0].Judge(newDecisionCtx(c, d.host), "a", &bridge.KeyEventData{Key: "a"}).Verdict; v != VerdictHandle {
+		t.Errorf("engine_default.key Judge(a) = %v, want Handle", v)
 	}
 }
 

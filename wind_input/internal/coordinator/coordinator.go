@@ -311,6 +311,11 @@ type Coordinator struct {
 	// 受管宿主模式内键、触发键激活、z 回退、夺取回退。详见 docs/design/input-processor-pipeline.md。
 	decider *decider
 
+	// keyPrevDigitState 是本次按键起始时 lastOutputWasDigit 的快照（HandleKeyEvent 入口在重置前
+	// 捕获）。供 engine_default 链上 handleEngineDefaultKey 的标点/选词键处理读取（数字后智能标点）。
+	// 仅在单次按键内有效，非持久状态。
+	keyPrevDigitState bool
+
 	// 输入历史：追踪最近上屏文字，用于加词推荐
 	inputHistory *InputHistory
 

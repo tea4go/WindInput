@@ -101,7 +101,8 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 	// 仅在数字直通（无候选词选择）时重新设置为 true。
 	// 对于 modifier-only 按键（Shift/Ctrl/Alt/CapsLock），保持状态不变，
 	// 避免 Shift+标点（如 Shift+; 输入冒号）时丢失数字后状态。
-	prevDigitState := c.lastOutputWasDigit
+	// 快照进 c.keyPrevDigitState（重置前），供 engine_default 链上 handleEngineDefaultKey 读取。
+	c.keyPrevDigitState = c.lastOutputWasDigit
 	if !isModifierOnlyKey(uint32(data.KeyCode)) {
 		c.lastOutputWasDigit = false
 		// 统一记录最近一次按键时间，覆盖所有模式（主输入 / 临时英文 / 临时拼音 / 快捷输入），
@@ -505,10 +506,10 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		c.decider.clearRewind()
 	}
 
-	// 受管宿主模式内键：经决策器链分发（dispatchManagedHost：host 状态机维护、退出回落
+	// 受管宿主模式内键：经决策器链分发（dispatchHostChain：host 状态机维护、退出回落
 	// engine_default）。temp_english/temp_pinyin/quick_input/special/url 五宿主统一走此路径。
 	if c.tempEnglishMode || c.tempPinyinMode || c.quickInputMode || c.specialMode || c.urlMode {
-		return c.decider.dispatchManagedHost(key, &data)
+		return c.decider.dispatchHostChain(key, &data)
 	}
 
 	// URL 模式激活：正常输入下 inputBuffer + 本键字符恰好构成某 URL 前缀（悲观全匹配）→ 夺取
@@ -573,209 +574,8 @@ func (c *Coordinator) HandleKeyEvent(data bridge.KeyEventData) (result *bridge.K
 		}
 	}
 
-	// Chinese mode handling
-	vk := uint32(data.KeyCode)
-
-	// 自动配对：方向键、Enter、Escape 等清空配对栈
-	if c.pairTracker != nil {
-		switch vk {
-		case ipc.VK_LEFT, ipc.VK_RIGHT, ipc.VK_UP, ipc.VK_DOWN,
-			ipc.VK_HOME, ipc.VK_END, ipc.VK_RETURN, ipc.VK_ESCAPE:
-			c.pairTracker.Clear()
-		}
-	}
-	if c.pairTrackerEn != nil {
-		switch vk {
-		case ipc.VK_LEFT, ipc.VK_RIGHT, ipc.VK_UP, ipc.VK_DOWN,
-			ipc.VK_HOME, ipc.VK_END, ipc.VK_RETURN, ipc.VK_ESCAPE:
-			c.pairTrackerEn.Clear()
-		}
-	}
-
-	switch {
-	case c.isHighlightUpKey(vk, uint32(data.Modifiers)):
-		return c.handleArrowUp()
-
-	case c.isHighlightDownKey(vk, uint32(data.Modifiers)):
-		return c.handleArrowDown()
-
-	case vk == ipc.VK_LEFT:
-		return c.handleCursorLeft()
-
-	case vk == ipc.VK_RIGHT:
-		return c.handleCursorRight()
-
-	case vk == ipc.VK_HOME:
-		return c.handleCursorHome()
-
-	case vk == ipc.VK_END:
-		return c.handleCursorEnd()
-
-	case vk == ipc.VK_BACK:
-		return c.handleBackspace()
-
-	case vk == ipc.VK_DELETE:
-		return c.handleDelete()
-
-	case vk == ipc.VK_RETURN:
-		return c.handleEnter()
-
-	case vk == ipc.VK_ESCAPE:
-		return c.handleEscape()
-
-	case vk == ipc.VK_SPACE:
-		return c.handleSpace()
-
-	case !hasShift && c.isSelectCharFirstKey(key, data.KeyCode):
-		if result := c.handleSelectCharWithOverflow(0, key, prevDigitState, data.PrevChar); result != nil {
-			return result
-		}
-		return nil
-
-	case !hasShift && c.isSelectCharSecondKey(key, data.KeyCode):
-		if result := c.handleSelectCharWithOverflow(1, key, prevDigitState, data.PrevChar); result != nil {
-			return result
-		}
-		return nil
-
-	case c.isPageUpKey(key, data.KeyCode, uint32(data.Modifiers)):
-		if result := c.handlePageUp(); result != nil {
-			return result
-		}
-		// No candidates — fall through to punctuation if applicable
-		if len(key) == 1 && c.isPunctuation(rune(key[0])) {
-			return c.handlePunctuation(rune(key[0]), prevDigitState, data.PrevChar)
-		}
-		return nil
-
-	case c.isPageDownKey(key, data.KeyCode, uint32(data.Modifiers)):
-		if result := c.handlePageDown(); result != nil {
-			return result
-		}
-		// No candidates — fall through to punctuation if applicable
-		if len(key) == 1 && c.isPunctuation(rune(key[0])) {
-			return c.handlePunctuation(rune(key[0]), prevDigitState, data.PrevChar)
-		}
-		return nil
-
-	case vk == ipc.VK_TAB:
-		// Tab 安全网：输入态下始终消费，防止透传给宿主程序导致焦点跳转
-		// 如果 Tab 已被 isHighlightDownKey/UpKey 匹配则不会到达此处
-		if c.hasPendingInput() {
-			return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}
-		}
-		return nil
-
-	case len(key) == 1 && ((key[0] >= 'a' && key[0] <= 'z') || (key[0] >= 'A' && key[0] <= 'Z')):
-		lowerKey := strings.ToLower(key)
-		// z 键混合回退：决策器判定（engine_default 宿主裁决，含 z 触发键门禁，见
-		// pipeline_engine_default.go）。执行复用 enterTempPinyinFromZBuffer（CompHot 原地切换）。
-		if buf, ok := c.decider.judgeZFallback(lowerKey, &data); ok {
-			res := c.enterTempPinyinFromZBuffer(buf, c.inputBuffer)
-			// CompHot 进入 temp_pinyin：对齐受管宿主 host，后续模式内键走 dispatchManagedHost。
-			c.decider.onTempPinyinEntered()
-			return res
-		}
-		// Chinese mode: convert to lowercase for pinyin
-		return c.handleAlphaKey(lowerKey)
-
-	case len(key) == 1 && key[0] >= '1' && key[0] <= '9':
-		result := c.handleNumberKey(int(key[0] - '0'))
-		if result == nil {
-			// 数字直通（无候选词选择），标记用于智能标点
-			if c.pairTracker != nil {
-				c.pairTracker.Clear()
-			}
-			if c.pairTrackerEn != nil {
-				c.pairTrackerEn.Clear()
-			}
-			c.lastOutputWasDigit = true
-			// 空码状态：有待处理输入但无候选，必须显式清空并上屏数字；
-			// 透传（nil）会让应用得到数字但 composition 不会结束，导致状态混乱。
-			if c.hasPendingInput() {
-				c.clearState()
-				c.hideUI()
-				digit := key
-				if c.fullWidth {
-					digit = transform.ToFullWidth(key)
-				}
-				return &bridge.KeyEventResult{
-					Type: bridge.ResponseTypeInsertText,
-					Text: digit,
-				}
-			}
-			// 全角模式下输出全角数字
-			if c.fullWidth {
-				return &bridge.KeyEventResult{
-					Type: bridge.ResponseTypeInsertText,
-					Text: transform.ToFullWidth(key),
-				}
-			}
-			// 透传路径：result 为 nil，defer fallback 不会触发，需主动记录
-			c.recordCommit(key, 0, -1, store.SourcePunctuation)
-		}
-		return result
-
-	case len(key) == 1 && key[0] == '0':
-		result := c.handleNumberKey(10)
-		if result == nil {
-			if c.pairTracker != nil {
-				c.pairTracker.Clear()
-			}
-			if c.pairTrackerEn != nil {
-				c.pairTrackerEn.Clear()
-			}
-			c.lastOutputWasDigit = true
-			// 空码状态：有待处理输入但无候选，必须显式清空并上屏数字；
-			// 透传（nil）会让应用得到数字但 composition 不会结束，导致状态混乱。
-			if c.hasPendingInput() {
-				c.clearState()
-				c.hideUI()
-				digit := key
-				if c.fullWidth {
-					digit = transform.ToFullWidth(key)
-				}
-				return &bridge.KeyEventResult{
-					Type: bridge.ResponseTypeInsertText,
-					Text: digit,
-				}
-			}
-			// 全角模式下输出全角数字
-			if c.fullWidth {
-				return &bridge.KeyEventResult{
-					Type: bridge.ResponseTypeInsertText,
-					Text: transform.ToFullWidth(key),
-				}
-			}
-			// 透传路径：result 为 nil，defer fallback 不会触发，需主动记录
-			c.recordCommit(key, 0, -1, store.SourcePunctuation)
-		}
-		return result
-
-	case !hasShift && c.isSelectKey2(key, data.KeyCode):
-		// buffer 非空时的二候选/overflow 已由 routeBufferedTriggerKey 接管，
-		// 这里只处理无输入缓冲时的标点回退。
-		if len(c.inputBuffer) == 0 && len(key) == 1 && c.isPunctuation(rune(key[0])) {
-			return c.handlePunctuation(rune(key[0]), prevDigitState, data.PrevChar)
-		}
-		return nil
-
-	case !hasShift && c.isPinyinSeparator(key, data.KeyCode):
-		return c.handlePinyinSeparator()
-
-	case !hasShift && c.isSelectKey3(key, data.KeyCode):
-		// buffer 非空时的三候选/overflow 已由 routeBufferedTriggerKey 接管，
-		// 这里只处理无输入缓冲时的标点回退。
-		if len(c.inputBuffer) == 0 && len(key) == 1 && c.isPunctuation(rune(key[0])) {
-			return c.handlePunctuation(rune(key[0]), prevDigitState, data.PrevChar)
-		}
-		return nil
-
-	case len(key) == 1 && c.isPunctuation(rune(key[0])):
-		return c.handlePunctuation(rune(key[0]), prevDigitState, data.PrevChar)
-
-	default:
-		c.logger.Debug("Unhandled key", "key", key, "keycode", data.KeyCode)
-		return nil
-	}
+	// engine_default 兜底宿主：正常输入键经决策器链分发（engineDefaultKeyHandler.Apply=
+	// handleEngineDefaultKey，与其它宿主同构）。此处 d.host 恒为 engine_default（受管模式均已
+	// 在上方 return），reconcileHost 不变更。
+	return c.decider.dispatchHostChain(key, &data)
 }

@@ -23,7 +23,7 @@ func armZRewind(h *testCoordinator) {
 	h.tempPinyinCursorPos = len("zha")
 	h.tempPinyinTriggerKey = "z"
 	// 对齐 d.host=tempPinyin（生产中 z 回退经 onTempPinyinEntered 完成），使后续模式内键经
-	// dispatchManagedHost 走临时拼音链。决策器恒开后这是必需的；缺它模式内键会落到 engine_default。
+	// dispatchHostChain 走临时拼音链。决策器恒开后这是必需的；缺它模式内键会落到 engine_default。
 	h.decider.onTempPinyinEntered()
 	h.decider.armRewind("zzh", "zha", h.clearTempPinyinModeStateForRewind)
 }

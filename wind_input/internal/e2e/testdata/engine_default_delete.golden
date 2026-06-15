@@ -1,0 +1,135 @@
+>>> type nihao
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "nihao",
+    "input_cursor_pos": 5,
+    "preedit_display": "ni hao",
+    "candidates": [
+      {
+        "text": "你好",
+        "code": "nihao",
+        "weight": 0
+      },
+      {
+        "text": "拟好",
+        "code": "nihao",
+        "weight": 0
+      },
+      {
+        "text": "你",
+        "code": "ni",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> key left
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "nihao",
+    "input_cursor_pos": 4,
+    "preedit_display": "ni hao",
+    "candidates": [
+      {
+        "text": "你好",
+        "code": "nihao",
+        "weight": 0
+      },
+      {
+        "text": "拟好",
+        "code": "nihao",
+        "weight": 0
+      },
+      {
+        "text": "你",
+        "code": "ni",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> key left
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "nihao",
+    "input_cursor_pos": 3,
+    "preedit_display": "ni hao",
+    "candidates": [
+      {
+        "text": "你好",
+        "code": "nihao",
+        "weight": 0
+      },
+      {
+        "text": "拟好",
+        "code": "nihao",
+        "weight": 0
+      },
+      {
+        "text": "你",
+        "code": "ni",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> key delete
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "niho",
+    "input_cursor_pos": 3,
+    "preedit_display": "ni ho",
+    "candidates": [
+      {
+        "text": "霓虹",
+        "code": "",
+        "weight": 0
+      },
+      {
+        "text": "你",
+        "code": "ni",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}

@@ -10,8 +10,11 @@ import (
 	"github.com/huanfeng/wind_input/pkg/config"
 )
 
-// 编译期断言：engineDefaultProcessor 实现 Processor 接口。
-var _ Processor = (*engineDefaultProcessor)(nil)
+// 编译期断言：engineDefaultProcessor 实现 Processor 接口、engineDefaultKeyHandler 实现 KeyHandler。
+var (
+	_ Processor  = (*engineDefaultProcessor)(nil)
+	_ KeyHandler = engineDefaultKeyHandler{}
+)
 
 type engineDefaultProcessor struct {
 	c *Coordinator
@@ -77,7 +80,28 @@ func (p *engineDefaultProcessor) Release() {}
 
 func (p *engineDefaultProcessor) BufferText() string { return p.c.inputBuffer }
 
-func (p *engineDefaultProcessor) KeyHandlers() []KeyHandler { return nil }
+// KeyHandlers engine_default 的链 = 单个恒 Handle 的整模式 handler（与 urlKeyHandler 同构）。
+// 正常输入的全部按键（导航/光标/编辑/上屏/字母含 z 回退/数字/选词/分隔符/标点）由
+// handleEngineDefaultKey 统一处理（原 HandleKeyEvent 末尾 switch 的搬迁）。把翻页/高亮拆给共享
+// navKeyHandler 是后续批次——届时本 handler 改为对导航键 Pass 让位。
+func (p *engineDefaultProcessor) KeyHandlers() []KeyHandler {
+	return []KeyHandler{engineDefaultKeyHandler{c: p.c}}
+}
+
+// engineDefaultKeyHandler 把 handleEngineDefaultKey 包装成链上的整模式处理单元（Judge 恒 Handle）。
+type engineDefaultKeyHandler struct {
+	c *Coordinator
+}
+
+func (h engineDefaultKeyHandler) Name() string { return "engine_default.key" }
+
+func (h engineDefaultKeyHandler) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
+	return decHandle()
+}
+
+func (h engineDefaultKeyHandler) Apply(c *Coordinator, key string, data *bridge.KeyEventData) *bridge.KeyEventResult {
+	return c.handleEngineDefaultKey(key, data)
+}
 
 func (p *engineDefaultProcessor) Capabilities() Capability { return 0 }
 

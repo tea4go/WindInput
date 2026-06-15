@@ -3,7 +3,7 @@
 // URL 的触发不是「buffer 空时的触发键」，而是「正常输入下 inputBuffer 恰好完成某前缀」
 // （悲观全匹配，Release→Activate），由 handle_key_event 的 urlActivationResidual 钩子在
 // 正常输入路径夺取（调 enterUrlMode）。故 url **不入 decider.registry**（registry 是触发键
-// 激活类）；但它是受管宿主——模式内键经 dispatchManagedHost 走链、host 由决策器维护。
+// 激活类）；但它是受管宿主——模式内键经 dispatchHostChain 走链、host 由决策器维护。
 package coordinator
 
 import (

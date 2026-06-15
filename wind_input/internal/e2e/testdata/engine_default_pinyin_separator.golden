@@ -1,0 +1,125 @@
+>>> type xian
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "xian",
+    "input_cursor_pos": 4,
+    "preedit_display": "xian",
+    "candidates": [
+      {
+        "text": "线",
+        "code": "xian",
+        "weight": 0
+      },
+      {
+        "text": "西安",
+        "code": "xian",
+        "weight": 0
+      },
+      {
+        "text": "现",
+        "code": "xian",
+        "weight": 0
+      },
+      {
+        "text": "锡安",
+        "code": "xian",
+        "weight": 0
+      },
+      {
+        "text": "西岸",
+        "code": "xian",
+        "weight": 0
+      },
+      {
+        "text": "见",
+        "code": "xian",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> type '
+{
+  "result_type": "insert_text",
+  "commit_text": "现",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "",
+    "input_cursor_pos": 0,
+    "preedit_display": "",
+    "candidates": [],
+    "current_page": 1,
+    "total_pages": 1,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}
+>>> type an
+{
+  "result_type": "update_composition",
+  "state": {
+    "chinese_mode": true,
+    "full_width": false,
+    "chinese_punctuation": true,
+    "effective_mode": "chinese",
+    "engine_name": "pinyin",
+    "input_buffer": "an",
+    "input_cursor_pos": 2,
+    "preedit_display": "an",
+    "candidates": [
+      {
+        "text": "按",
+        "code": "an",
+        "weight": 0
+      },
+      {
+        "text": "安",
+        "code": "an",
+        "weight": 0
+      },
+      {
+        "text": "俺",
+        "code": "an",
+        "weight": 0
+      },
+      {
+        "text": "案",
+        "code": "an",
+        "weight": 0
+      },
+      {
+        "text": "暗",
+        "code": "an",
+        "weight": 0
+      },
+      {
+        "text": "氨",
+        "code": "an",
+        "weight": 0
+      },
+      {
+        "text": "胺",
+        "code": "an",
+        "weight": 0
+      }
+    ],
+    "current_page": 1,
+    "total_pages": 20,
+    "selected_index": 0,
+    "candidates_per_page": 7
+  }
+}

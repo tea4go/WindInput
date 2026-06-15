@@ -189,7 +189,7 @@ func (d *decider) tryActivateFromEmpty(key string, data *bridge.KeyEventData) (*
 // enterXxxMode（setupXxxMode + modeCompositionResult）。
 //
 // 受管宿主（isManaged：temp_pinyin/quick_input/temp_english/special）激活后经 markEntered 设
-// d.host=p，使模式内键经 dispatchManagedHost 走 decide()。markEntered 自带 modeActive 守卫，
+// d.host=p，使模式内键经 dispatchHostChain 走 decide()。markEntered 自带 modeActive 守卫，
 // 仅在模式真置位时设 host；非受管宿主（仅 engine_default）不会进 registry/此路径。
 func (d *decider) executeActivate(p Processor, dec Decision) (*bridge.KeyEventResult, bool) {
 	prefix, ok := p.Activate(dec)
@@ -202,11 +202,12 @@ func (d *decider) executeActivate(p Processor, dec Decision) (*bridge.KeyEventRe
 	return d.c.modeCompositionResult(prefix, len(prefix)), true
 }
 
-// dispatchManagedHost 在 d.host 为受管宿主时驱动其按键处理链（decide() 接管模式内按键）。
+// dispatchHostChain 驱动当前 d.host（受管宿主 + engine_default 兜底宿主）的按键处理链。
 // 遍历链取第一个非 Pass 者执行（I11 短路），Apply 后 reconcileHost 据模式真值源回填 host
-// （退出→回落 engine_default）。受管宿主的链含恒 Handle 的整模式 handler，故必中第一个；
-// 兜底分支防御链意外全 Pass（不应发生）。全程在 c.mu 内（I7，调用方 HandleKeyEvent 已持锁）。
-func (d *decider) dispatchManagedHost(key string, data *bridge.KeyEventData) *bridge.KeyEventResult {
+// （受管宿主退出→回落 engine_default；engine_default 自身 reconcile 为 no-op）。各宿主的链当前
+// 均含恒 Handle 的整模式 handler（engineDefaultKeyHandler/各 xxxKeyHandler/urlKeyHandler），故必中
+// 第一个；兜底分支防御链意外全 Pass（不应发生）。全程在 c.mu 内（I7，调用方 HandleKeyEvent 已持锁）。
+func (d *decider) dispatchHostChain(key string, data *bridge.KeyEventData) *bridge.KeyEventResult {
 	ctx := newDecisionCtx(d.c, d.host)
 	for _, h := range d.keyHandlerChain() {
 		if h.Judge(ctx, key, data).Verdict == VerdictPass {
@@ -221,7 +222,7 @@ func (d *decider) dispatchManagedHost(key string, data *bridge.KeyEventData) *br
 	}
 	// 兜底：链意外全 Pass（受管宿主 KeyHandler 恒 Handle，不应发生）——记 WARN，消费按键防泄漏。
 	if d.c.logger != nil {
-		d.c.logger.Warn("dispatchManagedHost: empty chain verdict", "host", d.host.Name())
+		d.c.logger.Warn("dispatchHostChain: empty chain verdict", "host", d.host.Name())
 	}
 	d.reconcileHost()
 	return &bridge.KeyEventResult{Type: bridge.ResponseTypeConsumed}

@@ -528,6 +528,16 @@ func TestEngineDefaultJudge(t *testing.T) {
 > 对 allow_symbols 符号字符 Handle 优先（保旧 switch 顺序）。golden `mode_temp_english_highlight`。**至此四模式
 > （temp_pinyin/special/quick_input/temp_english）导航全部从整模式 handler 移入决策器链。** **后续待办**：模式特有键
 > 进一步细分（字母/数字/选词等拆为独立 handler）；引擎副作用 `applyEngineDiff` 单点化（I3）；url_english 处理器。
+>
+> **engine_default 正常输入进决策器（2026-06-15，终态骨架）**：原 `HandleKeyEvent` 中文模式末尾的大 switch
+> （导航/光标/编辑/上屏/字母含 z 回退/数字/以词定字/拼音分隔符/标点）**逐字节搬入** `handleEngineDefaultKey`
+> （`handle_engine_default.go`），包成恒 Handle 的 `engineDefaultKeyHandler` 进 `engine_default.KeyHandlers()`；
+> `HandleKeyEvent` 尾部仅余一行 `dispatchHostChain`。**至此五受管宿主 + engine_default 兜底宿主全部经决策器链，
+> switch 不再是内联特例，I1（host 永不为空）名副其实。** 因 decider-off 已退役、A/B parity 约束消失，本步骤
+> 直接进行、零开关；安全网为新增的 e2e golden（`engine_default_cursor_move`/`_delete`/`_highlight_nav`/`_escape`/
+> `_enter_raw`/`_pinyin_separator`）+ 既有核心 golden。`prevDigitState` 经 `c.keyPrevDigitState` 透传（Apply 签名固定）。
+> `dispatchManagedHost` 因不再限于受管宿主，更名 `dispatchHostChain`。**后续**：engine_default/url 仍是单一整模式
+> handler，把翻页/高亮拆给共享 `navKeyHandler`（如其它受管宿主）是下一步内部分解。
 
 **贯穿全程：开关控制，可回退旧 `HandleKeyEvent`。** 第 0b 影子运行的开关放在独立开发
 配置 `wind_dev.toml`（`decider_shadow`，见 `internal/coordinator/dev_config.go`），**不进主配置
