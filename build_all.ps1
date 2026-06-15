@@ -644,6 +644,25 @@ function Prepare-DataFiles {
         Write-Host "[警告] 未找到主题目录" -ForegroundColor Yellow
     }
     Write-DetailLine
+
+    # 预生成拼音 wdat 缓存（同步阻塞）
+    # 目的：CI / 本地构建后首次跑 E2E 测试时，wdat 已就绪，NeedsRegenerate 返回 false，
+    # 避免多个 harness 并发初始化时因后台异步生成 wdat 竞态导致 mixed 方案拼音部分缺失。
+    $pinyinDictPath = Join-Path $pinyinDir "rime_frost.dict.yaml"
+    if (Test-Path $pinyinDictPath) {
+        Write-Detail "  - 预生成拼音 wdat 缓存..."
+        Push-Location (Join-Path $ScriptDir "wind_input")
+        try {
+            & go run ./cmd/pregen_wdat -dict $pinyinDictPath
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[警告] wdat 预生成失败，E2E 测试首次运行时将自动重试" -ForegroundColor Yellow
+            } else {
+                Write-Detail "  - wdat 预生成完成"
+            }
+        } finally {
+            Pop-Location
+        }
+    }
 }
 
 # ============================================================

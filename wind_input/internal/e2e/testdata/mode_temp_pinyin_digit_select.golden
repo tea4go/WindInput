@@ -94,12 +94,12 @@
         "weight": 0
       },
       {
-        "text": "地",
+        "text": "得",
         "code": "de",
         "weight": 0
       },
       {
-        "text": "得",
+        "text": "地",
         "code": "de",
         "weight": 0
       }
@@ -115,7 +115,7 @@
 >>> select 2
 {
   "result_type": "insert_text",
-  "commit_text": "地",
+  "commit_text": "得",
   "state": {
     "chinese_mode": true,
     "full_width": false,
