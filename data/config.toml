@@ -15,6 +15,9 @@ default_chinese_punct = true
 [schema]
 active = "wubi86"
 available = ["wubi86", "wubi86_pinyin"]
+# 主码表/主拼音方案 ID，留空时按 available 顺序自动选第一个对应类型的方案
+primary_codetable = ""
+primary_pinyin = ""
 
 [hotkeys]
 toggle_mode_keys = ["lshift", "rshift"]
@@ -31,6 +34,7 @@ open_add_word_dialog = "none"
 toggle_s2t = "ctrl+shift+j"
 take_screenshot = "ctrl+shift+f11"
 activate_ime = "ctrl+shift+["
+enter_temp_pinyin = "none"
 global_hotkeys = []
 
 [input]
@@ -54,6 +58,7 @@ pinyin_separator = "auto"
 enabled = true
 show_english_candidates = true
 shift_behavior = "temp_english"
+trigger_keys = []
 allow_symbols = false
 space_as_input = false
 
@@ -68,6 +73,13 @@ accent_color = ""
 [input.auto_pair]
 chinese = false
 english = false
+blacklist = []
+chinese_pairs = ["（）", "【】", "｛｝", "《》", "〈〉"]
+english_pairs = ["()", "[]", "{}", "<>"]
+
+# 自定义标点映射：enabled 为总开关；mappings 留空时全部走内置默认转换
+[input.punct_custom]
+enabled = false
 
 [input.overflow]
 number_key = "ignore"
