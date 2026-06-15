@@ -1,5 +1,5 @@
 ﻿param(
-    [ValidateSet("all", "dll", "service", "setting", "portable")]
+    [ValidateSet("all", "dll", "service", "setting", "portable", "data")]
     [string[]]$Module = @("all"),
 
     [ValidateSet("debug", "release", "skip")]
@@ -25,6 +25,7 @@ $BuildService = $BuildAll -or ($Module -contains "service")
 $BuildDll = $BuildAll -or ($Module -contains "dll")
 $BuildSetting = $BuildAll -or ($Module -contains "setting")
 $BuildPortable = $BuildAll -or ($Module -contains "portable")
+$BuildData = $BuildAll -or ($Module -contains "data")
 
 Write-Host "======================================"
 Write-Host "WindInput - Build"
@@ -70,7 +71,8 @@ $script:StepIdx = 0
 if ($BuildAll) {
     $script:TotalSteps = 7
 } else {
-    $script:TotalSteps = (@($BuildService, $BuildDll, $BuildSetting, $BuildPortable) | Where-Object { $_ }).Count
+    $dataSteps = if ($BuildData) { 2 } else { 0 }
+    $script:TotalSteps = (@($BuildService, $BuildDll, $BuildSetting, $BuildPortable) | Where-Object { $_ }).Count + $dataSteps
 }
 
 function Write-Step([string]$Message) {
@@ -96,6 +98,7 @@ if (-not $BuildAll) {
     if ($BuildService) { $moduleNames += "GO 服务" }
     if ($BuildSetting) { $moduleNames += "设置" }
     if ($BuildPortable) { $moduleNames += "便携启动器" }
+    if ($BuildData) { $moduleNames += "词库/数据" }
     Write-Host "构建模块: $($moduleNames -join ', ')"
 }
 Write-Host ""
@@ -651,7 +654,7 @@ if ($BuildService) { Build-GoService }
 if ($BuildDll) { Build-CppDll }
 if ($BuildSetting) { Build-SettingUI }
 if ($BuildPortable) { Build-PortableLauncher }
-if ($BuildAll) {
+if ($BuildData) {
     Download-Dictionaries
     Prepare-DataFiles
 }
@@ -692,7 +695,7 @@ if ($Brief) {
         "无需要检查的输出文件"
     }
     Write-Host "构建完成: $outputList"
-    if ($BuildAll) {
+    if ($BuildData) {
         Write-Host "数据文件已准备: $buildDirLabel\data"
     }
     exit 0
@@ -707,7 +710,7 @@ foreach ($f in $checkFiles) {
     Write-Host "- $buildDirLabel\$f"
 }
 
-if ($BuildAll) {
+if ($BuildData) {
     Write-Host "- $buildDirLabel\data\schemas\*.schema.toml（输入方案配置）"
     Write-Host "- $buildDirLabel\data\schemas\pinyin\*.dict.yaml（拼音词库）"
     Write-Host "- $buildDirLabel\data\schemas\pinyin\unigram.txt（Unigram 语言模型）"
