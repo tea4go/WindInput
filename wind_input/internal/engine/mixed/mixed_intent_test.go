@@ -390,6 +390,48 @@ func TestIsWholeSyllablePinyin(t *testing.T) {
 	}
 }
 
+// TestHasNonInitialSingleLetterSyllable 验证"非首位单字母音节"判断（顶码歧义裁决的第二门禁，纯逻辑、不依赖词库）。
+//
+// 背景：naap=民营 / buap=联营 / haap=虚荣 这类五笔全码，拼音解析会得到 [na,a]/[bu,a]/[ha,a]——
+// 含一个非首位的单字母音节 a。真实拼音里 na'a / bu'a 这类需隔音符的串裸写极少，裸写时几乎都是
+// 五笔编码。本门禁与 isWholeSyllablePinyin 互补：把这类"退化解析串"识别出来，配合"终止性全码"
+// 放行顶码，而 yans（yan+残留 s，无退化音节）/ niha（ni+ha 皆双字母）则不命中，继续受拼音保护。
+func TestHasNonInitialSingleLetterSyllable(t *testing.T) {
+	engine := &Engine{
+		maxCodeLen:   4,
+		pinyinParser: pinyin.NewPinyinParser(),
+	}
+
+	tests := []struct {
+		input string
+		want  bool
+		desc  string
+	}{
+		// 含非首位单字母音节（退化解析）→ 是
+		{"naap", true, "naap: na+a，第二音节单字母 a（民营）"},
+		{"buap", true, "buap: bu+a，第二音节单字母 a（联营）"},
+		{"haap", true, "haap: ha+a，第二音节单字母 a（虚荣）"},
+		{"niap", true, "niap: ni+a，第二音节单字母 a"},
+
+		// 无非首位单字母音节 → 否（继续受拼音保护）
+		{"yans", false, "yans: 仅 yan 一个完整音节，残留 s 不是音节"},
+		{"aipu", false, "aipu: ai+pu 皆双字母"},
+		{"niha", false, "niha: ni+ha 皆双字母"},
+		{"wang", false, "wang: 单个完整音节"},
+		{"zhon", false, "zhon: zhong 的残缺前缀"},
+		{"abcd", false, "abcd: 首音节 a 单字母但在首位，不算非首位"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			got := engine.hasNonInitialSingleLetterSyllable(tt.input)
+			if got != tt.want {
+				t.Errorf("hasNonInitialSingleLetterSyllable(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestMixedOverflow_PinyinWithCodetable 验证超过码长时码表和拼音都参与查询
 func TestMixedOverflow_PinyinWithCodetable(t *testing.T) {
 	dictRoot := getBuiltDictRoot(t)
@@ -438,13 +480,10 @@ func TestMixedOverflow_PinyinWithCodetable(t *testing.T) {
 func createCodetableEngine(t *testing.T, dictRoot string) *codetable.Engine {
 	t.Helper()
 
-	// 查找五笔 RIME 词库（split .dict.toml 优先，回退旧 .dict.yaml）
-	rimeMainDict := filepath.Join(dictRoot, "wubi86", "wubi86_jidian.dict.toml")
+	// 查找五笔 RIME 词库（.dict.yaml）
+	rimeMainDict := filepath.Join(dictRoot, "wubi86", "wubi86_jidian.dict.yaml")
 	if _, err := os.Stat(rimeMainDict); os.IsNotExist(err) {
-		rimeMainDict = filepath.Join(dictRoot, "wubi86", "wubi86_jidian.dict.yaml")
-		if _, err := os.Stat(rimeMainDict); os.IsNotExist(err) {
-			t.Skipf("wubi rime dict not found under %s", filepath.Join(dictRoot, "wubi86"))
-		}
+		t.Skipf("wubi rime dict not found under %s", filepath.Join(dictRoot, "wubi86"))
 	}
 
 	// 转换 RIME 格式到 wdb（放在 dictRoot 同级目录避免 mmap 文件锁导致 TempDir 清理失败）

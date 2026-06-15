@@ -271,17 +271,28 @@ func (e *Engine) HandleTopCode(input string) (commitText string, newInput string
 
 	// 检查前 N 码是否为合法拼音序列：默认抑制顶码（保护正在输入的拼音）。
 	//
-	// 歧义裁决（2026-06-08）：当前缀同时满足"整音节拼音"+"终止性精确五笔全码"
-	// 时（典型如 wang / aipu —— 既是完整拼音又是唯一五笔编码），其意图无法从编码
-	// 区分。此时按 TopCodeOverridePinyin 开关放行顶码、倒向五笔连打。
-	//   - 整音节门禁（isWholeSyllablePinyin）确保前缀切在音节边界上，无论裁决给
-	//     哪一侧都不会落实半个音节；zhon/yans 这类残缺尾音节永远不进此分支，仍受保护。
-	//   - 终止性全码门禁（isTerminalExactCode）把误伤限定到极小的碰撞集——只有
-	//     "恰好是唯一五笔全码"的整音节串才放行。
+	// 歧义裁决（2026-06-08，2026-06-15 扩充退化解析）：当前缀是"终止性精确五笔全码"
+	// 且其拼音读法"非真实拼音"时，意图无法从编码区分，按 TopCodeOverridePinyin 开关
+	// 放行顶码、倒向五笔连打。"非真实拼音"有两种形态（命中任一即放行）：
+	//   - 整音节门禁（isWholeSyllablePinyin）：前缀恰好切在音节边界（wang / aipu ——
+	//     既是完整拼音又是唯一五笔码），真歧义，由开关裁决。
+	//   - 退化解析门禁（hasNonInitialSingleLetterSyllable）：拼音读法含非首位单字母
+	//     音节（naap=民营 → na|a|p / buap=联营 / haap=虚荣），需隔音符才成拼音，裸写
+	//     几乎必是五笔码。
+	//   - 终止性全码门禁（isTerminalExactCode）：贯穿两种形态的硬条件，把误伤限定到
+	//     "恰好是唯一五笔全码"的极小碰撞集——zhon/yans（残缺尾音节）、niap（含 a 但非
+	//     唯一全码）都不放行，仍受拼音保护。
 	// 开关为 false 时维持原拼音保护（习惯打 "wang ba" 等拼音词的用户应关闭）。
 	if e.isPossiblePinyinSequence(prefix) {
+		// 放行顶码需同时满足：开关开启 + 终止性精确全码 + 拼音读法"非真实拼音"。
+		// 后者有两种形态，命中任一即可：
+		//   - isWholeSyllablePinyin：整音节歧义串（aipu/wang，真歧义，由开关裁决）；
+		//   - hasNonInitialSingleLetterSyllable：含非首位单字母音节的退化解析串
+		//     （naap=民营 / buap=联营 / haap=虚荣，拼音读法 na|a|p 需隔音符，裸写几乎必是五笔码）。
+		// yans（yan+残留 s，无退化音节）/ niap（非唯一全码）均不命中，继续受拼音保护。
 		override := e.config != nil && e.config.TopCodeOverridePinyin &&
-			e.isWholeSyllablePinyin(prefix) && e.isTerminalExactCode(prefix)
+			e.isTerminalExactCode(prefix) &&
+			(e.isWholeSyllablePinyin(prefix) || e.hasNonInitialSingleLetterSyllable(prefix))
 		if !override {
 			e.logger.Debug("HandleTopCode: prefix is valid pinyin, suppress top-code", "prefix", prefix)
 			return "", input, false
@@ -427,6 +438,32 @@ func (e *Engine) isWholeSyllablePinyin(prefix string) bool {
 		return false
 	}
 	return endPos == len(prefix)
+}
+
+// hasNonInitialSingleLetterSyllable 判断 prefix 的连续完整音节解析中，是否存在非首位的
+// 单字母音节（a/e/o）。这是"伪拼音/退化解析"的特征：真实拼音里 na'a / bu'a / ha'a 这类需要
+// 隔音符的串极少裸写，裸写时几乎都是五笔编码（naap=民营 / buap=联营 / haap=虚荣）。
+//
+// 用于顶码歧义裁决的第二门禁：与 isWholeSyllablePinyin 互补——前者放行 aipu/wang 这类"整音节
+// 真歧义"，本函数放行 naap 这类"退化解析"。两者均须再叠加 isTerminalExactCode（确认是唯一全码）
+// 才放行顶码，从而把误伤限定在"恰好是唯一五笔全码"的极小碰撞集内：yans（yan+残留 s，无退化
+// 音节）/ niap（含 a 但非唯一全码）都不会被放行，继续受拼音保护。
+//   - "naap" → na + a（第二音节单字母）→ true
+//   - "yans" → yan + 残留 s（残留不是完整音节）→ false
+//   - "aipu" → ai + pu（皆双字母）→ false
+//   - "abcd" → 首音节 a 单字母但在首位 → false（首位单字母由 isPossiblePinyinSequence 过滤）
+func (e *Engine) hasNonInitialSingleLetterSyllable(prefix string) bool {
+	if e.pinyinParser == nil {
+		return false
+	}
+	parsed := e.pinyinParser.Parse(prefix)
+	completed, _ := parsed.ContiguousCompletedFromStart()
+	for i := 1; i < len(completed); i++ {
+		if len(completed[i]) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // isTerminalExactCode 判断 prefix 是否为"终止性精确五笔全码"：码表中存在 Code==prefix
