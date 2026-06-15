@@ -22,6 +22,7 @@ type learningEventKind int
 const (
 	learningEventCandidateSelected learningEventKind = iota
 	learningEventPhraseTerminated
+	learningEventDrain // 测试/flush 专用：worker 处理时关闭 doneCh，调用方以此同步等待队列清空
 )
 
 // learningEvent 是 Manager learning channel 上传递的事件单元。
@@ -33,6 +34,7 @@ type learningEvent struct {
 	code   string
 	text   string
 	source candidate.CandidateSource
+	doneCh chan struct{} // 仅 learningEventDrain 使用
 }
 
 // learningChanCapacity learning channel 缓冲容量。
@@ -125,6 +127,10 @@ func (m *Manager) learningWorker() {
 			m.onCandidateSelectedSync(ev.code, ev.text, ev.source)
 		case learningEventPhraseTerminated:
 			m.onPhraseTerminatedSync()
+		case learningEventDrain:
+			if ev.doneCh != nil {
+				close(ev.doneCh)
+			}
 		}
 	}
 }

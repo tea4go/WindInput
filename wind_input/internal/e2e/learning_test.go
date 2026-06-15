@@ -16,7 +16,7 @@ package e2e
 import "testing"
 
 // TestLearningFreqRecorded 验证重复选词累积词频：拼音方案下重复选第 1 候选 5 次并
-// FlushLearning，词频桶中应存在对应记录且 Count==4（首次不计，误选保护）。
+// FlushLearning，词频桶中应存在对应记录且 Count==5（每次选择均记录）。
 // 选第 1 候选而非固定文字，避免测试依赖特定词典版本的候选顺序。
 func TestLearningFreqRecorded(t *testing.T) {
 	h := mustHarness(t, "pinyin")
@@ -28,7 +28,7 @@ func TestLearningFreqRecorded(t *testing.T) {
 		t.Fatal("nihao 无候选，拼音词典可能未就绪")
 	}
 	targetText := initState.Candidates[0].Text
-	h.SelectCandidate(1) // 第一次选择（首次不计入词频）
+	h.SelectCandidate(1)
 
 	const selections = 5
 	for range [selections - 1]struct{}{} {
@@ -46,8 +46,8 @@ func TestLearningFreqRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFreq(%q): %v", schemaID, err)
 	}
-	if got, want := int(rec.Count), selections-1; got != want {
-		t.Errorf("选 %d 次后 %s 词频 Count = %d, 期望 %d（首次选择不计入）", selections, targetText, got, want)
+	if got, want := int(rec.Count), selections; got != want {
+		t.Errorf("选 %d 次后 %s 词频 Count = %d, 期望 %d", selections, targetText, got, want)
 	}
 }
 

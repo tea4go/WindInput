@@ -236,9 +236,13 @@ func (h *Harness) PageDown() *bridge.KeyEventResult  { return h.Key("pagedown") 
 func (h *Harness) PageUp() *bridge.KeyEventResult    { return h.Key("pageup") }
 
 // FlushLearning 同步 flush 词频增量到 store，使前面选词记录的频次对随后查询立即生效。
-// 选词的词频写入是异步批量的（生产靠后台 50 条/30s flush），测试需显式调用此方法
-// 才能在同一次运行内观察到词频重排。
+// 词频写入有两级异步：① OnCandidateSelected 事件进 learningCh 由 worker 处理；
+// ② freqHandler.Record 调 IncrementFreqAsync 进 BoltDB 批次队列。
+// 必须先 drain learningCh（确保 ① 完成），再 FlushFreq（完成 ②），否则 flush 空队列。
 func (h *Harness) FlushLearning() {
+	if h.EngineMgr != nil {
+		h.EngineMgr.DrainLearning()
+	}
 	if h.DictMgr != nil {
 		if err := h.DictMgr.FlushFreq(); err != nil {
 			panic(fmt.Sprintf("e2e: flush 词频失败: %v", err))

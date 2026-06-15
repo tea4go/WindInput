@@ -252,6 +252,18 @@ func (m *Manager) OnPhraseTerminated() {
 	}
 }
 
+// DrainLearning 阻塞直到 learningCh 中所有已排队事件被 worker 处理完毕。
+// 用于测试场景：在 FlushFreq 之前确保 freqHandler.Record 已全部执行，否则
+// FlushFreq 会 flush 空队列，导致词频 Count 永远为 0。
+func (m *Manager) DrainLearning() {
+	if m.learningCh == nil {
+		return
+	}
+	done := make(chan struct{})
+	m.learningCh <- learningEvent{kind: learningEventDrain, doneCh: done}
+	<-done
+}
+
 // onCandidateSelectedSync 是 OnCandidateSelected 的同步实现，仅供 learningWorker 调用。
 func (m *Manager) onCandidateSelectedSync(code, text string, source candidate.CandidateSource) {
 	engine := m.GetCurrentEngine()
