@@ -1,8 +1,9 @@
-// pipeline_decider.go — 统一决策器骨架（第 0 批）。
+// pipeline_decider.go — 统一决策器。
 //
-// 第 0 批只搭骨架，不接入 HandleKeyEvent 主路径。decide() 实现求值算法的结构，但宿主迁移
-// （executeActivate / applyEngineDiff / CompositionPhase 推导）与共享导航 handler 留待第 1 批。
-// 当前 decide() 在无 handler 认领时返回 (nil, false)，表示「未接管，交旧路径」。
+// 决策器是 HandleKeyEvent 键事件的唯一主路径：host 状态机（markEntered/reconcileHost/
+// dispatchHostChain）、触发激活（tryActivateFromEmpty/tryActivateSpecial）、z 回退判定、
+// 统一夺取回退（armRewind/canRewind/rewindHijack）、引擎层单点挂卸（applyEngineDiff）。
+// decide() 为早期求值骨架，现仅余 tryActivate*/judgeZFallback/dispatchHostChain 等具体入口被调用。
 package coordinator
 
 import "github.com/huanfeng/wind_input/internal/bridge"
@@ -154,10 +155,9 @@ func (d *decider) decide(key string, data *bridge.KeyEventData) (*bridge.KeyEven
 	return nil, false
 }
 
-// judgeZFallback 用决策器（engine_default 宿主裁决）判定 z 键混合回退，供主路径在
-// decider_enabled 时接管旧 zHybridFallback。返回 (residual, true) 表示应回退临时拼音，
-// residual 为初始拼音 buffer。判定与旧 zHybridFallback 等价（含 z 触发键门禁）。
-// 执行仍复用 enterTempPinyinFromZBuffer（CompHot 原地切换，不 hideUI）。
+// judgeZFallback 用决策器（engine_default 宿主裁决）判定 z 键混合回退。返回 (residual, true)
+// 表示应回退临时拼音，residual 为初始拼音 buffer（判定逻辑在 decideEngineDefaultZFallback，含 z
+// 触发键门禁）。执行复用 enterTempPinyinFromZBuffer（CompHot 原地切换，不 hideUI）。
 func (d *decider) judgeZFallback(key string, data *bridge.KeyEventData) (string, bool) {
 	ctx := newDecisionCtx(d.c, d.host)
 	if dec := d.host.Judge(ctx, key, data); dec.Verdict == VerdictRelease {
@@ -177,9 +177,9 @@ func (d *decider) tryActivateSpecial(key string, data *bridge.KeyEventData) (*br
 	return nil, false
 }
 
-// tryActivateFromEmpty 在 buffer 空/无候选时遍历 registry（按优先级），第一个判 Activate 的
-// 宿主接管激活。返回 (result, true) 表示已接管；(nil, false) 交旧路径（如 z 首次触发、special）。
-// 供主路径在 decider_enabled 时接管旧三段 getXxxTriggerKey。
+// tryActivateFromEmpty 在 buffer 空/无候选时遍历 registry（按优先级 quick > temp_pinyin >
+// temp_english，含 z 首次触发），第一个判 Activate 的宿主接管激活。返回 (result, true) 表示已接管；
+// (nil, false) 未接管（如 special——不在 registry，由 tryActivateSpecial 单独处理）。
 func (d *decider) tryActivateFromEmpty(key string, data *bridge.KeyEventData) (*bridge.KeyEventResult, bool) {
 	ctx := newDecisionCtx(d.c, d.host)
 	for _, p := range d.registry {
@@ -212,7 +212,13 @@ func (d *decider) executeActivate(p Processor, dec Decision) (*bridge.KeyEventRe
 // （受管宿主退出→回落 engine_default；engine_default 自身 reconcile 为 no-op）。各宿主的链当前
 // 均含恒 Handle 的整模式 handler（engineDefaultKeyHandler/各 xxxKeyHandler/urlKeyHandler），故必中
 // 第一个；兜底分支防御链意外全 Pass（不应发生）。全程在 c.mu 内（I7，调用方 HandleKeyEvent 已持锁）。
+//
+// **组链前先 reconcileHost**：链外路径（输入态 Ctrl/Alt 透传、失焦/IME 停用、CapsLock 通知、
+// numpad direct）经 clearState 清模式标志但不经本函数，d.host 可能滞留陈旧受管宿主；若不先回填，
+// engine_default 尾部分发会用陈旧 host 组链，把正常输入键误路由回已退出的模式（且引擎层已卸载）。
+// reconcileHost 仅在 modeActive(d.host)=false 时降级，模式仍活跃的正常模式内分发不受影响。
 func (d *decider) dispatchHostChain(key string, data *bridge.KeyEventData) *bridge.KeyEventResult {
+	d.reconcileHost()
 	ctx := newDecisionCtx(d.c, d.host)
 	for _, h := range d.keyHandlerChain() {
 		if h.Judge(ctx, key, data).Verdict == VerdictPass {

@@ -1,8 +1,7 @@
-// pipeline_types.go — 输入处理器流水线核心类型（第 0 批地基）。
+// pipeline_types.go — 输入处理器流水线核心类型。
 // 设计见 docs/design/input-processor-pipeline.md。
 //
-// 本批次只引入类型与接口骨架，不接入 HandleKeyEvent 主路径（feature flag 默认关闭，
-// 影子运行待后续接入）。所有行为与现状逐条等价。
+// 决策器/处理器/按键处理层的共享类型：Verdict、Decision、Capability 位掩码、CompositionPhase。
 package coordinator
 
 // Verdict 是决策器/处理器/按键处理单元对单个按键的裁决类型。

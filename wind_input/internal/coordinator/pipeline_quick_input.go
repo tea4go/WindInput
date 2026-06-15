@@ -82,7 +82,7 @@ func (p *quickInputProcessor) KeyHandlers() []KeyHandler {
 // quickInputKeyHandler 把 handleQuickInputKey 包装成链上的模式特有处理单元。
 // Judge 对当前上下文的导航键 Pass（让位链上居后的 navKeyHandler），其余键 Handle（I11 短路于此）；
 // Apply 委托回 handleQuickInputKey（含拼音子模式内部分发）——其导航 case 已被链上 nav handler
-// 在 Apply 前认领，对 quick_input 不再被触达（仍供 decider 关闭时的旧路径复用）。
+// 在 Apply 前认领，故 handleQuickInputKey 的导航 case 对 quick_input 不再被触达（保留作冗余兜底）。
 type quickInputKeyHandler struct {
 	c *Coordinator
 }

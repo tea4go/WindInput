@@ -1,8 +1,8 @@
 // pipeline_temp_pinyin.go — 临时拼音宿主（Processor）。
 //
-// 第 1 批 1a：实现 Processor 接口，注册到 decider.registry。当前**不接管**主路径（影子仍只读、
-// host 仍不切换），故 Activate/Release 尚不会被实际调用；Judge 的「激活」裁决可被单测验证。
-// 真正接管（CompHot 热切换、residual 注入、引擎层 diff）在第 1 批 1c 落地。
+// 实现 Processor 接口，注册到 decider.registry（生产路径）：Judge 裁决触发键激活（标点触发键 +
+// z 首次触发 judgeZFirstTrigger），Activate 复用 setupTempPinyinMode，KeyHandlers 贡献模式特有键
+// + 共享导航 handler。引擎层（拼音词库层）挂卸由决策器 applyEngineDiff 单点管（I3）。
 package coordinator
 
 import (
@@ -31,9 +31,7 @@ func (p *tempPinyinProcessor) Name() string { return "temp_pinyin" }
 //
 // z 首次触发由 judgeZFirstTrigger 单独裁决（matchTempPinyinTrigger 故意排除 z，因 z 还需
 // 渐进决策：重复上屏历史 / z 码表前缀）。收编进决策器后，z 与标点触发键一样经 registry
-// 激活，不再走 handle_key_event.go 的 getTempPinyinTriggerKey 旁路（decider_enabled 下）。
-//
-// 作为当前 host 时的「退出」裁决在 1c 接管时补充（1a host 不会是 temp_pinyin）。
+// 激活（getTempPinyinTriggerKey 的 z 渐进仲裁仍被 judgeZFirstTrigger 复用，但已无独立旁路）。
 func (p *tempPinyinProcessor) Judge(ctx *DecisionCtx, key string, data *bridge.KeyEventData) Decision {
 	if ctx.BufferLen() == 0 && ctx.CandidateCount() == 0 {
 		if tk := p.c.matchTempPinyinTrigger(key, data.KeyCode); tk != "" {

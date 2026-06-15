@@ -91,7 +91,7 @@ func (p *specialProcessor) AcceptedProviders() []ProviderID { return nil }
 // specialKeyHandler 把 handleSpecialModeKey 包装成链上的模式特有处理单元。
 // Judge 对导航键 Pass（让位链上居后的 navKeyHandler），其余键 Handle（I11 短路于此）；
 // Apply 委托回 handleSpecialModeKey——其 switch 仍含导航 case，但导航键已被链上 nav handler
-// 在 Apply 前认领，故那些 case 对 special 不再被触达（仍供 decider 关闭时的旧路径复用）。
+// 在 Apply 前认领，故 handleSpecialModeKey 的导航 case 对 special 不再被触达（保留作冗余兜底）。
 type specialKeyHandler struct {
 	c *Coordinator
 }

@@ -1,8 +1,8 @@
 // pipeline_engine_default.go — 兜底宿主（正常码表/拼音输入）。
 //
 // engine_default 是「host 永不为空」（不变量 I1）的默认宿主：启动即它，上屏/ESC/删空后
-// host 回落到它。第 0 批只实现可单测的核心分流骨架（z 键混合回退），其余为占位实现，
-// 真正的按键处理在第 1 批抽取共享导航 handler 时填充。
+// host 回落到它。Judge 含 z 键混合回退裁决（decideEngineDefaultZFallback 纯函数）；
+// KeyHandlers 贡献 engineDefaultKeyHandler（正常输入键处理 = handleEngineDefaultKey）。
 package coordinator
 
 import (
