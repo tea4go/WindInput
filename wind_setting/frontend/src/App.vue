@@ -594,6 +594,7 @@ async function resetCurrentPageDefaults() {
         punct_follow_mode: defaults.input.punct_follow_mode,
         filter_mode: defaults.input.filter_mode,
         smart_punct_after_digit: defaults.input.smart_punct_after_digit,
+        smart_punct_list: defaults.input.smart_punct_list,
         smart_symbol_mode: defaults.input.smart_symbol_mode,
         smart_symbol_timeout_ms: defaults.input.smart_symbol_timeout_ms,
         smart_symbol_chars: defaults.input.smart_symbol_chars,

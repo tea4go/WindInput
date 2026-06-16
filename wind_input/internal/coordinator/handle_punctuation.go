@@ -373,14 +373,11 @@ func (c *Coordinator) shouldSmartPunct(r rune, afterDigit bool, prevChar rune) b
 	return afterDigit
 }
 
-// isSmartPunctChar 判断该英文标点是否在数字后智能标点列表中
+// isSmartPunctChar 判断该英文标点是否在数字后智能标点列表中。
+// 严格按配置：列表为空表示无任何标点参与（等同该子特性关闭），
+// 不做内置默认回退——参与集合完全由用户配置决定，总开关 SmartPunctAfterDigit 控制开/关。
 func (c *Coordinator) isSmartPunctChar(r rune) bool {
-	list := c.config.Input.SmartPunctList
-	if list == "" {
-		// 列表为空时回退到默认行为
-		return r == '.' || r == ','
-	}
-	for _, ch := range list {
+	for _, ch := range c.config.Input.SmartPunctList {
 		if ch == r {
 			return true
 		}

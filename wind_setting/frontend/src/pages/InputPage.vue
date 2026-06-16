@@ -9,6 +9,28 @@
     <div class="settings-card">
       <div class="card-title">字符与标点</div>
       <SchemaRenderer :schema="punctSchema" :form-data="formData" mode="bare" />
+      <div class="setting-item" data-search-anchor="input.smart_punct_after_digit">
+        <div class="setting-info">
+          <label>数字后智能标点</label>
+          <p class="setting-hint">
+            数字后句号输出点号、逗号输出英文逗号，方便输入 IP、小数、千分位等
+          </p>
+        </div>
+        <div class="setting-control inline-control">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="formData.input.smart_punct_after_digit" />
+            启用
+          </label>
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="!formData.input.smart_punct_after_digit"
+            @click="openSmartPunctDialog()"
+          >
+            配置
+          </Button>
+        </div>
+      </div>
       <div class="setting-item" data-search-anchor="input.smart_symbol_mode">
         <div class="setting-info">
           <label>智能符号模式</label>
@@ -191,6 +213,50 @@
               >取消</Button
             >
             <Button size="sm" @click="confirmSmartSymbol()">确定</Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 数字后标点字符对话框 -->
+    <Dialog
+      :open="showSmartPunctDialog"
+      @update:open="
+        (v: boolean) => {
+          if (!v) cancelSmartPunct();
+        }
+      "
+    >
+      <DialogContent class="max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle>数字后标点字符</DialogTitle>
+        </DialogHeader>
+        <div>
+          <p class="dialog-hint">
+            列出数字后需要转为英文半角的标点，直接连写即可（无需分隔）。<br />
+            例如默认 <b>.,:</b> 表示句号→点号、逗号→英文逗号、冒号→英文冒号，便于输入 IP、小数、千分位、时间等。<br />
+            留空表示不转换任何标点（等同关闭本特性）。
+          </p>
+          <textarea
+            v-model="smartPunctDraft"
+            class="smart-symbol-textarea"
+            rows="2"
+            placeholder=".,:"
+          ></textarea>
+        </div>
+        <DialogFooter class="flex !justify-between">
+          <Button
+            variant="outline"
+            size="sm"
+            @click="resetSmartPunctDefaults()"
+          >
+            恢复默认
+          </Button>
+          <div class="flex gap-2">
+            <Button variant="outline" size="sm" @click="cancelSmartPunct()"
+              >取消</Button
+            >
+            <Button size="sm" @click="confirmSmartPunct()">确定</Button>
           </div>
         </DialogFooter>
       </DialogContent>
@@ -892,6 +958,26 @@ function cancelSmartSymbol() {
 function confirmSmartSymbol() {
   props.formData.input.smart_symbol_chars = smartSymbolDraft.value;
   showSmartSymbolDialog.value = false;
+}
+
+// ========== 数字后标点字符 ==========
+const showSmartPunctDialog = ref(false);
+const smartPunctDraft = ref("");
+
+function openSmartPunctDialog() {
+  smartPunctDraft.value = props.formData.input.smart_punct_list ?? "";
+  showSmartPunctDialog.value = true;
+}
+// 恢复默认仅重置草稿，确定后才写回（与智能符号一致）
+function resetSmartPunctDefaults() {
+  smartPunctDraft.value = getDefaultConfig().input.smart_punct_list;
+}
+function cancelSmartPunct() {
+  showSmartPunctDialog.value = false;
+}
+function confirmSmartPunct() {
+  props.formData.input.smart_punct_list = smartPunctDraft.value;
+  showSmartPunctDialog.value = false;
 }
 
 // 触发键选项列表

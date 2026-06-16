@@ -31,12 +31,8 @@ export const inputSchema: PageSchema = [
     label: '标点随中英文切换',
     hint: '切换到中文模式时自动切换中文标点',
   },
-  {
-    type: 'toggle',
-    key: 'input.smart_punct_after_digit',
-    label: '数字后智能标点',
-    hint: '数字后句号输出点号、逗号输出英文逗号，方便输入 IP、小数、千分位等',
-  },
+  // 注意：smart_punct_after_digit 改为 InputPage 手写「启用+对话框」行（含 smart_punct_list 配置），
+  // 故不在此 schema 中，下方 slice 索引相应前移。
 
   // ── 按键行为 ──────────────────────────────────────────────
   { type: 'card', label: '按键行为' },
@@ -199,25 +195,25 @@ export const inputSchema: PageSchema = [
 // 各 card 的 key 前缀用于 InputPage 中 bare 模式渲染
 
 /** 字符与标点卡片内的字段（bare 模式） */
-export const punctSchema: PageSchema = inputSchema.slice(1, 4)
+export const punctSchema: PageSchema = inputSchema.slice(1, 3)
 
 /** 按键行为卡片内的字段（full 卡片） */
-export const keyBehaviorSchema: PageSchema = inputSchema.slice(5, 8)
+export const keyBehaviorSchema: PageSchema = inputSchema.slice(4, 7)
 
 /** 候选无效按键卡片内的字段（full 卡片） */
-export const overflowSchema: PageSchema = inputSchema.slice(9, 12)
+export const overflowSchema: PageSchema = inputSchema.slice(8, 11)
 
 /** 快捷输入卡片内的额外字段（bare 模式，trigger_keys 手写在前） */
-export const quickInputExtraSchema: PageSchema = inputSchema.slice(13, 15)
+export const quickInputExtraSchema: PageSchema = inputSchema.slice(12, 14)
 
 /** 临时拼音卡片内的分隔符字段（bare 模式） */
-export const pinyinSeparatorSchema: PageSchema = inputSchema.slice(16, 17)
+export const pinyinSeparatorSchema: PageSchema = inputSchema.slice(15, 16)
 
 /** 临时英文卡片内的额外字段（bare 模式） */
-export const shiftExtraSchema: PageSchema = inputSchema.slice(18, 22)
+export const shiftExtraSchema: PageSchema = inputSchema.slice(17, 21)
 
 /** 默认状态卡片内的记忆字段（bare 模式） */
-export const startupExtraSchema: PageSchema = inputSchema.slice(23, 24)
+export const startupExtraSchema: PageSchema = inputSchema.slice(22, 23)
 
 /** 网址输入卡片内的 enabled 字段（bare 模式，prefixes 手写在后） */
-export const urlInputSchema: PageSchema = inputSchema.slice(25, 26)
+export const urlInputSchema: PageSchema = inputSchema.slice(24, 25)
