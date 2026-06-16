@@ -87,7 +87,7 @@ func (c *Coordinator) setupGlobalHotkeyCallbacks() {
 	for i, e := range entries {
 		cmds[i] = e.Command
 	}
-	c.logger.Debug("Initial global hotkey registration", "count", len(entries), "commands", cmds)
+	c.logger.Debug("Initial global hotkey registration", "count", len(entries), "commands", cmds, "activateIME", activateHotkey)
 	if len(entries) > 0 {
 		c.uiManager.RegisterGlobalHotkeys(entries)
 	}

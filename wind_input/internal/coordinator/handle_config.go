@@ -262,7 +262,8 @@ func (c *Coordinator) UpdateHotkeyConfig(hotkeyConfig *config.HotkeyConfig) {
 
 	c.logger.Debug("Hotkey config updated",
 		"toggleModeKeys", hotkeyConfig.ToggleModeKeys,
-		"switchEngine", hotkeyConfig.SwitchEngine)
+		"switchEngine", hotkeyConfig.SwitchEngine,
+		"activateIME", hotkeyConfig.ActivateIME)
 }
 
 // UpdateStartupConfig 更新启动配置

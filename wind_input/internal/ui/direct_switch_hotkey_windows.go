@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -76,6 +77,7 @@ func SyncDirectSwitchHotkey(hotkey string) error {
 
 	mods, vk, ok := parseDirectSwitchHotkey(hotkey)
 	if !ok {
+		slog.Debug("DirectSwitchHotkey cleared (disabled)", "hotkey", hotkey)
 		return nil // 仅清理（禁用本功能）
 	}
 
@@ -101,6 +103,7 @@ func SyncDirectSwitchHotkey(hotkey string) error {
 	if err := slot.SetStringValue("VirtualKey", fmt.Sprintf("%08x", vk)); err != nil {
 		return err
 	}
+	slog.Debug("DirectSwitchHotkey registered", "hotkey", hotkey, "slot", slotName, "mods", fmt.Sprintf("%08x", directSwitchModBase|mods), "vk", fmt.Sprintf("%08x", vk))
 	return nil
 }
 
