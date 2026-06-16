@@ -362,10 +362,12 @@ func (s *Server) handleClient(conn net.Conn, clientID int) uint32 {
 
 		// Activation commands (IMEActivated / FocusGained) 走两段式异步化：
 		//
-		// 1. processRequest 立即返回（仅做 active 状态字段更新，无任何 handler 调用、
-		//    无任何跨进程 shell 调用）。若 C++ 端走 sync 形态，这一步会把 Ack 写回去；
-		//    若走 async 形态（当前 wind_tsf 已切换到此），跳过写回。
-		//    无论哪种形态，C++ 端的同步 ReceiveResponse 都不会再阻塞「等 Go 完成 handler」，
+		// 1. processRequest 立即返回（仅做 active 状态字段更新 + 极轻量内存读，无重型 handler
+		//    调用、无任何跨进程 shell 调用）。若 C++ 端走 sync 形态，这一步会把响应写回去；
+		//    若走 async 形态，跳过写回。当前 wind_tsf：CmdFocusGained 走 sync（响应回带
+		//    CmdModePush 权威模式，DLL 在首键前写正确 _bChineseMode，根治首键英文竞态）；
+		//    CmdIMEActivated 仍走 async。无论哪种形态，C++ 端的同步 ReceiveResponse 都不会
+		//    阻塞「等 Go 完成重型 handler」（重型 handler 在响应写出之后才跑），
 		//    explorer.exe 等宿主 UI 线程的环形等待被切断。
 		//
 		// 2. 第二段：在本 goroutine 内同步调用 HandleIMEActivated / HandleFocusGained，

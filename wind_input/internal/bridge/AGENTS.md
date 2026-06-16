@@ -76,7 +76,9 @@
 
 bridge handler goroutine 处理仍走同步响应的命令（`CmdHostRenderRequest`、`CmdToggleMode`、`CmdSystemModeSwitch`、`CmdMenuCommand`、`CmdKeyEvent`、`CmdCommitRequest` 等）时，**调用方（C++ TSF DLL）正阻塞在宿主进程的 UI 线程上等响应**（`READ_TIMEOUT_MS = 1500ms`，见 `wind_tsf/include/IPCClient.h`）。在这条路径上 Go 端**严禁**做以下调用：
 
-注：`CmdIMEActivated` / `CmdFocusGained` 已异步化（先 Ack 后处理，见 `server.go` 中的 `isActivation` 分支与 `runActivationHandlerAndPush`），handler 内部允许跨进程调用——但 **handler 仍在 handleClient goroutine 内执行**，会延迟本 client 的后续命令读取。重 IO/慢调用仍应单独 spawn goroutine 处理。
+注：`CmdIMEActivated` / `CmdFocusGained` 的**重型 handler**（`HandleIMEActivated` / `HandleFocusGained`）已异步化（先回响应后处理，见 `server.go` 中的 `isActivation` 分支与 `runActivationHandlerAndPush`），handler 内部允许跨进程调用——但 **handler 仍在 handleClient goroutine 内执行**，会延迟本 client 的后续命令读取。重 IO/慢调用仍应单独 spawn goroutine 处理。
+
+例外细节：`CmdFocusGained` 现为**同步**命令（C++ 端 `SendFocusGained` 等响应），其 processRequest 同步段回传 `CmdModePush`（权威 chineseMode/fullWidth），让 DLL 在首键前写正确 `_bChineseMode`，根治"切到微信首键上屏英文"竞态。**该同步段同样受本红线约束**——只允许 `markFocused`（map 写）+ `applyFocusGainedCaret`（caret 字段同步）+ `GetCurrentMode`（锁+读两字段）这类纯内存操作，**禁止任何跨进程 Win32/Shell 调用**；重型 `HandleFocusGained`（含 `GetProcessName` 等跨进程调用）仍在响应写出之后由 `runActivationHandlerAndPush` 执行，不在 DLL 阻塞路径上。`CmdIMEActivated` 仍全程 async（不回带模式）。
 
 - `SHQueryUserNotificationState`、`SHGetKnownFolderPath` 等 shell32 跨进程 API
 - 对 `GetForegroundWindow()` 返回的 hwnd 再做 `SendMessage` / `SendMessageTimeout`

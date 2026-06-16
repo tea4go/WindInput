@@ -728,7 +728,7 @@ BOOL CIPCClient::SendFocusGained(int caretX, int caretY, int caretHeight, UINT64
         return FALSE;
     }
 
-    _LogDebug(L"Sending focus_gained (async) with caret: x=%d, y=%d, h=%d, inputScope=0x%016llX, token=0x%016llX", caretX, caretY, caretHeight, (unsigned long long)inputScopeMask, (unsigned long long)_clientToken);
+    _LogDebug(L"Sending focus_gained (sync) with caret: x=%d, y=%d, h=%d, inputScope=0x%016llX, token=0x%016llX", caretX, caretY, caretHeight, (unsigned long long)inputScopeMask, (unsigned long long)_clientToken);
 
     FocusGainedPayload payload = {};
     payload.caret.x = caretX;
@@ -737,11 +737,30 @@ BOOL CIPCClient::SendFocusGained(int caretX, int caretY, int caretHeight, UINT64
     payload.clientToken = _clientToken;
     payload.inputScopeMask = inputScopeMask;
 
-    // 异步化（见 BinaryProtocol.h::CMD_ACTIVATION_STATUS_PUSH 注释）：
-    // Go 端 server.go::handleClient 收到 FOCUS_GAINED 立即回 Ack，HandleFocusGained
-    // 在 Ack 之后才执行，结果通过 push pipe 回送 CMD_ACTIVATION_STATUS_PUSH。
-    // 本端写完即返回，宿主 UI 线程不再阻塞等响应。
-    return _SendBinaryMessage(CMD_FOCUS_GAINED, &payload, sizeof(payload), true /* async */);
+    // 同步发送（首次按键模式竞态根治，见 server_handler.go::CmdFocusGained 注释）：
+    // Go 端在响应里回传权威模式（仅读内存两字段，无等待 / 无回调进本进程 → 无死锁可能），
+    // 本调用在 OnSetFocus 内同步拿到模式并立即写入 _bChineseMode/_bFullWidth，使首个
+    // OnTestKeyDown 之前模式必然就绪，消除"切过来首键上屏英文"。
+    // 重型 HandleFocusGained 仍由 Go 在写响应之后异步执行，宿主 UI 线程不为重活阻塞。
+    if (!_SendBinaryMessage(CMD_FOCUS_GAINED, &payload, sizeof(payload), false /* sync */))
+    {
+        return FALSE;
+    }
+
+    ServiceResponse response;
+    if (ReceiveResponse(response))
+    {
+        // 响应载荷为 CMD_MODE_PUSH（4 字节 flags），_ParseResponse 已填好 chineseMode/statusFlags。
+        // 复用模式回调（仅 InterlockedExchange 两个标志位，无 COM 访问），在 TSF 线程调用安全。
+        EnterCriticalSection(&_asyncLock);
+        ModePushCallback mpCallback = _modePushCallback;
+        LeaveCriticalSection(&_asyncLock);
+        if (mpCallback)
+        {
+            mpCallback(response.IsChineseMode(), response.IsFullWidth());
+        }
+    }
+    return TRUE;
 }
 
 BOOL CIPCClient::SendIMEDeactivated()
@@ -967,6 +986,23 @@ BOOL CIPCClient::_ParseResponse(const IpcHeader& header, const std::vector<uint8
     case CMD_ACK:
         response.type = ResponseType::Ack;
         _LogDebug(L"Response: Ack");
+        break;
+
+    case CMD_MODE_PUSH:
+        // FOCUS_GAINED 同步响应：4 字节 flags（STATUS_CHINESE_MODE=bit0, STATUS_FULL_WIDTH=bit1）。
+        // 携带权威中英/全半角模式，供 SendFocusGained 在 OnSetFocus 内立即写入 _bChineseMode。
+        response.type = ResponseType::StatusUpdate;
+        if (payload.size() >= 4)
+        {
+            uint32_t flags = static_cast<uint32_t>(payload[0])
+                           | (static_cast<uint32_t>(payload[1]) << 8)
+                           | (static_cast<uint32_t>(payload[2]) << 16)
+                           | (static_cast<uint32_t>(payload[3]) << 24);
+            response.statusFlags = flags;
+            response.chineseMode = (flags & STATUS_CHINESE_MODE) != 0;
+        }
+        _LogDebug(L"Response: ModePush (focus sync) flags=0x%X chineseMode=%d",
+                  response.statusFlags, response.IsChineseMode());
         break;
 
     case CMD_PASS_THROUGH:

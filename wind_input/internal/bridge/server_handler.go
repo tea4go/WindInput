@@ -134,15 +134,22 @@ func (s *Server) processRequest(header *ipc.IpcHeader, payload []byte, clientID 
 		// DLL 在 OnSetFocus 里已经过 _hasTextInputContext / XamlIsland gate
 		// 过滤掉无文本输入上下文的 DocMgr，所以这里到达即可信。
 		s.markFocused(clientID, processID)
-		// 异步化第一段：只做 caret 字段同步（纯字段写入，第一次按键前必须就绪）+ 立即回 Ack。
-		// 真正的 HandleFocusGained 由 handleClient 在 Ack 已写出后内联触发，状态走 push pipe。
+		// 异步化第一段：只做 caret 字段同步（纯字段写入，第一次按键前必须就绪）。
+		// 真正的 HandleFocusGained 由 handleClient 在响应已写出后内联触发，状态走 push pipe。
 		s.applyFocusGainedCaret(payload, clientID)
-		// 模式预推送：在回 Ack 前入队 CmdModePush，仅携带 chineseMode+fullWidth。
-		// 使 DLL 侧模式就绪时机从激活 push（~15ms）提前至 ~1ms，消除首次按键竞态窗口。
-		// GetCurrentMode 极轻量（锁+读两字段），PushModePushToActiveClient 为非阻塞入队。
+		// 首次按键模式竞态根治：FOCUS_GAINED 现为**同步**命令，DLL 发完即在 OnSetFocus
+		// 内阻塞等本响应，拿到权威模式后于首个 OnTestKeyDown 之前写好 _bChineseMode，
+		// 彻底消除"切到微信首键上屏英文"。
+		//
+		// 旧方案走 push pipe 推 CmdModePush，但 push pipe + 独立 AsyncReader 线程与首键所在
+		// 的 TSF 主线程无 happens-before，只能把窗口从 ~15ms 缩到 ~1ms 而非消除；焦点抖动
+		// 下在途按键仍会抢跑。改回同一条有序请求管道即根除竞态。
+		//
+		// 不重演 explorer 环形等待：本同步段仅 markFocused（map 写）+ caret 字段同步 +
+		// GetCurrentMode（锁+读两字段），全是内存操作，无 shell/COM、不回调进 DLL；
+		// 重型 HandleFocusGained 仍在本响应写出之后由 runActivationHandlerAndPush 异步执行。
 		chineseMode, fullWidth := s.handler.GetCurrentMode()
-		s.PushModePushToActiveClient(chineseMode, fullWidth)
-		return s.codec.EncodeAck()
+		return s.codec.EncodeModePush(chineseMode, fullWidth)
 
 	case ipc.CmdFocusLost:
 		s.markUnfocused(clientID)

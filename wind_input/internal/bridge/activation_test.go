@@ -138,10 +138,13 @@ func TestProcessRequest_IMEActivatedReturnsAckWithoutInvokingHandler(t *testing.
 	}
 }
 
-// TestProcessRequest_FocusGainedReturnsAckWithoutInvokingHandler 守住契约 1
-// 针对 CmdFocusGained。FocusGained 同步路径允许 HandleCaretUpdate (纯字段写入),
-// 但**绝不**调用 HandleFocusGained。
-func TestProcessRequest_FocusGainedReturnsAckWithoutInvokingHandler(t *testing.T) {
+// TestProcessRequest_FocusGainedReturnsModePushWithoutInvokingHandler 守住契约 1
+// 针对 CmdFocusGained。FocusGained 同步路径允许 HandleCaretUpdate (纯字段写入)
+// 与 GetCurrentMode (锁+读两字段)，但**绝不**调用 HandleFocusGained。
+//
+// FocusGained 现为同步命令：响应回带 CmdModePush(权威 chineseMode/fullWidth)，
+// 使 DLL 在首键前写正确 _bChineseMode，根治"切到微信首键上屏英文"竞态。
+func TestProcessRequest_FocusGainedReturnsModePushWithoutInvokingHandler(t *testing.T) {
 	h := &fakeMessageHandler{}
 	s := newServerWithFakeHandler(t, h)
 
@@ -157,8 +160,10 @@ func TestProcessRequest_FocusGainedReturnsAckWithoutInvokingHandler(t *testing.T
 	header := &ipc.IpcHeader{Version: ipc.ProtocolVersion, Command: ipc.CmdFocusGained, Length: uint32(len(payload))}
 	resp := s.processRequest(header, payload[:], 2, 54321)
 
-	if string(resp) != string(s.codec.EncodeAck()) {
-		t.Fatalf("processRequest for CmdFocusGained should return Ack bytes")
+	// fakeMessageHandler.GetCurrentMode() 返回 (chineseMode=true, fullWidth=false)。
+	wantModePush := s.codec.EncodeModePush(true, false)
+	if string(resp) != string(wantModePush) {
+		t.Fatalf("processRequest for CmdFocusGained should return CmdModePush bytes; got len=%d want len=%d", len(resp), len(wantModePush))
 	}
 	if got := h.focusGainedCalls.Load(); got != 0 {
 		t.Fatalf("processRequest 不应该直接调用 HandleFocusGained; got=%d", got)
