@@ -19,6 +19,9 @@ func (c *Coordinator) handleAlphaKey(key string) *bridge.KeyEventResult {
 	startTime := time.Now()
 	c.lastKeyTime = startTime
 
+	// 字母输入 = 光标进入新的编码区域，已提交标点的「智能符号」武装状态失效。
+	c.disarmSmartSymbol()
+
 	// 在变更 inputBuffer 之前抓取"是否为本次 composition 的首字"。若是，本次
 	// 按键会让宿主（如 WPS）触发文本 reflow，光标位置会从按键前的位置漂移到
 	// reflow 后的位置；此时不能用旧坐标 showUI，否则候选窗会先错位再跳。
@@ -308,6 +311,8 @@ func (c *Coordinator) handleBackspace() *bridge.KeyEventResult {
 	}
 
 	if len(c.inputBuffer) == 0 {
+		// 无编码退格 = 正在删除已提交的文本（可能正好删掉已武装的标点），arm 状态失效。
+		c.disarmSmartSymbol()
 		// Buffer is already empty and no confirmed segments - pass through to system
 		c.logger.Debug("Backspace with empty buffer, passing through to system")
 		return nil

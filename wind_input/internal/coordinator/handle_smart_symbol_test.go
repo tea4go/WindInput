@@ -93,13 +93,57 @@ func TestSmartSymbol_PrevCharMismatch(t *testing.T) {
 	}
 }
 
-// TestSmartSymbol_PrevCharUnavailable prevChar=0（不可用）时不触发，安全退化。
+// TestSmartSymbol_PrevCharUnavailable prevChar=0（TSF 不可读）时退化为信任 arm 状态触发。
+// 多数应用不实现 TSF 文本回读，prevChar 始终为 0；靠 disarmSmartSymbol 守护误触发场景。
 func TestSmartSymbol_PrevCharUnavailable(t *testing.T) {
 	c := newSmartSymbolCoordinator(t)
 	c.trySmartSymbolReplace('.', false, 0) // 武装 。
-	// 第二次 prevChar 仍为 0（C++ 未提供光标前字符）→ 不触发。
+	// 第二次 prevChar=0：退化为信任 arm 状态，应触发（alpha/backspace 路径已 disarm 守护）。
+	res := c.trySmartSymbolReplace('.', false, 0)
+	if res == nil {
+		t.Fatal("prevChar=0 应触发（arm 状态信任），实际 nil")
+	}
+	if res.Type != bridge.ResponseTypeReplaceBackward || res.ReplaceCount != 1 || res.Text != "." {
+		t.Fatalf("prevChar=0 触发替换响应不符：type=%v count=%d text=%q", res.Type, res.ReplaceCount, res.Text)
+	}
+}
+
+// TestSmartSymbol_DisarmPrevents_PrevChar0 disarm 后即使 prevChar=0 也不触发（守护路径验证）。
+func TestSmartSymbol_DisarmPrevents_PrevChar0(t *testing.T) {
+	c := newSmartSymbolCoordinator(t)
+	c.trySmartSymbolReplace('.', false, 0) // 武装
+	c.disarmSmartSymbol()                  // 模拟 alpha 键 / 焦点变化
 	if res := c.trySmartSymbolReplace('.', false, 0); res != nil {
-		t.Fatalf("PrevChar 不可用不应触发，实际 %+v", res)
+		t.Fatalf("disarm 后 prevChar=0 不应触发，实际 %+v", res)
+	}
+}
+
+// TestSmartSymbol_SelectionChangedDisarms HandleSelectionChanged（grace 外）解除武装，
+// 防止鼠标移动光标后 prevChar=0 时误发 ReplaceBackward。
+func TestSmartSymbol_SelectionChangedDisarms(t *testing.T) {
+	c := newSmartSymbolCoordinator(t)
+	c.trySmartSymbolReplace('.', false, 0) // 武装 。
+	// 模拟 grace 期外的 SelectionChanged（用户鼠标点击移光标）
+	c.lastSelfCommitTime = time.Time{} // 零值 → 视为"很久以前"，超出 grace window
+	c.HandleSelectionChanged(0)        // 应 disarm
+	// prevChar=0 + disarmed → 不触发
+	if res := c.trySmartSymbolReplace('.', false, 0); res != nil {
+		t.Fatalf("SelectionChanged(grace 外) 后不应触发，实际 %+v", res)
+	}
+}
+
+// TestSmartSymbol_SelectionChangedInGraceKeepsArm HandleSelectionChanged 在 grace 内
+// 不解除武装（自提交副作用），保留双击窗口。
+func TestSmartSymbol_SelectionChangedInGraceKeepsArm(t *testing.T) {
+	c := newSmartSymbolCoordinator(t)
+	c.trySmartSymbolReplace('.', false, 0) // 武装 。
+	// 模拟 IME 自提交后立即到来的 SelectionChanged（grace 内）
+	c.lastSelfCommitTime = time.Now() // 刚刚提交 → 在 200ms grace 内
+	c.HandleSelectionChanged(0)       // 不应 disarm
+	// prevChar=0 + 仍武装 → 应触发
+	res := c.trySmartSymbolReplace('.', false, 0)
+	if res == nil {
+		t.Fatal("grace 内 SelectionChanged 不应解除武装，press2 应触发")
 	}
 }
 

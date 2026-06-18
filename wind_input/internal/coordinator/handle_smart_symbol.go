@@ -46,7 +46,10 @@ func (c *Coordinator) trySmartSymbolReplace(r rune, afterDigit bool, prevChar ru
 	if c.smartSymbolArmed && r == c.smartSymbolKey && c.isEffectiveChinesePunct() &&
 		time.Since(c.smartSymbolAt) < c.smartSymbolTimeout() {
 		armedRunes := []rune(c.smartSymbolStr)
-		if len(armedRunes) > 0 && prevChar == armedRunes[len(armedRunes)-1] {
+		// prevChar==0：TSF 不可读取光标前字符（多数应用的常见情况），退化为信任 arm 状态。
+		// 安全性由 disarmSmartSymbol 守护：HandleSelectionChanged（鼠标/方向键）、
+		// handleAlphaKey、handleBackspace（空 buffer）均在光标移动时解除武装。
+		if len(armedRunes) > 0 && (prevChar == 0 || prevChar == armedRunes[len(armedRunes)-1]) {
 			if rep, ok := c.computePunctStrPure(r, false); ok {
 				c.smartSymbolArmed = false
 				// 吃掉一个引号后回退引号交替状态，使下一次同引号仍从左引号开始。
